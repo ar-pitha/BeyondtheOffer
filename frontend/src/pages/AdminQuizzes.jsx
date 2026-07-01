@@ -1,0 +1,279 @@
+import { useState, useEffect } from "react";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { HiPlus, HiPencil, HiTrash } from "react-icons/hi";
+import Modal from "../components/Modal";
+import Loader from "../components/Loader";
+
+const emptyForm = {
+  title: "",
+  description: "",
+  link: "",
+  platform: "",
+  deadline: "",
+  eligibility: "Freshers & Experienced",
+};
+
+function AdminQuizzes() {
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchQuizzes = async () => {
+    try {
+      const { data } = await axios.get("/api/quizzes");
+      setQuizzes(data);
+    } catch (error) {
+      console.error("Error fetching quizzes:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuizzes();
+  }, []);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowModal(true);
+  };
+
+  const openEdit = (quiz) => {
+    setEditingId(quiz._id);
+    setForm({
+      title: quiz.title,
+      description: quiz.description,
+      link: quiz.link,
+      platform: quiz.platform,
+      eligibility: quiz.eligibility || "Freshers & Experienced",
+      deadline: quiz.deadline
+        ? new Date(quiz.deadline).toISOString().split("T")[0]
+        : "",
+    });
+    setShowModal(true);
+  };
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const payload = {
+      ...form,
+      deadline: form.deadline || null,
+    };
+
+    try {
+      if (editingId) {
+        await axios.put(`/api/quizzes/${editingId}`, payload);
+        toast.success("Quiz updated!");
+      } else {
+        await axios.post("/api/quizzes", payload);
+        toast.success("Quiz created!");
+      }
+      setShowModal(false);
+      fetchQuizzes();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this quiz?")) return;
+
+    try {
+      await axios.delete(`/api/quizzes/${id}`);
+      toast.success("Quiz deleted!");
+      fetchQuizzes();
+    } catch (error) {
+      toast.error("Failed to delete quiz");
+    }
+  };
+
+  if (loading) return <Loader />;
+
+  const filteredQuizzes = quizzes.filter(q => 
+    q.title.toLowerCase().includes(search.toLowerCase()) ||
+    (q.platform && q.platform.toLowerCase().includes(search.toLowerCase())) ||
+    (q.description && q.description.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <div className="page container">
+      <div className="admin-header">
+        <h1>Manage Quizzes</h1>
+        <button className="btn btn-primary" onClick={openCreate}>
+          <HiPlus /> Add Quiz
+        </button>
+      </div>
+
+      {quizzes.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">🧩</div>
+          <h3>No quizzes yet</h3>
+          <p>Create your first quiz posting</p>
+        </div>
+      ) : (
+        <div className="admin-table-wrapper">
+          <div style={{ marginBottom: "1rem" }}>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search quizzes by title, platform, or description..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Platform</th>
+                <th>Eligibility</th>
+                <th>Deadline</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredQuizzes.map((quiz) => (
+                <tr key={quiz._id}>
+                  <td>{quiz.title}</td>
+                  <td>{quiz.platform || "—"}</td>
+                  <td>{quiz.eligibility || "Freshers & Experienced"}</td>
+                  <td>
+                    {quiz.deadline
+                      ? new Date(quiz.deadline).toLocaleDateString()
+                      : "—"}
+                  </td>
+                  <td>{new Date(quiz.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => openEdit(quiz)}
+                      >
+                        <HiPencil />
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => handleDelete(quiz._id)}
+                      >
+                        <HiTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Create / Edit Modal */}
+      {showModal && (
+        <Modal
+          title={editingId ? "Edit Quiz" : "Create Quiz"}
+          onClose={() => setShowModal(false)}
+        >
+          <form onSubmit={handleSubmit}>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Quiz Title</label>
+                <input
+                  name="title"
+                  className="form-control"
+                  placeholder="e.g. Unstop Coding Challenge"
+                  value={form.title}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  name="description"
+                  className="form-control"
+                  placeholder="Brief description of the quiz..."
+                  value={form.description}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Quiz Link</label>
+                <input
+                  name="link"
+                  type="url"
+                  className="form-control"
+                  placeholder="https://unstop.com/..."
+                  value={form.link}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Platform (optional)</label>
+                <input
+                  name="platform"
+                  className="form-control"
+                  placeholder="e.g. Unstop, HackerRank"
+                  value={form.platform}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="form-group">
+                <label>Eligibility</label>
+                <select
+                  name="eligibility"
+                  className="form-control"
+                  value={form.eligibility}
+                  onChange={handleChange}
+                >
+                  <option>Freshers</option>
+                  <option>Experienced</option>
+                  <option>Freshers & Experienced</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Deadline (optional)</label>
+                <input
+                  name="deadline"
+                  type="date"
+                  className="form-control"
+                  value={form.deadline}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowModal(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {submitting ? "Saving..." : editingId ? "Update" : "Create"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+export default AdminQuizzes;
