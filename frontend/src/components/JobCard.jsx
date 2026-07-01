@@ -40,9 +40,10 @@ function JobCard({ job }) {
           href={job.link}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm btn-icon-mobile"
         >
-          Apply Now <HiExternalLink />
+          <span className="btn-text">Apply Now</span>
+          <HiExternalLink />
         </a>
       </div>
     </div>

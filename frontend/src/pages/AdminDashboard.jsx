@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { HiBriefcase, HiLightningBolt, HiUsers, HiPlus } from "react-icons/hi";
+import { HiBriefcase, HiLightningBolt } from "react-icons/hi";
 import Loader from "../components/Loader";
 
 function AdminDashboard() {
@@ -56,7 +56,7 @@ function AdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <h2 style={{ marginBottom: "1rem", fontSize: "1.25rem" }}>Quick Actions</h2>
+      <h2 style={{ marginBottom: "0.75rem", fontSize: "1rem", fontWeight: 700 }}>Quick Actions</h2>
       <div className="quick-actions">
         <Link to="/admin/jobs" className="quick-action-card">
           <div className="quick-action-icon"><HiBriefcase /></div>
@@ -65,7 +65,6 @@ function AdminDashboard() {
             <p>Create, edit, and delete job postings</p>
           </div>
         </Link>
-
         <Link to="/admin/quizzes" className="quick-action-card">
           <div className="quick-action-icon"><HiLightningBolt /></div>
           <div>
@@ -76,7 +75,7 @@ function AdminDashboard() {
       </div>
 
       {/* Users Table */}
-      <h2 style={{ margin: "2.5rem 0 1rem", fontSize: "1.25rem" }}>Registered Users</h2>
+      <h2 style={{ margin: "1.5rem 0 0.75rem", fontSize: "1rem", fontWeight: 700 }}>Registered Users</h2>
       <div className="admin-table-wrapper">
         <table className="admin-table">
           <thead>

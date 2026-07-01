@@ -33,9 +33,10 @@ function QuizCard({ quiz }) {
           href={quiz.link}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm btn-icon-mobile"
         >
-          Participate <HiExternalLink />
+          <span className="btn-text">Participate</span>
+          <HiExternalLink />
         </a>
       </div>
     </div>

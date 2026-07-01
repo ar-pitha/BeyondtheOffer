@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { HiPlus, HiPencil, HiTrash } from "react-icons/hi";
+import { HiPlus, HiPencil, HiTrash, HiX, HiCheck } from "react-icons/hi";
 import Modal from "../components/Modal";
 import Loader from "../components/Loader";
 
@@ -260,13 +260,15 @@ function AdminQuizzes() {
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary btn-icon-mobile"
                 onClick={() => setShowModal(false)}
               >
-                Cancel
+                <span className="btn-text">Cancel</span>
+                <HiX />
               </button>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? "Saving..." : editingId ? "Update" : "Create"}
+              <button type="submit" className="btn btn-primary btn-icon-mobile" disabled={submitting}>
+                <span className="btn-text">{submitting ? "Saving..." : editingId ? "Update" : "Create"}</span>
+                <HiCheck />
               </button>
             </div>
           </form>

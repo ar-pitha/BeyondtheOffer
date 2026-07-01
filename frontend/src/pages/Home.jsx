@@ -96,6 +96,25 @@ function Home() {
         )}
       </section>
 
+      {/* About Section */}
+      <section className="about-section container">
+        <RevealOnScroll>
+          <div className="about-card">
+            <h2>About BeyondTheOffer</h2>
+            <p>
+              BeyondTheOffer is a free platform built to help students and freshers
+              discover the best job openings and quiz competitions — all in one place.
+              No more hopping between Unstop, LinkedIn, Naukri, and HackerRank. We
+              curate the best opportunities and bring them straight to you.
+            </p>
+            <p>
+              Whether you're looking for your first job or want to sharpen your skills
+              through competitive quizzes, BeyondTheOffer has you covered.
+            </p>
+          </div>
+        </RevealOnScroll>
+      </section>
+
       {/* Features Section */}
       <section className="features container">
         <div className="features-grid">

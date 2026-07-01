@@ -66,7 +66,14 @@ function App() {
     delete axios.defaults.headers.common["Authorization"];
   };
 
-  if (loading) return null;
+  if (loading) return (
+    <div className="app-loader">
+      <span className="app-loader-brand">BeyondTheOffer</span>
+      <div className="dots-loader">
+        <span /><span /><span />
+      </div>
+    </div>
+  );
 
   return (
     <>

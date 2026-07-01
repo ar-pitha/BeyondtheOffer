@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { HiPlus, HiPencil, HiTrash } from "react-icons/hi";
+import { HiPlus, HiPencil, HiTrash, HiX, HiCheck } from "react-icons/hi";
 import Modal from "../components/Modal";
 import Loader from "../components/Loader";
 
@@ -152,8 +152,8 @@ function AdminJobs() {
                 <tr key={job._id}>
                   <td>{job.title}</td>
                   <td>{job.company}</td>
-                  <td><span className="badge badge-accent">{job.type}</span></td>
-                  <td><span className="badge badge-warning">{job.eligibility || "Freshers & Experienced"}</span></td>
+                  <td>{job.type}</td>
+                  <td>{job.eligibility || "Freshers & Experienced"}</td>
                   <td>{job.platform || "—"}</td>
                   <td>{new Date(job.createdAt).toLocaleDateString()}</td>
                   <td>
@@ -311,13 +311,15 @@ function AdminJobs() {
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary btn-icon-mobile"
                 onClick={() => setShowModal(false)}
               >
-                Cancel
+                <span className="btn-text">Cancel</span>
+                <HiX />
               </button>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? "Saving..." : editingId ? "Update" : "Create"}
+              <button type="submit" className="btn btn-primary btn-icon-mobile" disabled={submitting}>
+                <span className="btn-text">{submitting ? "Saving..." : editingId ? "Update" : "Create"}</span>
+                <HiCheck />
               </button>
             </div>
           </form>
