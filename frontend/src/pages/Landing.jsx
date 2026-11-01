@@ -25,7 +25,7 @@ function Landing() {
     .slice(0, 5);
 
   return (
-    <>
+    <div className="landing">
       <section className="hero">
         <h1>Jobs, govt exams and hackathons for freshers.</h1>
         <p>Checked every morning. Sorted by deadline. Official links only.</p>
@@ -49,7 +49,7 @@ function Landing() {
         )}
         <Link to="/register" className="more">See all openings</Link>
       </section>
-    </>
+    </div>
   );
 }
 

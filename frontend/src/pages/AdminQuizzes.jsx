@@ -166,14 +166,10 @@ function AdminQuizzes() {
                       {quiz.isActive === false && <span className="tag tag-off" title="Expired or past deadline, so it is hidden from the site">Hidden</span>}
                     </span>
                   </td>
-                  <td>{quiz.platform || "—"}</td>
+                  <td>{quiz.platform || ""}</td>
                   <td>{quiz.eligibility || "Freshers & Experienced"}</td>
-                  <td>
-                    {quiz.deadline
-                      ? new Date(quiz.deadline).toLocaleDateString()
-                      : "—"}
-                  </td>
-                  <td>{new Date(quiz.createdAt).toLocaleDateString()}</td>
+                  <td data-label="Closes">{quiz.deadline ? new Date(quiz.deadline).toLocaleDateString() : ""}</td>
+                  <td data-label="Added">{new Date(quiz.createdAt).toLocaleDateString()}</td>
                   <td>
                     <div className="table-actions">
                       <button

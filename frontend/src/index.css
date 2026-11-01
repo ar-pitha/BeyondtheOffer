@@ -1330,3 +1330,221 @@ select.form-control {
   0%, 80%, 100% { opacity: 0.25; }
   40% { opacity: 1; }
 }
+
+/* ── Desktop: student app ──────────────────────────────────────── */
+/* Same four tabs as the phone bottom nav, moved into a top bar */
+.app-top {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .app-top {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    padding: 0 max(24px, calc((100vw - 1040px) / 2));
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .top-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .top-tabs .tab {
+    flex-direction: row;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 14px;
+  }
+
+  .top-tabs .tab svg {
+    font-size: 18px;
+  }
+
+  .top-tabs .tab.active {
+    background: var(--soft);
+  }
+
+  .app > .tabbar {
+    display: none;
+  }
+
+  .app-main {
+    max-width: 680px;
+    padding: 36px 24px 64px;
+  }
+
+  /* Feed: filters on the left, list on the right */
+  .app-main:has(.feed-layout) {
+    max-width: 1040px;
+  }
+
+  .feed-layout {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  .feed-side {
+    position: sticky;
+    top: 100px;
+  }
+
+  .feed-side .chips {
+    flex-wrap: wrap;
+    margin: 14px 0 0;
+    padding: 0;
+  }
+
+  .feed-list .rows {
+    border-top: none;
+  }
+
+  .feed-list .row:first-child {
+    padding-top: 0;
+  }
+}
+
+/* ── Desktop: landing ──────────────────────────────────────────── */
+@media (min-width: 900px) {
+  .public-main:has(.landing) {
+    max-width: 1040px;
+  }
+
+  .landing {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 72px;
+    align-items: start;
+  }
+
+  .landing .hero {
+    position: sticky;
+    top: 32px;
+    padding-top: 48px;
+  }
+
+  .landing > section:last-child {
+    padding-top: 48px;
+  }
+}
+
+/* ── Admin on phones: slim bar, bottom tabs, flat rows ─────────── */
+@media (min-width: 900px) {
+  .admin-tabbar {
+    display: none;
+  }
+}
+
+@media (max-width: 899px) {
+  .admin-bar-top {
+    padding: 12px 16px;
+  }
+
+  .admin-nav {
+    display: none;
+  }
+
+  .admin-main {
+    padding-bottom: calc(var(--tabbar) + 32px + env(safe-area-inset-bottom));
+  }
+
+  /* Tables become the same flat rows as the student feed */
+  .admin-table-wrapper {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .admin-table-wrapper > .admin-toolbar {
+    padding: 0 0 12px;
+  }
+
+  .admin-table thead {
+    display: none;
+  }
+
+  .admin-table,
+  .admin-table tbody {
+    display: block;
+  }
+
+  .admin-table tbody {
+    border-top: 1px solid var(--line);
+  }
+
+  .admin-table tr {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 0;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .admin-table tr:has(.table-actions) {
+    padding-right: 96px;
+  }
+
+  .admin-table td {
+    padding: 0;
+    border: none;
+    white-space: normal;
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+
+  .admin-table td:first-child {
+    flex-basis: 100%;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* Separator between facts, but not before the edit/delete buttons */
+  .admin-table td:not(:first-child):not(:last-child):not(:has(+ td .table-actions))::after {
+    content: "·";
+    margin: 0 6px;
+  }
+
+  .admin-table td:has(.table-actions) {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+  }
+
+  .admin-table td:has(.table-actions)::after,
+  .admin-table td:empty::after {
+    content: none;
+  }
+
+  .admin-table td:empty {
+    display: none;
+  }
+
+  .stats-grid .stat-card:nth-child(2n) {
+    border-right: none;
+  }
+}
+
+@media (max-width: 899px) {
+  /* Labels for the two dates */
+  .admin-table td[data-label]:not(:empty)::before {
+    content: attr(data-label) " ";
+  }
+
+  .table-actions .btn {
+    height: 32px;
+    padding: 0 10px;
+  }
+}

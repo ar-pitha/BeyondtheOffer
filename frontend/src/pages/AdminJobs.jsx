@@ -180,11 +180,11 @@ function AdminJobs() {
                     </span>
                   </td>
                   <td>{job.company}</td>
-                  <td>{job.jobKind === "govt" ? "Govt" : job.jobKind === "tech" ? "Tech" : "—"}</td>
+                  <td>{job.jobKind === "govt" ? "Govt" : job.jobKind === "tech" ? "Tech" : ""}</td>
                   <td>{job.type}</td>
                   <td>{job.eligibility || "Freshers & Experienced"}</td>
-                  <td>{job.deadline ? new Date(job.deadline).toLocaleDateString() : "—"}</td>
-                  <td>{new Date(job.createdAt).toLocaleDateString()}</td>
+                  <td data-label="Closes">{job.deadline ? new Date(job.deadline).toLocaleDateString() : ""}</td>
+                  <td data-label="Added">{new Date(job.createdAt).toLocaleDateString()}</td>
                   <td>
                     <div className="table-actions">
                       <button

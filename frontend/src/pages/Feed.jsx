@@ -43,7 +43,9 @@ function Feed() {
   };
 
   return (
-    <>
+    <div className="feed-layout">
+      {/* Desktop: this column sits on the left and stays in view */}
+      <aside className="feed-side">
       <header className="screen-head">
         <h1>Openings</h1>
         {!loading && <span className="count">{list.length}</span>}
@@ -62,7 +64,9 @@ function Feed() {
           </button>
         ))}
       </div>
+      </aside>
 
+      <section className="feed-list">
       {loading ? (
         <p className="note">Loading openings…</p>
       ) : error ? (
@@ -86,7 +90,8 @@ function Feed() {
           )}
         </>
       )}
-    </>
+      </section>
+    </div>
   );
 }
 

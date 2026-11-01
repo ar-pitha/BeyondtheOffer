@@ -4,7 +4,11 @@ import {
   HiOutlineNewspaper, HiNewspaper,
   HiOutlineBookmark, HiBookmark,
   HiOutlineUserCircle, HiUserCircle,
+  HiOutlineChartBar, HiChartBar,
+  HiOutlineBriefcase, HiBriefcase,
+  HiOutlineLightningBolt, HiLightningBolt,
 } from "react-icons/hi";
+import { FaInstagram } from "react-icons/fa";
 
 const Brand = ({ to = "/" }) => (
   <Link to={to} className="brand">
@@ -60,37 +64,45 @@ const TABS = [
   { to: "/me", label: "Me", icon: HiOutlineUserCircle, active: HiUserCircle },
 ];
 
-// Students: content + bottom nav
+const Tabs = ({ items, className = "tabbar", label = "Main" }) => (
+  <nav className={className} aria-label={label}>
+    {items.map(({ to, label: text, icon: Icon, active: Active, end }) => (
+      <NavLink key={to} to={to} end={end} className="tab">
+        {({ isActive }) => (
+          <>
+            {isActive ? <Active aria-hidden /> : <Icon aria-hidden />}
+            <span>{text}</span>
+          </>
+        )}
+      </NavLink>
+    ))}
+  </nav>
+);
+
+// Students: bottom nav on phones, top bar on desktop (same four tabs)
 export function AppLayout() {
   return (
     <div className="app">
+      <header className="app-top">
+        <Brand />
+        <Tabs items={TABS} className="top-tabs" />
+      </header>
       <main className="app-main">
         <Outlet />
       </main>
-      <nav className="tabbar" aria-label="Main">
-        {TABS.map(({ to, label, icon: Icon, active: Active, end }) => (
-          <NavLink key={to} to={to} end={end} className="tab">
-            {({ isActive }) => (
-              <>
-                {isActive ? <Active aria-hidden /> : <Icon aria-hidden />}
-                <span>{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+      <Tabs items={TABS} />
     </div>
   );
 }
 
 const ADMIN_NAV = [
-  { to: "/admin", label: "Overview", end: true },
-  { to: "/admin/feed", label: "Instagram" },
-  { to: "/admin/jobs", label: "Jobs" },
-  { to: "/admin/quizzes", label: "Events" },
+  { to: "/admin", label: "Overview", icon: HiOutlineChartBar, active: HiChartBar, end: true },
+  { to: "/admin/feed", label: "Instagram", icon: FaInstagram, active: FaInstagram },
+  { to: "/admin/jobs", label: "Jobs", icon: HiOutlineBriefcase, active: HiBriefcase },
+  { to: "/admin/quizzes", label: "Events", icon: HiOutlineLightningBolt, active: HiLightningBolt },
 ];
 
-// Admin console: its own dark bar and sections, no student navigation
+// Admin console: dark bar with sections on desktop; slim bar + bottom tabs on phones
 export function AdminLayout({ user, onLogout }) {
   return (
     <div className="admin">
@@ -113,6 +125,8 @@ export function AdminLayout({ user, onLogout }) {
       <main className="admin-main">
         <Outlet />
       </main>
+      {/* Phones: the same bottom tabs as the student app */}
+      <Tabs items={ADMIN_NAV} className="tabbar admin-tabbar" label="Admin" />
     </div>
   );
 }
