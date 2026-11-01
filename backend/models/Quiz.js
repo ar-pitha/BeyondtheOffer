@@ -34,6 +34,18 @@ const quizSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+
+    // Automation (Google Sheet sync): every field below is optional
+    externalId: { type: String, trim: true, unique: true, sparse: true },
+    origin: { type: String, enum: ["admin", "auto"], default: "admin" },
+    eventType: { type: String, enum: ["hackathon", "quiz", "ctf", "contest"] },
+    organiser: { type: String, trim: true },
+    prizes: { type: String, trim: true },
+    eventDate: { type: Date },
+    verified: { type: String, enum: ["Official", "Multi-source", "Single-source"] },
+    isActive: { type: Boolean, default: true },
+    adminEdited: { type: Boolean, default: false },
+    extra: { type: mongoose.Schema.Types.Mixed },
   },
   { timestamps: true }
 );

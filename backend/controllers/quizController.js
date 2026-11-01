@@ -4,7 +4,9 @@ const Quiz = require("../models/Quiz");
 // @route   GET /api/quizzes
 const getQuizzes = async (req, res) => {
   try {
-    const quizzes = await Quiz.find().sort({ createdAt: -1 });
+    // Items without isActive count as active. Admin pages pass ?includeInactive=true.
+    const filter = req.query.includeInactive === "true" ? {} : { isActive: { $ne: false } };
+    const quizzes = await Quiz.find(filter).sort({ createdAt: -1 });
     res.json(quizzes);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +17,7 @@ const getQuizzes = async (req, res) => {
 // @route   POST /api/quizzes
 const createQuiz = async (req, res) => {
   try {
-    const { title, description, link, platform, deadline } = req.body;
+    const { title, description, link, platform, deadline, eligibility, eventType } = req.body;
 
     const quiz = await Quiz.create({
       title,
@@ -23,6 +25,8 @@ const createQuiz = async (req, res) => {
       link,
       platform,
       deadline: deadline || null,
+      eligibility,
+      eventType: eventType || undefined,
       createdBy: req.user._id,
     });
 
@@ -41,9 +45,10 @@ const updateQuiz = async (req, res) => {
       return res.status(404).json({ message: "Quiz not found" });
     }
 
+    // adminEdited stops the sheet sync from overwriting this edit
     const updatedQuiz = await Quiz.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { ...req.body, adminEdited: true },
       { new: true, runValidators: true }
     );
 

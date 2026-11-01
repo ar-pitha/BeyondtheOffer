@@ -55,6 +55,19 @@ const jobSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+
+    // Automation (Google Sheet sync): every field below is optional
+    externalId: { type: String, trim: true, unique: true, sparse: true },
+    origin: { type: String, enum: ["admin", "auto"], default: "admin" },
+    jobKind: { type: String, enum: ["tech", "govt"] },
+    sector: { type: String, trim: true },
+    salary: { type: String, trim: true },
+    deadline: { type: Date },
+    verified: { type: String, enum: ["Official", "Multi-source", "Single-source"] },
+    sourceName: { type: String, trim: true },
+    isActive: { type: Boolean, default: true },
+    adminEdited: { type: Boolean, default: false },
+    extra: { type: mongoose.Schema.Types.Mixed },
   },
   { timestamps: true }
 );

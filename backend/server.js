@@ -6,6 +6,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 const quizRoutes = require("./routes/quizRoutes");
+const newsRoutes = require("./routes/newsRoutes");
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use(async (req, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/quizzes", quizRoutes);
+app.use("/api/news", newsRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "BeyondTheOffer API is running" });

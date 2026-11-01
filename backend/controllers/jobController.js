@@ -4,7 +4,9 @@ const Job = require("../models/Job");
 // @route   GET /api/jobs
 const getJobs = async (req, res) => {
   try {
-    const jobs = await Job.find().sort({ createdAt: -1 });
+    // Items without isActive count as active. Admin pages pass ?includeInactive=true.
+    const filter = req.query.includeInactive === "true" ? {} : { isActive: { $ne: false } };
+    const jobs = await Job.find(filter).sort({ createdAt: -1 });
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +17,7 @@ const getJobs = async (req, res) => {
 // @route   POST /api/jobs
 const createJob = async (req, res) => {
   try {
-    const { title, company, location, description, type, link, platform, eligibility, batch, experience } =
+    const { title, company, location, description, type, link, platform, eligibility, batch, experience, jobKind, deadline } =
       req.body;
 
     const job = await Job.create({
@@ -29,6 +31,8 @@ const createJob = async (req, res) => {
       eligibility,
       batch,
       experience,
+      jobKind: jobKind || undefined,
+      deadline: deadline || undefined,
       postedBy: req.user._id,
     });
 
@@ -47,7 +51,8 @@ const updateJob = async (req, res) => {
       return res.status(404).json({ message: "Job not found" });
     }
 
-    const updatedJob = await Job.findByIdAndUpdate(req.params.id, req.body, {
+    // adminEdited stops the sheet sync from overwriting this edit
+    const updatedJob = await Job.findByIdAndUpdate(req.params.id, { ...req.body, adminEdited: true }, {
       new: true,
       runValidators: true,
     });
