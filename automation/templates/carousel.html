@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700;800;900&display=block" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: var(--w, 1080px); height: var(--h, 1350px); }
+  body {
+    font-family: "Schibsted Grotesk", "Segoe UI", Arial, sans-serif;
+    background: var(--ink);
+    color: var(--text);
+    overflow: hidden;
+  }
+  .slide {
+    position: relative;
+    width: var(--w, 1080px);
+    height: var(--h, 1350px);
+    padding: 96px 88px 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  /* The sun disc from the logo, cropped off the corner */
+  .slide::before {
+    content: "";
+    position: absolute;
+    width: 760px; height: 760px;
+    right: -320px; top: -400px;
+    border-radius: 50%;
+    border: 6px solid var(--marigold);
+    opacity: .55;
+  }
+  .top { display: flex; justify-content: space-between; align-items: center; font-size: 30px; color: var(--muted); font-weight: 500; position: relative; }
+  .count { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .body { flex: 1; display: flex; flex-direction: column; justify-content: center; position: relative; }
+  footer {
+    position: relative;
+    height: 120px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-top: 3px dashed rgba(236, 237, 247, .22);
+    font-size: 30px; color: var(--muted); font-weight: 500;
+  }
+  footer b { color: var(--text); font-weight: 700; }
+
+  /* Cover */
+  .kicker { font-size: 36px; font-weight: 700; color: var(--marigold); margin-bottom: 36px; }
+  .cover h1 { font-size: 112px; line-height: .98; font-weight: 900; letter-spacing: -3px; }
+  .cover p { margin-top: 44px; font-size: 42px; line-height: 1.3; color: var(--muted); max-width: 22ch; }
+  .cover .swipe { margin-top: 64px; display: inline-flex; align-self: flex-start;
+    background: var(--violet); color: #fff; font-size: 34px; font-weight: 700; padding: 20px 34px; border-radius: 999px; }
+
+  /* Item: a ticket with a perforated deadline stub */
+  .ticket { display: flex; background: var(--surface); border-radius: 36px; overflow: hidden; position: relative; }
+  .ticket .main { flex: 1; padding: 64px 56px; min-width: 0; }
+  .ticket h2 { font-size: 72px; line-height: 1.04; font-weight: 800; letter-spacing: -1.5px; }
+  .ticket ul { list-style: none; margin-top: 44px; display: grid; gap: 22px; }
+  .ticket li { font-size: 36px; line-height: 1.25; padding-left: 38px; position: relative; }
+  .ticket li::before { content: ""; position: absolute; left: 0; top: 16px; width: 16px; height: 16px; border-radius: 50%; background: var(--violet); }
+  .stub {
+    width: 250px; flex-shrink: 0;
+    background: var(--marigold); color: var(--ink);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    padding: 32px 20px; position: relative;
+  }
+  .stub::before {
+    content: ""; position: absolute; left: -2px; top: 24px; bottom: 24px; width: 4px;
+    background: repeating-linear-gradient(to bottom, var(--ink) 0 14px, transparent 14px 28px);
+  }
+  .stub .label { font-size: 28px; font-weight: 700; }
+  .stub .big { font-variant-numeric: tabular-nums; font-size: 96px; font-weight: 900; line-height: 1; margin: 10px 0; letter-spacing: -2px; }
+  .stub .date { font-size: 46px; font-weight: 800; line-height: 1.1; margin-top: 10px; }
+  .stub .small { font-size: 28px; font-weight: 500; }
+  .no-stub .stub { display: none; }
+  .tag { display: inline-block; font-size: 30px; font-weight: 700; color: var(--green); margin-bottom: 28px; }
+
+  /* CTA */
+  .cta h1 { font-size: 100px; line-height: 1; font-weight: 900; letter-spacing: -2.5px; }
+  .cta p { margin-top: 40px; font-size: 42px; color: var(--muted); line-height: 1.3; max-width: 22ch; }
+  .cta .site { margin-top: 64px; font-size: 44px; font-weight: 800; color: var(--marigold); }
+  .cta .comment { margin-top: 28px; font-size: 38px; }
+  .cta .comment b { background: var(--violet); color: #fff; padding: 4px 18px; border-radius: 14px; }
+
+  /* Tall formats: stories and reels */
+  .tall .slide { padding-top: 180px; }
+  .tall footer { height: 240px; align-items: flex-start; padding-top: 40px; }
+  .tall .cover h1 { font-size: 128px; }
+  .tall .ticket { flex-direction: column; }
+  .tall .stub { width: auto; flex-direction: row; gap: 28px; padding: 36px; }
+  .tall .stub::before { left: 24px; right: 24px; top: -2px; bottom: auto; width: auto; height: 4px;
+    background: repeating-linear-gradient(to right, var(--ink) 0 14px, transparent 14px 28px); }
+  .tall .stub .big, .tall .stub .date { margin: 0; }
+</style>
+</head>
+<body>
+<div class="slide" id="slide"></div>
+<script>
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const DEADLINE = /^(apply by|last date|register by|closes|deadline|ends)\b[:\s-]*/i;
+
+  function daysLeft(text, today) {
+    const raw = text.replace(DEADLINE, "");
+    const d = new Date(/\d{4}/.test(raw) ? raw : `${raw} ${new Date(today).getFullYear()}`);
+    if (isNaN(d)) return null;
+    return Math.ceil((d - today) / 86400000);
+  }
+
+  window.renderSlide = ({ variant, fields, index, total, brand, format, today }) => {
+    const root = document.documentElement;
+    for (const [k, v] of Object.entries(brand.colors)) root.style.setProperty(`--${k}`, v);
+    const tall = format !== "post";
+    root.style.setProperty("--h", tall ? "1920px" : "1350px");
+    document.body.classList.toggle("tall", tall);
+
+    const [first = "", second = "", ...rest] = fields;
+    let body = "";
+    if (variant === "cover") {
+      body = `<div class="cover">
+        ${rest[0] ? `<div class="kicker">${esc(rest[0])}</div>` : ""}
+        <h1>${esc(first)}</h1>
+        ${second ? `<p>${esc(second)}</p>` : ""}
+        ${format === "post" && total > 1 ? `<span class="swipe">Swipe for details</span>` : ""}
+      </div>`;
+    } else if (variant === "cta") {
+      body = `<div class="cta">
+        <h1>${esc(first || "Don't miss the next one")}</h1>
+        <p>${esc(second || "Fresh jobs, govt notifications and hackathons, every morning.")}</p>
+        <div class="site">${esc(brand.website)}</div>
+        <div class="comment">Comment <b>JOB</b> and we'll DM you the links</div>
+      </div>`;
+    } else {
+      const details = [second, ...rest].filter(Boolean);
+      const deadline = details.find((d) => DEADLINE.test(d));
+      const verified = details.find((d) => /^verified\b/i.test(d));
+      const list = details.filter((d) => d !== deadline && d !== verified);
+      const n = deadline ? daysLeft(deadline, today) : null;
+      const stub = !deadline
+        ? ""
+        : n !== null && n >= 0 && n <= 45
+          ? `<span class="label">Closes in</span><span class="big">${n}</span><span class="small">${n === 1 ? "day" : "days"}</span>`
+          : `<span class="label">${esc(deadline.match(DEADLINE)[1])}</span><span class="date">${esc(deadline.replace(DEADLINE, ""))}</span>`;
+      body = `<div class="ticket ${deadline ? "" : "no-stub"}">
+        <div class="main">
+          ${verified ? `<span class="tag">✓ ${esc(verified)}</span>` : ""}
+          <h2>${esc(first)}</h2>
+          <ul>${list.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>
+        </div>
+        <div class="stub">${stub}</div>
+      </div>`;
+    }
+
+    document.getElementById("slide").innerHTML = `
+      <div class="top"><span>${esc(brand.handle)}</span><span class="count">${total > 1 ? `${index}/${total}` : ""}</span></div>
+      <div class="body">${body}</div>
+      <footer><span>${esc(brand.footer)}</span><b>${esc(brand.website)}</b></footer>`;
+  };
+</script>
+</body>
+</html>

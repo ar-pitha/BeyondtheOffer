@@ -1,0 +1,84 @@
+name: publish
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render + upload only, don't post"
+        type: boolean
+        default: true
+      id:
+        description: "Content_Queue ID to publish (optional)"
+        type: string
+        default: ""
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SHEET_ID: ${{ secrets.SHEET_ID }}
+      GOOGLE_SA_JSON_B64: ${{ secrets.GOOGLE_SA_JSON_B64 }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      IG_TOKEN_ISSUED_AT: ${{ secrets.IG_TOKEN_ISSUED_AT }}
+      IG_APP_ID: ${{ secrets.IG_APP_ID }}
+      IG_APP_SECRET: ${{ secrets.IG_APP_SECRET }}
+      IG_API_BASE: ${{ secrets.IG_API_BASE }}
+      IG_API_VERSION: ${{ secrets.IG_API_VERSION }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      TIMEZONE: Asia/Kolkata
+      POST_SLOTS_IST: ${{ vars.POST_SLOTS_IST || '09:00,13:00,19:00' }}
+      WEBSITE_URL: ${{ vars.WEBSITE_URL || 'https://beyondtheoffer.vercel.app' }}
+      # Scheduled runs read the repository variable DRY_RUN (Settings → Variables). Set it to "false" to go live.
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || vars.DRY_RUN || 'true' }}
+      # Manual runs ignore posting slots
+      NOW_FLAG: ${{ github.event_name == 'workflow_dispatch' && '--now' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: automation/package-lock.json
+
+      - run: npm ci
+        working-directory: automation
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      # Cheap check first so most 30-minute runs finish in seconds
+      - name: Anything due?
+        id: check
+        working-directory: automation
+        run: node publish.js --check $NOW_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
+
+      - name: Install Chromium and ffmpeg
+        if: steps.check.outputs.due == 'true'
+        working-directory: automation
+        run: |
+          npx playwright install --with-deps chromium
+          command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
+      - name: Publish
+        if: steps.check.outputs.due == 'true'
+        working-directory: automation
+        run: node publish.js $NOW_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
+
+      - name: Keep renders
+        if: steps.check.outputs.due == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renders-${{ github.run_id }}
+          path: automation/renders/
+          if-no-files-found: ignore
+          retention-days: 7

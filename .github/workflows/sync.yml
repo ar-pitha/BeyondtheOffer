@@ -1,0 +1,70 @@
+name: sync
+
+on:
+  schedule:
+    # 02:00 UTC = 7:30 AM IST, then every 6 hours
+    - cron: "0 2,8,14,20 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print what would change"
+        type: boolean
+        default: false
+      include_single:
+        description: "Also sync Single-source rows"
+        type: boolean
+        default: false
+      insights:
+        description: "Also collect Instagram insights"
+        type: boolean
+        default: false
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      AUTOMATION_USER_EMAIL: ${{ secrets.AUTOMATION_USER_EMAIL }}
+      SHEET_ID: ${{ secrets.SHEET_ID }}
+      GOOGLE_SA_JSON_B64: ${{ secrets.GOOGLE_SA_JSON_B64 }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      IG_API_BASE: ${{ secrets.IG_API_BASE }}
+      IG_API_VERSION: ${{ secrets.IG_API_VERSION }}
+      TIMEZONE: Asia/Kolkata
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            automation/package-lock.json
+            backend/package-lock.json
+
+      # sync.js reuses the backend's Mongoose models
+      - run: npm ci --omit=dev
+        working-directory: backend
+      - run: npm ci
+        working-directory: automation
+
+      - name: Sheet → MongoDB
+        working-directory: automation
+        run: node sync.js ${{ inputs.dry_run && '--dry-run' || '' }} ${{ inputs.include_single && '--include-single' || '' }}
+
+      # Once a day: the 02:00 UTC scheduled run, or when ticked on a manual run
+      - name: Instagram insights
+        if: env.IG_ACCESS_TOKEN != ''
+        working-directory: automation
+        run: |
+          if [ "${{ inputs.insights }}" = "true" ] || { [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%H)" = "02" ]; }; then
+            node insights.js
+          else
+            echo "Insights run once a day at the 02:00 UTC sync."
+          fi

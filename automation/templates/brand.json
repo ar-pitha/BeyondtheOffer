@@ -1,0 +1,14 @@
+{
+  "handle": "@beyond_the.offer",
+  "footer": "@beyond_the.offer · link in bio",
+  "website": "beyondtheoffer.vercel.app",
+  "colors": {
+    "ink": "#15162A",
+    "surface": "#1E2040",
+    "text": "#ECEDF7",
+    "muted": "#A3A6C4",
+    "violet": "#8F86FF",
+    "marigold": "#F5B254",
+    "green": "#4CC38A"
+  }
+}
