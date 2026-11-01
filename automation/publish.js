@@ -14,7 +14,7 @@ import path from "node:path";
 import { ROOT, TABS, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, nowInZone, logRun } from "./lib/sheets.js";
 import { parseSlides, renderSlides, closeBrowser } from "./lib/render.js";
-import { hasCloudinary, uploadSlides } from "./lib/cloudinary.js";
+import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
 
 const dryRun = isDryRun();
 const sample = hasFlag("sample");
@@ -133,7 +133,7 @@ async function publishToInstagram(row, imageUrls, video) {
 
   let creationId;
   if (format === "reel") {
-    creationId = await ig.createReelContainer(video, caption);
+    creationId = await ig.createReelContainerFromUrl(video, caption);
   } else if (imageUrls.length === 1) {
     creationId = await ig.createImageContainer(imageUrls[0], { caption });
   } else {
@@ -141,7 +141,8 @@ async function publishToInstagram(row, imageUrls, video) {
     for (const url of imageUrls) children.push(await ig.createImageContainer(url, { isCarouselItem: true }));
     creationId = await ig.createCarouselContainer(children, caption);
   }
-  await ig.waitUntilFinished(creationId);
+  // Video needs longer to process than images
+  await ig.waitUntilFinished(creationId, format === "reel" ? { intervalMs: 20_000, maxMs: 10 * 60_000 } : {});
   const mediaId = await ig.publish(creationId);
   return { mediaId, permalink: await ig.getPermalink(mediaId) };
 }
@@ -198,12 +199,20 @@ async function main() {
       console.log("Cloudinary not configured: skipped upload.");
     }
 
+    let videoUrl = null;
+    if (video && hasCloudinary()) {
+      videoUrl = await uploadVideo(video, { folder: `beyondtheoffer/${row.ID}`, publicId: "reel" });
+      console.log(`Uploaded reel to Cloudinary:\n  ${videoUrl}`);
+    } else if (video && !dryRun) {
+      throw new Error("Cloudinary credentials missing; Instagram needs a public video URL for reels");
+    }
+
     if (dryRun) {
       console.log("Dry run: nothing published. Set DRY_RUN=false to post.");
       return;
     }
 
-    const { permalink } = await publishToInstagram(row, urls, video);
+    const { permalink } = await publishToInstagram(row, urls, videoUrl);
     console.log(`Published: ${permalink}`);
 
     if (!sample) {

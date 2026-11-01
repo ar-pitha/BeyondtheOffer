@@ -6,7 +6,12 @@ import path from "node:path";
 export const hasCloudinary = () =>
   Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
 
-export async function uploadImage(filePath, { folder, publicId }) {
+export const uploadImage = (filePath, opts) => upload(filePath, { ...opts, type: "image", mime: "image/jpeg" });
+
+// Reels: Instagram fetches the MP4 from this public URL (video_url)
+export const uploadVideo = (filePath, opts) => upload(filePath, { ...opts, type: "video", mime: "video/mp4" });
+
+async function upload(filePath, { folder, publicId, type, mime }) {
   if (!hasCloudinary()) throw new Error("Cloudinary credentials missing (CLOUDINARY_CLOUD_NAME / API_KEY / API_SECRET)");
 
   const params = { folder, overwrite: "true", public_id: publicId, timestamp: Math.floor(Date.now() / 1000) };
@@ -20,9 +25,9 @@ export async function uploadImage(filePath, { folder, publicId }) {
   for (const [k, v] of Object.entries(params)) form.append(k, String(v));
   form.append("api_key", process.env.CLOUDINARY_API_KEY);
   form.append("signature", signature);
-  form.append("file", new Blob([fs.readFileSync(filePath)], { type: "image/jpeg" }), path.basename(filePath));
+  form.append("file", new Blob([fs.readFileSync(filePath)], { type: mime }), path.basename(filePath));
 
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload`, {
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/${type}/upload`, {
     method: "POST",
     body: form,
   });

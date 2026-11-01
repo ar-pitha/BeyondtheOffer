@@ -26,7 +26,15 @@ export const createStoryContainer = (imageUrl) =>
     (d) => d.id
   );
 
-// Reels via resumable upload: no public video hosting needed.
+// Reels from a public MP4 URL (Cloudinary). This works with unified-login tokens,
+// where rupload.facebook.com rejects direct uploads.
+export const createReelContainerFromUrl = (videoUrl, caption) =>
+  igRequest(`${igUserId()}/media`, {
+    method: "POST",
+    params: { media_type: "REELS", video_url: videoUrl, caption, share_to_feed: true },
+  }).then((d) => d.id);
+
+// Reels via resumable upload (Instagram-login tokens): no public video hosting needed.
 export async function createReelContainer(filePath, caption) {
   const { id, uri } = await igRequest(`${igUserId()}/media`, {
     method: "POST",
