@@ -46,7 +46,7 @@ const parseSlides = (script = "") =>
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, nowIST, onSave, busy }) {
+function PostCard({ row, slots, onSave, onPostNow, busy, posting }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -55,8 +55,6 @@ function PostCard({ row, slots, nowIST, onSave, busy }) {
   const status = row.Status || "Draft";
 
   const save = (patch, done) => onSave(row.ID, patch, done);
-  const postSoon = () =>
-    save({ Status: "Approved", Scheduled_Time_IST: `${nowIST.date} ${nowIST.time}` }, "Approved. It will post within about 30 minutes.");
 
   return (
     <article className={`feed-card status-${status.toLowerCase()}`}>
@@ -118,12 +116,12 @@ function PostCard({ row, slots, nowIST, onSave, busy }) {
       ) : (
         <div className="feed-actions">
           {status !== "Approved" && (
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => save({ Status: "Approved" }, `Approved. It will post at the next slot (${slots} IST).`)}>
-              Approve
+            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => save({ Status: "Approved" }, `Approved. It will post at the next slot (${slots} IST).`)}>
+              Approve for next slot
             </button>
           )}
-          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={postSoon}>
-            Post within 30 min
+          <button className="btn btn-primary btn-sm" disabled={busy || posting} onClick={() => onPostNow(row)}>
+            {posting ? "Posting…" : "Post now"}
           </button>
           {status !== "Rejected" && (
             <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.")}>
@@ -212,6 +210,7 @@ function AdminFeed() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("Draft");
+  const [run, setRun] = useState(null); // { id, status, conclusion, url }
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -243,6 +242,41 @@ function AdminFeed() {
     }
   };
 
+  // Start the GitHub publish run for one post, then follow it until it finishes
+  const onPostNow = async (row) => {
+    if (!window.confirm(`Post "${row.Title || row.ID}" to Instagram now?`)) return;
+    setRun({ id: row.ID, status: "starting" });
+    try {
+      await axios.post("/api/admin-sheet", { action: "publish-now", id: row.ID }, api);
+      toast.success("Posting started. This takes about 2 minutes.");
+    } catch (err) {
+      setRun(null);
+      toast.error(err.response?.data?.message || "Couldn't start posting.");
+    }
+  };
+
+  useEffect(() => {
+    if (!run || run.status === "completed") return;
+    const started = Date.now();
+    const timer = setInterval(async () => {
+      try {
+        const { data: s } = await axios.post("/api/admin-sheet", { action: "publish-status" }, api);
+        // Ignore the previous run until GitHub registers the new one
+        if (s.startedAt && new Date(s.startedAt).getTime() < started - 60_000) return;
+        setRun((r) => ({ ...r, ...s }));
+        if (s.status === "completed") {
+          clearInterval(timer);
+          if (s.conclusion === "success") toast.success("Posted to Instagram");
+          else toast.error("Posting failed. Open the run for details.");
+          load("Content_Queue");
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [run?.id, run?.status === "completed"]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const posts = data?.tab === "Content_Queue" ? data.rows : [];
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
@@ -261,6 +295,20 @@ function AdminFeed() {
           <HiRefresh aria-hidden /> Refresh
         </button>
       </div>
+
+      {run && (
+        <div className={`feed-run feed-run-${run.conclusion || run.status}`} role="status">
+          <span>
+            {run.status === "completed"
+              ? run.conclusion === "success"
+                ? `${run.id} is live on Instagram.`
+                : `Posting ${run.id} failed.`
+              : `Posting ${run.id}… rendering slides and uploading (about 2 minutes).`}
+          </span>
+          {run.url && <a href={run.url} target="_blank" rel="noopener noreferrer" className="link-button">See the run</a>}
+          {run.status === "completed" && <button className="link-button" onClick={() => setRun(null)}>Dismiss</button>}
+        </div>
+      )}
 
       <div className="chips" role="group" aria-label="Sheet tab">
         {Object.keys(TAB_LABELS).map((t) => (
@@ -294,7 +342,7 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {visiblePosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} nowIST={data.nowIST} onSave={onSave} busy={busy} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPostNow={onPostNow} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
             </div>
           )}

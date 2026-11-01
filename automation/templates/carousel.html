@@ -48,6 +48,11 @@
   .kicker { font-size: 36px; font-weight: 700; color: var(--marigold); margin-bottom: 36px; }
   .cover h1 { font-size: 112px; line-height: .98; font-weight: 900; letter-spacing: -3px; }
   .cover p { margin-top: 44px; font-size: 42px; line-height: 1.3; color: var(--muted); max-width: 22ch; }
+  .cover h1.l { font-size: 84px; letter-spacing: -2px; }
+  .cover h1.xl { font-size: 64px; letter-spacing: -1px; line-height: 1.1; }
+  .ticket h2.l { font-size: 56px; }
+  .tall .cover h1.l { font-size: 100px; }
+  .tall .cover h1.xl { font-size: 76px; }
   .cover .swipe { margin-top: 64px; display: inline-flex; align-self: flex-start;
     background: var(--violet); color: #fff; font-size: 34px; font-weight: 700; padding: 20px 34px; border-radius: 999px; }
 
@@ -78,6 +83,11 @@
   /* CTA */
   .cta h1 { font-size: 100px; line-height: 1; font-weight: 900; letter-spacing: -2.5px; }
   .cta p { margin-top: 32px; font-size: 42px; color: var(--muted); line-height: 1.3; max-width: 24ch; }
+  .cta h1.l { font-size: 76px; letter-spacing: -1.5px; }
+  .cta h1.xl { font-size: 60px; letter-spacing: -1px; line-height: 1.1; }
+  .tall .cta h1.l { font-size: 92px; }
+  .tall .cta h1.xl { font-size: 72px; }
+  .cta h1 b { color: #fff; background: var(--violet); padding: 0 16px; border-radius: 14px; }
   .cta p b { color: #fff; background: var(--violet); padding: 0 14px; border-radius: 12px; font-weight: 700; }
   .cta .site { margin-top: 64px; font-size: 44px; font-weight: 800; color: var(--marigold); }
   .cta .comment { margin-top: 28px; font-size: 38px; }
@@ -98,7 +108,7 @@
 <div class="slide" id="slide"></div>
 <script>
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const DEADLINE = /^(apply by|last date|register by|closes|deadline|ends)\b[:\s-]*/i;
+  const DEADLINE = /^(apply by|last date|register by|closes|deadline|ends|by)\b[:\s-]*/i;
 
   function daysLeft(text, today) {
     const raw = text.replace(DEADLINE, "");
@@ -120,7 +130,7 @@
     if (variant === "cover") {
       body = `<div class="cover">
         ${rest[0] ? `<div class="kicker">${esc(rest[0])}</div>` : ""}
-        <h1>${esc(first)}</h1>
+        <h1 class="${first.length > 70 ? "xl" : first.length > 38 ? "l" : ""}">${esc(first)}</h1>
         ${second ? `<p>${esc(second)}</p>` : ""}
         ${format === "post" && total > 1 ? `<span class="swipe">Swipe for details</span>` : ""}
       </div>`;
@@ -129,10 +139,10 @@
       const saysComment = fields.some((f) => /\bcomment\b/i.test(f));
       const lines = [second, ...rest].filter(Boolean);
       body = `<div class="cta">
-        <h1>${esc(first || "Don't miss the next one")}</h1>
+        <h1 class="${first.length > 70 ? "xl" : first.length > 38 ? "l" : ""}">${esc(first || "Don't miss the next one").replace(/\b(JOB|INTERN|LINK|AI)\b(?=\s+(?:for|and|to)\b)/g, "<b>$1</b>")}</h1>
         ${lines.length
           ? lines.map((l) => `<p>${esc(l).replace(/\b(JOB|INTERN|LINK)\b/g, "<b>$1</b>")}</p>`).join("")
-          : `<p>Fresh jobs, govt notifications and hackathons, every morning.</p>`}
+          : first.length > 38 ? "" : `<p>Fresh jobs, govt notifications and hackathons, every morning.</p>`}
         <div class="site">${esc(brand.website)}</div>
         ${saysComment ? "" : `<div class="comment">Comment <b>JOB</b> and we'll DM you the links</div>`}
       </div>`;
@@ -150,7 +160,7 @@
       body = `<div class="ticket ${deadline ? "" : "no-stub"}">
         <div class="main">
           ${verified ? `<span class="tag">✓ ${esc(verified)}</span>` : ""}
-          <h2>${esc(first)}</h2>
+          <h2 class="${first.length > 34 ? "l" : ""}">${esc(first)}</h2>
           <ul>${list.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>
         </div>
         <div class="stub">${stub}</div>

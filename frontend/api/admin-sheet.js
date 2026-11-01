@@ -28,6 +28,49 @@ const TABS = {
   Comments_Log: { editable: {}, newestFirst: true, limit: 100 },
 };
 
+// GitHub Actions (publish.yml) is where posts are rendered and published.
+// GH_DISPATCH_TOKEN: fine-grained token for this repo with "Actions: Read and write".
+const repo = () => process.env.GH_REPO || "ar-pitha/BeyondtheOffer";
+
+async function github(path, init = {}) {
+  const token = process.env.GH_DISPATCH_TOKEN;
+  if (!token) {
+    const err = new Error("Instant posting isn't set up yet: add GH_DISPATCH_TOKEN to the Vercel project.");
+    err.status = 501;
+    throw err;
+  }
+  const res = await fetch(`https://api.github.com/repos/${repo()}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+    },
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    const err = new Error(`GitHub ${res.status}: ${detail.slice(0, 200)}`);
+    err.status = 502;
+    throw err;
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+const dispatchPublish = (id) =>
+  github("/actions/workflows/publish.yml/dispatches", {
+    method: "POST",
+    body: JSON.stringify({ ref: "main", inputs: { dry_run: "false", id } }),
+  });
+
+async function latestPublishRun() {
+  const { workflow_runs: runs = [] } = await github("/actions/workflows/publish.yml/runs?per_page=1");
+  const r = runs[0];
+  return r
+    ? { status: r.status, conclusion: r.conclusion, url: r.html_url, startedAt: r.run_started_at, event: r.event }
+    : { status: "none" };
+}
+
 function backendBase() {
   const raw = process.env.ADMIN_API_URL || process.env.VITE_API_URL || "";
   return raw.replace(/\/+$/, "").replace(/\/api$/, "");
@@ -88,7 +131,27 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "POST") {
-      const { tab, id, patch } = await readJson(req);
+      const body = await readJson(req);
+
+      // "Post now": start the publish workflow on GitHub for one approved row
+      if (body.action === "publish-now") {
+        const { rows } = await readTab("Content_Queue");
+        const row = rows.find((r) => r.ID === body.id);
+        if (!row) return send(res, 404, { message: `No post with ID ${body.id}.` });
+        if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
+        if (row.Status !== "Approved") {
+          await updateRow("Content_Queue", (await readTab("Content_Queue")).headers, row._row, { Status: "Approved" }, { raw: true });
+        }
+        await dispatchPublish(row.ID);
+        return send(res, 202, { message: "Posting started", runsUrl: `https://github.com/${repo()}/actions/workflows/publish.yml` });
+      }
+
+      // Latest publish run, so the page can show progress
+      if (body.action === "publish-status") {
+        return send(res, 200, await latestPublishRun());
+      }
+
+      const { tab, id, patch } = body;
       const cfg = TABS[tab];
       if (!cfg) return send(res, 400, { message: `Unknown tab "${tab}"` });
       if (!id || !patch || typeof patch !== "object") return send(res, 400, { message: "Send a row id and the fields to change." });
@@ -113,6 +176,6 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "GET, POST");
     return send(res, 405, { message: "Method not allowed" });
   } catch (err) {
-    return send(res, 500, { message: err.message });
+    return send(res, err.status || 500, { message: err.message });
   }
 }

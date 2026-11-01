@@ -13,8 +13,15 @@ import { parseReelScript, renderSlides, closeBrowser } from "./lib/render.js";
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const FADE = 0.4;
 
-// Hook 4 s, CTA 5 s, points share the rest so the reel lands around 36 s (min 30, max 45).
+// Timings from the script ("POINT 1 (3-18s)") win, each card 2–20 s, the reel at most 90 s.
+// Otherwise: hook 4 s, CTA 5 s, points share the rest so the reel lands around 36 s (min 30, max 45).
 export function planDurations(cards) {
+  if (cards.length && cards.every((c) => c.seconds > 0)) {
+    let durations = cards.map((c) => Math.min(20, Math.max(2, c.seconds)));
+    const total = durations.reduce((a, b) => a + b, 0);
+    if (total > 90) durations = durations.map((d) => d * (90 / total));
+    return durations.map((d) => +d.toFixed(2));
+  }
   const points = cards.filter((c) => c.kind === "point").length;
   const fixed = cards.reduce((t, c) => t + (c.kind === "hook" ? 4 : c.kind === "cta" ? 5 : 0), 0);
   const perPoint = points ? Math.min(10, Math.max(4, (36 - fixed) / points)) : 0;
