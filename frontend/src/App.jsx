@@ -17,6 +17,7 @@ import { Privacy, Terms, DataDeletion } from "./pages/Legal";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminJobs from "./pages/AdminJobs";
 import AdminQuizzes from "./pages/AdminQuizzes";
+import AdminFeed from "./pages/AdminFeed";
 
 // Set Axios base URL
 axios.defaults.baseURL = import.meta.env.VITE_API_URL;
@@ -126,6 +127,15 @@ function App() {
           element={
             <ProtectedRoute user={user} adminOnly>
               <AdminQuizzes />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/feed"
+          element={
+            <ProtectedRoute user={user} adminOnly>
+              <AdminFeed />
             </ProtectedRoute>
           }
         />

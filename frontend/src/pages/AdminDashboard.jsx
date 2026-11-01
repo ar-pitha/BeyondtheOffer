@@ -85,13 +85,13 @@ function AdminDashboard() {
             <p>Hackathons, quizzes, CTFs and contests</p>
           </div>
         </Link>
-        <a href="https://docs.google.com/spreadsheets/d/1wMs0w53J7STUPeFuP7mlE-QTKLG9UP97_JXJl-BtGdI" target="_blank" rel="noopener noreferrer" className="quick-action-card">
+        <Link to="/admin/feed" className="quick-action-card">
           <div className="quick-action-icon"><HiTable /></div>
           <div>
-            <h4>Open the feed sheet</h4>
-            <p>Approve Instagram drafts in Content_Queue</p>
+            <h4>Instagram posts and feed</h4>
+            <p>Approve drafts, schedule posts, edit the sheet</p>
           </div>
-        </a>
+        </Link>
       </div>
 
       {/* Users Table */}

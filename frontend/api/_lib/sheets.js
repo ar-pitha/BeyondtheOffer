@@ -108,7 +108,9 @@ export async function updateRowById(tab, id, patch, { idColumn = "ID" } = {}) {
   return true;
 }
 
-export async function updateRow(tab, headers, rowNumber, patch) {
+// raw: true stores values as typed text, so "2026-11-02 19:00" isn't reformatted
+// into a locale date that reads back differently.
+export async function updateRow(tab, headers, rowNumber, patch, { raw = false } = {}) {
   const data = Object.entries(patch)
     .filter(([key]) => headers.includes(key))
     .map(([key, value]) => ({
@@ -118,7 +120,7 @@ export async function updateRow(tab, headers, rowNumber, patch) {
   if (data.length === 0) return;
   await sheetsFetch(`/values:batchUpdate`, {
     method: "POST",
-    body: { valueInputOption: "USER_ENTERED", data },
+    body: { valueInputOption: raw ? "RAW" : "USER_ENTERED", data },
   });
 }
 

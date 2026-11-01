@@ -1460,6 +1460,136 @@ textarea.form-control {
   text-decoration: underline;
 }
 
+/* ── Admin feed (Google Sheet) ─────────────────────────────────── */
+.feed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
+  gap: 1rem;
+}
+
+.feed-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feed-card.status-approved { border-left-color: var(--violet); }
+.feed-card.status-published { border-left-color: var(--green); }
+.feed-card.status-rejected { border-left-color: var(--red); opacity: 0.75; }
+
+.feed-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.feed-card-head .ticket-tags {
+  margin: 0;
+}
+
+.feed-card-head small {
+  color: var(--ink-3);
+  font-size: var(--font-xs);
+}
+
+.feed-status-approved { background: var(--violet-soft); color: var(--violet); }
+.feed-status-published { background: var(--green-soft); color: var(--green); }
+.feed-status-rejected { background: var(--red-soft); color: var(--red); }
+.feed-status-draft { background: var(--marigold-soft); color: var(--ink); }
+
+.feed-slides {
+  list-style: decimal;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.3rem;
+  font-size: var(--font-sm);
+  color: var(--ink-2);
+}
+
+.feed-slides li::marker {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-caption summary {
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.feed-caption-text {
+  margin-top: 0.6rem;
+  white-space: pre-line;
+  font-size: var(--font-sm);
+  color: var(--ink-2);
+}
+
+.feed-hashtags {
+  margin-top: 0.5rem;
+  font-size: var(--font-xs);
+  color: var(--violet);
+  margin-bottom: 0.4rem;
+}
+
+.feed-caption textarea {
+  margin-top: 0.6rem;
+  font-size: var(--font-sm);
+}
+
+.feed-row,
+.feed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.feed-actions {
+  margin-top: auto;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.feed-time {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--font-xs);
+  color: var(--ink-3);
+  flex-wrap: wrap;
+}
+
+.feed-time .form-control {
+  width: auto;
+  padding: 0.35rem 0.5rem;
+  font-size: var(--font-xs);
+}
+
+.feed-table td {
+  max-width: 260px;
+}
+
+.feed-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-cell-select {
+  padding: 0.3rem 2rem 0.3rem 0.5rem;
+  font-size: var(--font-xs);
+  min-width: 130px;
+}
+
 /* ── Legal pages ───────────────────────────────────────────────── */
 .legal {
   max-width: 760px;
