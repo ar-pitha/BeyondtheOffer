@@ -77,7 +77,8 @@
 
   /* CTA */
   .cta h1 { font-size: 100px; line-height: 1; font-weight: 900; letter-spacing: -2.5px; }
-  .cta p { margin-top: 40px; font-size: 42px; color: var(--muted); line-height: 1.3; max-width: 22ch; }
+  .cta p { margin-top: 32px; font-size: 42px; color: var(--muted); line-height: 1.3; max-width: 24ch; }
+  .cta p b { color: #fff; background: var(--violet); padding: 0 14px; border-radius: 12px; font-weight: 700; }
   .cta .site { margin-top: 64px; font-size: 44px; font-weight: 800; color: var(--marigold); }
   .cta .comment { margin-top: 28px; font-size: 38px; }
   .cta .comment b { background: var(--violet); color: #fff; padding: 4px 18px; border-radius: 14px; }
@@ -113,6 +114,7 @@
     root.style.setProperty("--h", tall ? "1920px" : "1350px");
     document.body.classList.toggle("tall", tall);
 
+    fields = fields.map((f) => f.replace(/\s*->\s*/g, " → "));
     const [first = "", second = "", ...rest] = fields;
     let body = "";
     if (variant === "cover") {
@@ -123,11 +125,16 @@
         ${format === "post" && total > 1 ? `<span class="swipe">Swipe for details</span>` : ""}
       </div>`;
     } else if (variant === "cta") {
+      // Use the draft's own lines; only add the default "Comment JOB" line if the draft doesn't say it
+      const saysComment = fields.some((f) => /\bcomment\b/i.test(f));
+      const lines = [second, ...rest].filter(Boolean);
       body = `<div class="cta">
         <h1>${esc(first || "Don't miss the next one")}</h1>
-        <p>${esc(second || "Fresh jobs, govt notifications and hackathons, every morning.")}</p>
+        ${lines.length
+          ? lines.map((l) => `<p>${esc(l).replace(/\b(JOB|INTERN|LINK)\b/g, "<b>$1</b>")}</p>`).join("")
+          : `<p>Fresh jobs, govt notifications and hackathons, every morning.</p>`}
         <div class="site">${esc(brand.website)}</div>
-        <div class="comment">Comment <b>JOB</b> and we'll DM you the links</div>
+        ${saysComment ? "" : `<div class="comment">Comment <b>JOB</b> and we'll DM you the links</div>`}
       </div>`;
     } else {
       const details = [second, ...rest].filter(Boolean);
