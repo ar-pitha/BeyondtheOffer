@@ -87,9 +87,21 @@ export async function refreshToken({ force = false } = {}) {
     );
     return null;
   }
-  const url = new URL(`${process.env.IG_API_BASE || "https://graph.instagram.com"}/refresh_access_token`);
-  url.searchParams.set("grant_type", "ig_refresh_token");
-  url.searchParams.set("access_token", process.env.IG_ACCESS_TOKEN);
+  const base = process.env.IG_API_BASE || "https://graph.instagram.com";
+  let url;
+  if (base.includes("graph.facebook.com")) {
+    // Unified login (EAA… tokens): exchange for a fresh long-lived token with the Meta app credentials
+    if (!process.env.IG_APP_ID || !process.env.IG_APP_SECRET) throw new Error("IG_APP_ID and IG_APP_SECRET are needed to refresh this token");
+    url = new URL(`${base}/${process.env.IG_API_VERSION || "v21.0"}/oauth/access_token`);
+    url.searchParams.set("grant_type", "fb_exchange_token");
+    url.searchParams.set("client_id", process.env.IG_APP_ID);
+    url.searchParams.set("client_secret", process.env.IG_APP_SECRET);
+    url.searchParams.set("fb_exchange_token", process.env.IG_ACCESS_TOKEN);
+  } else {
+    url = new URL(`${base}/refresh_access_token`);
+    url.searchParams.set("grant_type", "ig_refresh_token");
+    url.searchParams.set("access_token", process.env.IG_ACCESS_TOKEN);
+  }
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok) throw new Error(`Token refresh failed: ${data.error?.message || res.status}`);
@@ -103,7 +115,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (cmd === "refresh") {
     const data = await refreshToken({ force: true });
     const today = new Date().toISOString().slice(0, 10);
-    console.log(`New token (valid ${Math.round(data.expires_in / 86400)} days):\n\n${data.access_token}\n`);
+    const days = data.expires_in ? `valid ${Math.round(data.expires_in / 86400)} days` : "no expiry reported";
+    console.log(`New token (${days}):\n\n${data.access_token}\n`);
     console.log(`Update IG_ACCESS_TOKEN everywhere (automation/.env, GitHub Secrets, Vercel) and set IG_TOKEN_ISSUED_AT=${today}`);
   } else if (cmd === "limit") {
     console.log(await getPublishingLimit());
