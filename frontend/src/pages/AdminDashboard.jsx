@@ -1,25 +1,31 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { HiBriefcase, HiLightningBolt } from "react-icons/hi";
+import { HiBriefcase, HiLightningBolt, HiTable } from "react-icons/hi";
 import Loader from "../components/Loader";
 
 function AdminDashboard() {
-  const [stats, setStats] = useState({ jobs: 0, quizzes: 0 });
+  const [stats, setStats] = useState({ jobs: 0, quizzes: 0, news: 0, autoJobs: 0, autoQuizzes: 0, hidden: 0 });
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [jobsRes, quizzesRes, usersRes] = await Promise.all([
-          axios.get("/api/jobs"),
-          axios.get("/api/quizzes"),
+        const [jobsRes, quizzesRes, usersRes, newsRes] = await Promise.all([
+          axios.get("/api/jobs?includeInactive=true"),
+          axios.get("/api/quizzes?includeInactive=true"),
           axios.get("/api/auth/users"),
+          axios.get("/api/news?limit=100").catch(() => ({ data: [] })),
         ]);
+        const live = (list) => list.filter((i) => i.isActive !== false);
         setStats({
-          jobs: jobsRes.data.length,
-          quizzes: quizzesRes.data.length,
+          jobs: live(jobsRes.data).length,
+          quizzes: live(quizzesRes.data).length,
+          news: newsRes.data.length,
+          autoJobs: live(jobsRes.data).filter((j) => j.origin === "auto").length,
+          autoQuizzes: live(quizzesRes.data).filter((q) => q.origin === "auto").length,
+          hidden: jobsRes.data.length + quizzesRes.data.length - live(jobsRes.data).length - live(quizzesRes.data).length,
         });
         setUsers(usersRes.data);
       } catch (error) {
@@ -43,20 +49,27 @@ function AdminDashboard() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-number">{stats.jobs}</div>
-          <div className="stat-label">Total Jobs</div>
+          <div className="stat-label">Live jobs</div>
+          <div className="stat-note">{stats.autoJobs} from the sheet</div>
         </div>
         <div className="stat-card">
           <div className="stat-number">{stats.quizzes}</div>
-          <div className="stat-label">Total Quizzes</div>
+          <div className="stat-label">Live events</div>
+          <div className="stat-note">{stats.autoQuizzes} from the sheet</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number">{stats.news}</div>
+          <div className="stat-label">News stories</div>
+          <div className="stat-note">{stats.hidden} expired items hidden</div>
         </div>
         <div className="stat-card">
           <div className="stat-number">{users.length}</div>
-          <div className="stat-label">Total Users</div>
+          <div className="stat-label">Registered users</div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <h2 style={{ marginBottom: "0.75rem", fontSize: "1rem", fontWeight: 700 }}>Quick Actions</h2>
+      <h2 className="admin-section-title" style={{ marginTop: 0 }}>Manage</h2>
       <div className="quick-actions">
         <Link to="/admin/jobs" className="quick-action-card">
           <div className="quick-action-icon"><HiBriefcase /></div>
@@ -68,14 +81,21 @@ function AdminDashboard() {
         <Link to="/admin/quizzes" className="quick-action-card">
           <div className="quick-action-icon"><HiLightningBolt /></div>
           <div>
-            <h4>Manage Quizzes</h4>
-            <p>Create, edit, and delete quiz postings</p>
+            <h4>Manage events</h4>
+            <p>Hackathons, quizzes, CTFs and contests</p>
           </div>
         </Link>
+        <a href="https://docs.google.com/spreadsheets/d/1wMs0w53J7STUPeFuP7mlE-QTKLG9UP97_JXJl-BtGdI" target="_blank" rel="noopener noreferrer" className="quick-action-card">
+          <div className="quick-action-icon"><HiTable /></div>
+          <div>
+            <h4>Open the feed sheet</h4>
+            <p>Approve Instagram drafts in Content_Queue</p>
+          </div>
+        </a>
       </div>
 
       {/* Users Table */}
-      <h2 style={{ margin: "1.5rem 0 0.75rem", fontSize: "1rem", fontWeight: 700 }}>Registered Users</h2>
+      <h2 className="admin-section-title">Registered users</h2>
       <div className="admin-table-wrapper">
         <table className="admin-table">
           <thead>

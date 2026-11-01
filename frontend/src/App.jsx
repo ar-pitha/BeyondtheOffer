@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Jobs from "./pages/Jobs";
 import Quizzes from "./pages/Quizzes";
+import News from "./pages/News";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminJobs from "./pages/AdminJobs";
 import AdminQuizzes from "./pages/AdminQuizzes";
@@ -81,9 +82,10 @@ function App() {
         position="top-right"
         toastOptions={{
           style: {
-            background: theme === "dark" ? "#1a1a2e" : "#ffffff",
-            color: theme === "dark" ? "#eeeef5" : "#1a1a2e",
-            border: `1px solid ${theme === "dark" ? "#2e2e48" : "#e2e4ea"}`,
+            background: theme === "dark" ? "#1b1c33" : "#ffffff",
+            color: theme === "dark" ? "#ecedf7" : "#17182b",
+            border: `1px solid ${theme === "dark" ? "#2e3058" : "#dadde8"}`,
+            fontFamily: "var(--font-family)",
           },
         }}
       />
@@ -96,6 +98,7 @@ function App() {
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register onLogin={loginUser} />} />
         <Route path="/jobs" element={<ProtectedRoute user={user}><Jobs /></ProtectedRoute>} />
         <Route path="/quizzes" element={<ProtectedRoute user={user}><Quizzes /></ProtectedRoute>} />
+        <Route path="/news" element={<News />} />
 
         {/* Admin routes */}
         <Route

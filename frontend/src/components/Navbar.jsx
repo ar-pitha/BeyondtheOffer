@@ -6,7 +6,7 @@ function Navbar({ user, onLogout, theme, onToggleTheme }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
-  const isActive = (path) => location.pathname === path ? "active" : "";
+  const isActive = (path) => (location.pathname === path || (path !== "/" && location.pathname.startsWith(path + "/")) ? "active" : "");
   const close = () => setMenuOpen(false);
 
   return (
@@ -22,15 +22,19 @@ function Navbar({ user, onLogout, theme, onToggleTheme }) {
             <Link to="/" className={isActive("/")} onClick={close}>Home</Link>
           )}
           <Link to="/jobs" className={isActive("/jobs")} onClick={close}>Jobs</Link>
-          <Link to="/quizzes" className={isActive("/quizzes")} onClick={close}>Quizzes</Link>
+          <Link to="/quizzes" className={isActive("/quizzes")} onClick={close}>Hackathons</Link>
+          <Link to="/news" className={isActive("/news")} onClick={close}>Tech news</Link>
 
           {user?.role === "admin" && (
             <Link to="/admin" className={isActive("/admin")} onClick={close}>Admin</Link>
           )}
 
           {!user && (
-            <Link to="/register" onClick={close}>
-              <span className="btn btn-primary btn-sm">Sign Up</span>
+            <Link to="/login" className={isActive("/login")} onClick={close}>Log in</Link>
+          )}
+          {!user && (
+            <Link to="/register" className="nav-cta" onClick={close}>
+              <span className="btn btn-primary btn-sm">Sign up free</span>
             </Link>
           )}
 
@@ -70,6 +74,7 @@ function Navbar({ user, onLogout, theme, onToggleTheme }) {
             className="mobile-toggle"
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Toggle menu"
+            aria-expanded={menuOpen}
           >
             {menuOpen ? <HiX /> : <HiMenu />}
           </button>

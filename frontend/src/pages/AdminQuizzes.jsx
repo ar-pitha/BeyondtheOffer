@@ -12,7 +12,10 @@ const emptyForm = {
   platform: "",
   deadline: "",
   eligibility: "Freshers & Experienced",
+  eventType: "",
 };
+
+const EVENT_LABELS = { hackathon: "Hackathon", quiz: "Quiz", ctf: "CTF", contest: "Contest" };
 
 function AdminQuizzes() {
   const [quizzes, setQuizzes] = useState([]);
@@ -25,7 +28,7 @@ function AdminQuizzes() {
 
   const fetchQuizzes = async () => {
     try {
-      const { data } = await axios.get("/api/quizzes");
+      const { data } = await axios.get("/api/quizzes?includeInactive=true");
       setQuizzes(data);
     } catch (error) {
       console.error("Error fetching quizzes:", error);
@@ -52,6 +55,7 @@ function AdminQuizzes() {
       link: quiz.link,
       platform: quiz.platform,
       eligibility: quiz.eligibility || "Freshers & Experienced",
+      eventType: quiz.eventType || "",
       deadline: quiz.deadline
         ? new Date(quiz.deadline).toISOString().split("T")[0]
         : "",
@@ -70,6 +74,7 @@ function AdminQuizzes() {
     const payload = {
       ...form,
       deadline: form.deadline || null,
+      eventType: form.eventType || null,
     };
 
     try {
@@ -103,7 +108,7 @@ function AdminQuizzes() {
 
   if (loading) return <Loader />;
 
-  const filteredQuizzes = quizzes.filter(q => 
+  const filteredQuizzes = quizzes.filter(q =>
     q.title.toLowerCase().includes(search.toLowerCase()) ||
     (q.platform && q.platform.toLowerCase().includes(search.toLowerCase())) ||
     (q.description && q.description.toLowerCase().includes(search.toLowerCase()))
@@ -148,8 +153,19 @@ function AdminQuizzes() {
             </thead>
             <tbody>
               {filteredQuizzes.map((quiz) => (
-                <tr key={quiz._id}>
-                  <td>{quiz.title}</td>
+                <tr key={quiz._id} className={quiz.isActive === false ? "is-off" : ""}>
+                  <td>
+                    <span className="admin-title-cell">
+                      {quiz.title}
+                      {quiz.eventType && <span className="tag tag-kind">{EVENT_LABELS[quiz.eventType]}</span>}
+                      {quiz.origin === "auto" && (
+                        <span className="tag tag-auto" title={quiz.adminEdited ? "From the sheet, edited by an admin (sync skips it)" : "Synced from the Google Sheet"}>
+                          {quiz.adminEdited ? "Auto, edited" : "Auto"}
+                        </span>
+                      )}
+                      {quiz.isActive === false && <span className="tag tag-off" title="Expired or past deadline, so it is hidden from the site">Hidden</span>}
+                    </span>
+                  </td>
                   <td>{quiz.platform || "—"}</td>
                   <td>{quiz.eligibility || "Freshers & Experienced"}</td>
                   <td>
@@ -244,6 +260,16 @@ function AdminQuizzes() {
                   <option>Freshers</option>
                   <option>Experienced</option>
                   <option>Freshers & Experienced</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Event type</label>
+                <select name="eventType" className="form-control" value={form.eventType} onChange={handleChange}>
+                  <option value="">Not set</option>
+                  <option value="hackathon">Hackathon</option>
+                  <option value="quiz">Quiz</option>
+                  <option value="ctf">CTF</option>
+                  <option value="contest">Contest</option>
                 </select>
               </div>
               <div className="form-group">

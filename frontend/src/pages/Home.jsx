@@ -1,155 +1,124 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { HiBriefcase, HiLightningBolt, HiGlobe, HiUsers } from "react-icons/hi";
 import axios from "axios";
+import { FaInstagram } from "react-icons/fa";
+import DeadlineStub from "../components/DeadlineStub";
+import usePageMeta from "../hooks/usePageMeta";
+import { daysUntil } from "../utils/deadline";
 
-function RevealOnScroll({ children, delay = "0s", className = "" }) {
-  const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef(null);
+const BOARD_SIZE = 6;
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.1 }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
+// Open items with a deadline, soonest first. Prefers this week; falls back to what's next.
+function closingSoon(jobs, quizzes) {
+  const items = [
+    ...jobs.map((j) => ({ id: j._id, title: j.title, sub: j.company, deadline: j.deadline, to: "/jobs" })),
+    ...quizzes.map((q) => ({ id: q._id, title: q.title, sub: q.organiser || q.platform || "Hackathon", deadline: q.deadline, to: "/quizzes" })),
+  ]
+    .map((item) => ({ ...item, days: daysUntil(item.deadline) }))
+    .filter((item) => item.days !== null && item.days >= 0)
+    .sort((a, b) => a.days - b.days);
 
-  return (
-    <div 
-      ref={ref} 
-      className={className} 
-      style={{ 
-        opacity: isVisible ? 1 : 0,
-        animation: isVisible ? `slideUp 0.6s ease ${delay} forwards` : 'none'
-      }}
-    >
-      {children}
-    </div>
-  );
+  const thisWeek = items.filter((item) => item.days <= 7);
+  return { items: (thisWeek.length ? thisWeek : items).slice(0, BOARD_SIZE), isThisWeek: thisWeek.length > 0 };
 }
 
 function Home() {
+  usePageMeta(
+    null,
+    "Tech jobs, government notifications and hackathons for freshers in India, checked every morning and sorted by deadline."
+  );
+
   const [userCount, setUserCount] = useState(0);
+  const [board, setBoard] = useState({ items: [], isThisWeek: true, loading: true });
 
   useEffect(() => {
-    const fetchUserCount = async () => {
-      try {
-        const { data } = await axios.get("/api/auth/users/count");
-        setUserCount(data.count);
-      } catch (error) {
-        console.error("Failed to fetch user count", error);
-      }
-    };
-    fetchUserCount();
+    axios
+      .get("/api/auth/users/count")
+      .then(({ data }) => setUserCount(data.count))
+      .catch(() => {});
+
+    Promise.all([axios.get("/api/jobs"), axios.get("/api/quizzes")])
+      .then(([jobs, quizzes]) => setBoard({ ...closingSoon(jobs.data, quizzes.data), loading: false }))
+      .catch(() => setBoard({ items: [], isThisWeek: true, loading: false }));
   }, []);
 
   return (
     <>
-      {/* Hero Section */}
-      <section className="hero">
-        <h1 style={{ animation: "slideUp 0.6s ease forwards" }}>
-          Go <span>Beyond</span> The Offer
-        </h1>
-        <p style={{ animation: "slideUp 0.6s ease 0.2s forwards", opacity: 0 }}>
-          Discover top jobs and quizzes from platforms like Unstop, Naukri, LinkedIn,
-          HackerRank, and more — all in one place.
-        </p>
-        <div className="hero-buttons" style={{ animation: "fadeIn 0.6s ease 0.4s forwards", opacity: 0 }}>
-          <Link to="/jobs" className="btn btn-primary">
-            Browse Jobs
-          </Link>
-          <Link to="/quizzes" className="btn btn-secondary">
-            Explore Quizzes
-          </Link>
+      <section className="hero container">
+        <div>
+          <h1>Find it early. Apply before it closes.</h1>
+          <p className="hero-lede">
+            Tech jobs, government notifications and hackathons for freshers, checked every morning and
+            sorted by deadline. Every listing links to the official place to apply.
+          </p>
+          <div className="hero-buttons">
+            <Link to="/jobs" className="btn btn-primary">Browse jobs</Link>
+            <Link to="/quizzes" className="btn btn-secondary">See hackathons</Link>
+          </div>
+          {userCount > 0 && (
+            <p className="hero-proof">
+              <strong>{userCount.toLocaleString("en-IN")}</strong> students already use it to track deadlines.
+            </p>
+          )}
         </div>
-        
-        {userCount > 0 && (
-          <div 
-            className="trusted-badge" 
-            style={{ 
-              animation: "slideUp 0.8s ease 0.6s forwards", 
-              opacity: 0, 
-              marginTop: "2.5rem", 
-              display: "inline-flex", 
-              alignItems: "center", 
-              gap: "0.5rem", 
-              background: "var(--bg-card)", 
-              padding: "0.5rem 1.25rem", 
-              borderRadius: "2rem", 
-              boxShadow: "var(--shadow-md)", 
-              border: "1px solid var(--border-color)", 
-              color: "var(--text-secondary)", 
-              fontSize: "0.875rem", 
-              fontWeight: 500 
-            }}
-          >
-            <HiUsers style={{ color: "var(--text-primary)", fontSize: "1.25rem" }} />
-            Trusted by <strong style={{ color: "var(--text-primary)" }}>{userCount}+</strong> people
+
+        <aside className="board" aria-labelledby="board-title">
+          <div className="board-head">
+            <h2 id="board-title">{board.isThisWeek || board.items.length === 0 ? "Closing this week" : "Closing next"}</h2>
+            <Link to="/jobs">See all</Link>
           </div>
-        )}
+          {board.loading ? (
+            <div className="board-empty">Loading deadlines…</div>
+          ) : board.items.length === 0 ? (
+            <div className="board-empty">
+              <strong>Nothing closing right now</strong>
+              New openings land every morning.
+            </div>
+          ) : (
+            <ul className="board-list">
+              {board.items.map((item) => (
+                <li key={item.id}>
+                  <Link to={item.to} className="mini-ticket">
+                    <div className="mini-ticket-main">
+                      <strong>{item.title}</strong>
+                      <span>{item.sub}</span>
+                    </div>
+                    <DeadlineStub deadline={item.deadline} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
       </section>
 
-      {/* About Section */}
-      <section className="about-section container">
-        <RevealOnScroll>
-          <div className="about-card">
-            <h2>About BeyondTheOffer</h2>
-            <p>
-              BeyondTheOffer is a free platform built to help students and freshers
-              discover the best job openings and quiz competitions — all in one place.
-              No more hopping between Unstop, LinkedIn, Naukri, and HackerRank. We
-              curate the best opportunities and bring them straight to you.
-            </p>
-            <p>
-              Whether you're looking for your first job or want to sharpen your skills
-              through competitive quizzes, BeyondTheOffer has you covered.
-            </p>
-          </div>
-        </RevealOnScroll>
+      <section className="steps container" aria-labelledby="steps-title">
+        <h2 id="steps-title">How a listing gets here</h2>
+        <ol>
+          <li>
+            <h3>Collected every morning</h3>
+            <p>Careers pages, government notifications and hackathon sites are checked daily before 7 AM.</p>
+          </li>
+          <li>
+            <h3>Checked against the source</h3>
+            <p>Only listings from an official page, or confirmed in two places, make it to the site.</p>
+          </li>
+          <li>
+            <h3>Sorted by deadline</h3>
+            <p>The stub on each listing shows how many days you have left. Closed ones disappear on their own.</p>
+          </li>
+        </ol>
       </section>
 
-      {/* Features Section */}
-      <section className="features container">
-        <div className="features-grid">
-          <RevealOnScroll className="feature-card" delay="0.1s">
-            <div className="feature-icon">
-              <HiBriefcase />
-            </div>
-            <h3>Curated Jobs</h3>
-            <p>
-              Handpicked job postings from Naukri, LinkedIn, Unstop, and other
-              leading platforms.
-            </p>
-          </RevealOnScroll>
-
-          <RevealOnScroll className="feature-card" delay="0.3s">
-            <div className="feature-icon">
-              <HiLightningBolt />
-            </div>
-            <h3>Live Quizzes</h3>
-            <p>
-              Participate in quizzes and challenges from Unstop, HackerRank,
-              and other contest platforms.
-            </p>
-          </RevealOnScroll>
-
-          <RevealOnScroll className="feature-card" delay="0.5s">
-            <div className="feature-icon">
-              <HiGlobe />
-            </div>
-            <h3>One Platform</h3>
-            <p>
-              No more switching between tabs. Find everything you need in a
-              single, clean dashboard.
-            </p>
-          </RevealOnScroll>
+      <section className="container">
+        <div className="insta-band">
+          <div>
+            <h2>Get the list on Instagram</h2>
+            <p>New posts at 9 AM, 1 PM and 7 PM. Comment JOB on any post and we'll DM you the apply links.</p>
+          </div>
+          <a className="btn" href="https://www.instagram.com/beyond_the.offer" target="_blank" rel="noopener noreferrer">
+            <FaInstagram aria-hidden /> Follow @beyond_the.offer
+          </a>
         </div>
       </section>
     </>

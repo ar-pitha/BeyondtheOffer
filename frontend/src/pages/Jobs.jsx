@@ -1,179 +1,214 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import JobCard from "../components/JobCard";
 import Loader from "../components/Loader";
-import { HiSearch, HiFilter, HiChevronLeft, HiChevronRight } from "react-icons/hi";
+import Pagination from "../components/Pagination";
+import usePageMeta from "../hooks/usePageMeta";
+import { daysUntil } from "../utils/deadline";
+import { HiSearch } from "react-icons/hi";
 
 const ITEMS_PER_PAGE = 10;
+const KINDS = [
+  { value: "all", label: "All" },
+  { value: "tech", label: "Tech" },
+  { value: "govt", label: "Govt" },
+];
+
+const batchesOf = (job) => (job.batch || "").match(/20\d\d/g) || [];
+const uniqueSorted = (values) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
 function Jobs() {
+  usePageMeta(
+    "Jobs and internships",
+    "Tech jobs, internships and government notifications for freshers, each with its deadline and an official apply link."
+  );
+
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [kind, setKind] = useState("all");
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [eligibilityFilter, setEligibilityFilter] = useState("All");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [type, setType] = useState("");
+  const [sector, setSector] = useState("");
+  const [location, setLocation] = useState("");
+  const [batch, setBatch] = useState("");
+  const [sort, setSort] = useState("newest");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    const fetchJobs = async () => {
-      try {
-        const { data } = await axios.get("/api/jobs");
-        setJobs(data);
-      } catch (error) {
-        console.error("Error fetching jobs:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchJobs();
+    axios
+      .get("/api/jobs")
+      .then(({ data }) => setJobs(data))
+      .catch(() => setError("Jobs didn't load. Check your connection and refresh the page."))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Reset to page 1 whenever filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, typeFilter, eligibilityFilter]);
+  useEffect(() => setPage(1), [kind, search, type, sector, location, batch, sort]);
+
+  const kindCounts = useMemo(
+    () => ({
+      all: jobs.length,
+      tech: jobs.filter((j) => j.jobKind === "tech").length,
+      govt: jobs.filter((j) => j.jobKind === "govt").length,
+    }),
+    [jobs]
+  );
+
+  // Filter options come from the jobs in the current tab
+  const inKind = useMemo(() => jobs.filter((j) => kind === "all" || j.jobKind === kind), [jobs, kind]);
+  const options = useMemo(
+    () => ({
+      sectors: uniqueSorted(inKind.map((j) => j.sector)),
+      locations: uniqueSorted(inKind.map((j) => j.location?.trim())),
+      batches: uniqueSorted(inKind.flatMap(batchesOf)),
+    }),
+    [inKind]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = inKind.filter((job) => {
+      if (q && ![job.title, job.company, job.description, job.sector].some((f) => f?.toLowerCase().includes(q))) return false;
+      if (type && job.type !== type) return false;
+      if (sector && job.sector !== sector) return false;
+      if (location && job.location?.trim() !== location) return false;
+      if (batch && !batchesOf(job).includes(batch)) return false;
+      return true;
+    });
+    if (sort === "closing") {
+      // Open deadlines first (soonest on top), then no deadline, then closed
+      const rank = (j) => {
+        const d = daysUntil(j.deadline);
+        return d === null ? 10_000 : d < 0 ? 20_000 - d : d;
+      };
+      return [...list].sort((a, b) => rank(a) - rank(b));
+    }
+    return list;
+  }, [inKind, search, type, sector, location, batch, sort]);
 
   if (loading) return <Loader />;
 
-  const filteredJobs = jobs.filter((job) => {
-    const matchesSearch =
-      job.title.toLowerCase().includes(search.toLowerCase()) ||
-      job.company.toLowerCase().includes(search.toLowerCase()) ||
-      job.description.toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === "All" || job.type === typeFilter;
-    const matchesEligibility =
-      eligibilityFilter === "All" || job.eligibility === eligibilityFilter;
-    return matchesSearch && matchesType && matchesEligibility;
-  });
-
-  const totalPages = Math.ceil(filteredJobs.length / ITEMS_PER_PAGE);
-  const paginatedJobs = filteredJobs.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
-
-  const getPageNumbers = () => {
-    const pages = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      if (currentPage <= 3) {
-        pages.push(1, 2, 3, 4, "...", totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
-      } else {
-        pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages);
-      }
-    }
-    return pages;
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const visible = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const hasFilters = search || type || sector || location || batch;
+  const clearFilters = () => {
+    setSearch("");
+    setType("");
+    setSector("");
+    setLocation("");
+    setBatch("");
   };
 
   return (
     <div className="page container">
-      <div className="page-header">
-        <h1>Job Openings</h1>
-        <p>Explore opportunities from top platforms</p>
+      <header className="page-header">
+        <h1>Jobs and internships</h1>
+        <p>Tech roles and government notifications, each linked to the official place to apply.</p>
+      </header>
+
+      <div className="seg" role="group" aria-label="Job category">
+        {KINDS.map((k) => (
+          <button key={k.value} aria-pressed={kind === k.value} onClick={() => setKind(k.value)}>
+            {k.label}
+            <span>{kindCounts[k.value]}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Filters */}
       <div className="filters-bar">
-        <div className="filter-search">
-          <HiSearch className="filter-search-icon" />
+        <label className="filter-search">
+          <span className="sr-only">Search jobs</span>
+          <HiSearch className="filter-search-icon" aria-hidden />
           <input
-            type="text"
+            type="search"
             className="form-control"
-            placeholder="Search by title, company or keyword..."
+            placeholder="Search role, company or skill"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-        </div>
+        </label>
         <div className="filter-controls">
-          <div className="filter-group">
-            <HiFilter style={{ color: "var(--text-muted)", fontSize: "1rem", flexShrink: 0 }} />
-            <select
-              className="form-control"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-            >
-              <option value="All">Type</option>
-              <option value="Full-time">Full-time</option>
-              <option value="Part-time">Part-time</option>
-              <option value="Internship">Internship</option>
-              <option value="Contract">Contract</option>
-              <option value="Remote">Remote</option>
+          <label className="filter-group">
+            <span className="sr-only">Job type</span>
+            <select className="form-control" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="">Any type</option>
+              {["Full-time", "Internship", "Part-time", "Contract", "Remote"].map((t) => (
+                <option key={t}>{t}</option>
+              ))}
             </select>
-          </div>
-          <div className="filter-group">
-            <select
-              className="form-control"
-              value={eligibilityFilter}
-              onChange={(e) => setEligibilityFilter(e.target.value)}
-            >
-              <option value="All">Eligibility</option>
-              <option value="Freshers">Freshers</option>
-              <option value="Experienced">Experienced</option>
-              <option value="Freshers & Experienced">Freshers & Experienced</option>
+          </label>
+          {options.sectors.length > 0 && (
+            <label className="filter-group">
+              <span className="sr-only">Sector</span>
+              <select className="form-control" value={sector} onChange={(e) => setSector(e.target.value)}>
+                <option value="">Any sector</option>
+                {options.sectors.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="filter-group">
+            <span className="sr-only">Location</span>
+            <select className="form-control" value={location} onChange={(e) => setLocation(e.target.value)}>
+              <option value="">Any location</option>
+              {options.locations.map((l) => (
+                <option key={l}>{l}</option>
+              ))}
             </select>
-          </div>
+          </label>
+          {options.batches.length > 0 && (
+            <label className="filter-group">
+              <span className="sr-only">Batch</span>
+              <select className="form-control" value={batch} onChange={(e) => setBatch(e.target.value)}>
+                <option value="">Any batch</option>
+                {options.batches.map((b) => (
+                  <option key={b} value={b}>Batch {b}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="filter-group">
+            <span className="sr-only">Sort</span>
+            <select className="form-control" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="newest">Newest first</option>
+              <option value="closing">Closing soonest</option>
+            </select>
+          </label>
         </div>
       </div>
 
-      {/* Results info — only show when filtering or paginating */}
-      {(search || typeFilter !== "All" || eligibilityFilter !== "All" || totalPages > 1) && filteredJobs.length > 0 && (
-        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>
-          Showing <strong style={{ color: "var(--text-primary)" }}>{paginatedJobs.length}</strong> of{" "}
-          <strong style={{ color: "var(--text-primary)" }}>{filteredJobs.length}</strong> jobs
-        </p>
-      )}
-
-      {filteredJobs.length === 0 ? (
+      {error ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📭</div>
-          <h3>No jobs found</h3>
-          <p>Try adjusting your search or filters.</p>
+          <h3>{error}</h3>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">
+          <h3>No jobs match these filters</h3>
+          <p>New openings are added every morning.</p>
+          {hasFilters && (
+            <button className="btn btn-secondary" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <>
+          <p className="results-line">
+            <strong>{filtered.length}</strong> {filtered.length === 1 ? "opening" : "openings"}
+            {hasFilters && (
+              <>
+                {" "}
+                <button className="link-button" onClick={clearFilters}>Clear filters</button>
+              </>
+            )}
+          </p>
           <div className="grid">
-            {paginatedJobs.map((job) => (
+            {visible.map((job) => (
               <JobCard key={job._id} job={job} />
             ))}
           </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="pagination">
-              <button
-                className="pagination-btn"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                <HiChevronLeft />
-              </button>
-
-              {getPageNumbers().map((page, i) =>
-                page === "..." ? (
-                  <span key={`dots-${i}`} className="pagination-dots">…</span>
-                ) : (
-                  <button
-                    key={page}
-                    className={`pagination-btn ${currentPage === page ? "active" : ""}`}
-                    onClick={() => setCurrentPage(page)}
-                  >
-                    {page}
-                  </button>
-                )
-              )}
-
-              <button
-                className="pagination-btn"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                <HiChevronRight />
-              </button>
-            </div>
-          )}
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </>
       )}
     </div>

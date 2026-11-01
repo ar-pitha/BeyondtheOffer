@@ -16,12 +16,17 @@ const emptyForm = {
   eligibility: "Freshers & Experienced",
   batch: "",
   experience: "",
+  jobKind: "",
+  deadline: "",
 };
+
+const toDateInput = (d) => (d ? new Date(d).toISOString().split("T")[0] : "");
 
 function AdminJobs() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [originFilter, setOriginFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -29,7 +34,7 @@ function AdminJobs() {
 
   const fetchJobs = async () => {
     try {
-      const { data } = await axios.get("/api/jobs");
+      const { data } = await axios.get("/api/jobs?includeInactive=true");
       setJobs(data);
     } catch (error) {
       console.error("Error fetching jobs:", error);
@@ -61,6 +66,8 @@ function AdminJobs() {
       eligibility: job.eligibility || "Freshers & Experienced",
       batch: job.batch || "",
       experience: job.experience || "",
+      jobKind: job.jobKind || "",
+      deadline: toDateInput(job.deadline),
     });
     setShowModal(true);
   };
@@ -73,12 +80,15 @@ function AdminJobs() {
     e.preventDefault();
     setSubmitting(true);
 
+    // Empty selects become null so the enum validators accept them
+    const payload = { ...form, jobKind: form.jobKind || null, deadline: form.deadline || null };
+
     try {
       if (editingId) {
-        await axios.put(`/api/jobs/${editingId}`, form);
+        await axios.put(`/api/jobs/${editingId}`, payload);
         toast.success("Job updated!");
       } else {
-        await axios.post("/api/jobs", form);
+        await axios.post("/api/jobs", payload);
         toast.success("Job created!");
       }
       setShowModal(false);
@@ -104,9 +114,11 @@ function AdminJobs() {
 
   if (loading) return <Loader />;
 
-  const filteredJobs = jobs.filter(j => 
-    j.title.toLowerCase().includes(search.toLowerCase()) ||
-    j.company.toLowerCase().includes(search.toLowerCase())
+  const autoCount = jobs.filter((j) => j.origin === "auto").length;
+  const filteredJobs = jobs.filter(
+    (j) =>
+      (originFilter === "all" || (originFilter === "auto" ? j.origin === "auto" : j.origin !== "auto")) &&
+      (j.title.toLowerCase().includes(search.toLowerCase()) || j.company.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -126,47 +138,66 @@ function AdminJobs() {
         </div>
       ) : (
         <div className="admin-table-wrapper">
-          <div style={{ marginBottom: "1rem" }}>
+          <div className="admin-toolbar">
             <input
-              type="text"
+              type="search"
               className="form-control"
-              placeholder="Search jobs by title or company..."
+              placeholder="Search by title or company"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            <select className="form-control" style={{ maxWidth: 240 }} value={originFilter} onChange={(e) => setOriginFilter(e.target.value)}>
+              <option value="all">All sources ({jobs.length})</option>
+              <option value="admin">Added by admins ({jobs.length - autoCount})</option>
+              <option value="auto">From the sheet ({autoCount})</option>
+            </select>
           </div>
           <table className="admin-table">
             <thead>
               <tr>
                 <th>Title</th>
                 <th>Company</th>
+                <th>Kind</th>
                 <th>Type</th>
                 <th>Eligibility</th>
-                <th>Platform</th>
-                <th>Date</th>
+                <th>Deadline</th>
+                <th>Added</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredJobs.map((job) => (
-                <tr key={job._id}>
-                  <td>{job.title}</td>
+                <tr key={job._id} className={job.isActive === false ? "is-off" : ""}>
+                  <td>
+                    <span className="admin-title-cell">
+                      {job.title}
+                      {job.origin === "auto" && (
+                        <span className="tag tag-auto" title={job.adminEdited ? "From the sheet, edited by an admin (sync skips it)" : "Synced from the Google Sheet"}>
+                          {job.adminEdited ? "Auto, edited" : "Auto"}
+                        </span>
+                      )}
+                      {job.isActive === false && <span className="tag tag-off" title="Expired or past deadline, so it is hidden from the site">Hidden</span>}
+                    </span>
+                  </td>
                   <td>{job.company}</td>
+                  <td>{job.jobKind === "govt" ? "Govt" : job.jobKind === "tech" ? "Tech" : "—"}</td>
                   <td>{job.type}</td>
                   <td>{job.eligibility || "Freshers & Experienced"}</td>
-                  <td>{job.platform || "—"}</td>
+                  <td>{job.deadline ? new Date(job.deadline).toLocaleDateString() : "—"}</td>
                   <td>{new Date(job.createdAt).toLocaleDateString()}</td>
                   <td>
                     <div className="table-actions">
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={() => openEdit(job)}
+                        aria-label={`Edit ${job.title}`}
                       >
                         <HiPencil />
                       </button>
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={() => handleDelete(job._id)}
+                        aria-label={`Delete ${job.title}`}
                       >
                         <HiTrash />
                       </button>
@@ -297,6 +328,25 @@ function AdminJobs() {
                   required
                 />
               </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Category</label>
+                  <select name="jobKind" className="form-control" value={form.jobKind} onChange={handleChange}>
+                    <option value="">Not set</option>
+                    <option value="tech">Tech</option>
+                    <option value="govt">Govt</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Apply by (optional)</label>
+                  <input name="deadline" type="date" className="form-control" value={form.deadline} onChange={handleChange} />
+                </div>
+              </div>
+              {editingId && jobs.find((j) => j._id === editingId)?.origin === "auto" && (
+                <p className="stat-note" style={{ marginBottom: "1rem" }}>
+                  This job came from the Google Sheet. Saving marks it as edited, so the daily sync will not overwrite your changes.
+                </p>
+              )}
               <div className="form-group">
                 <label>Platform (optional)</label>
                 <input
