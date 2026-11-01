@@ -11,7 +11,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, TABS, hasFlag, isDryRun } from "./lib/config.js";
+import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, nowInZone, logRun } from "./lib/sheets.js";
 import { parseSlides, renderSlides, closeBrowser } from "./lib/render.js";
 import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
@@ -112,7 +112,9 @@ async function renderRow(row, outDir) {
 
 async function publishToInstagram(row, imageUrls, video) {
   const ig = await import("./lib/instagram.js");
-  const caption = [row.Caption, row.Hashtags].filter(Boolean).join("\n\n");
+  // Every post gets its own links page, which comment-to-DM replies can point to
+  const linksLine = /\/links\//.test(row.Caption || "") ? "" : `🔗 All apply links: ${WEBSITE_URL.replace(/^https?:\/\//, "")}/links/${row.ID}`;
+  const caption = [row.Caption, linksLine, row.Hashtags].filter(Boolean).join("\n\n");
   const format = row.Format.toLowerCase();
 
   const { used, total } = await ig.getPublishingLimit();

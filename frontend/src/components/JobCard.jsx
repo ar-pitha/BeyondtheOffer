@@ -1,6 +1,4 @@
-import { HiExternalLink, HiLocationMarker, HiOfficeBuilding, HiAcademicCap, HiBriefcase, HiCurrencyRupee } from "react-icons/hi";
-import DeadlineStub from "./DeadlineStub";
-import { formatDate } from "../utils/deadline";
+import OppCard from "./OppCard";
 
 const EMPLOYMENT_TYPE = {
   "Full-time": "FULL_TIME",
@@ -28,52 +26,32 @@ function jobPostingJsonLd(job) {
   };
   if (job.deadline) data.validThrough = job.deadline;
   if (job.type === "Remote") data.jobLocationType = "TELECOMMUTE";
-  return JSON.stringify(data).replace(/</g, "\u003c");
+  return JSON.stringify(data).replace(/</g, "\\u003c");
 }
 
 function JobCard({ job }) {
-  const trusted = job.verified === "Official" || job.verified === "Multi-source";
-
   return (
-    <article className="ticket">
-      <div className="ticket-main">
-        {(job.jobKind || trusted) && (
-          <div className="ticket-tags">
-            {job.jobKind === "govt" && <span className="tag tag-kind">Govt</span>}
-            {job.jobKind === "tech" && <span className="tag tag-kind">Tech</span>}
-            {trusted && <span className="tag tag-verified">✓ {job.verified === "Official" ? "Official source" : "Checked in 2+ sources"}</span>}
-          </div>
-        )}
-
-        <h3 className="ticket-title">{job.title}</h3>
-        <p className="ticket-org">
-          <span><HiOfficeBuilding aria-hidden /> {job.company}</span>
-          <span><HiLocationMarker aria-hidden /> {job.location}</span>
-        </p>
-
-        <div className="ticket-facts">
-          <span><HiBriefcase aria-hidden /> {job.type}</span>
-          {job.batch && <span><HiAcademicCap aria-hidden /> Batch {job.batch}</span>}
-          {job.salary && <span><HiCurrencyRupee aria-hidden /> {job.salary}</span>}
-          {!job.batch && job.eligibility && <span>{job.eligibility}</span>}
-          {job.experience && <span>Exp: {job.experience}</span>}
-          {job.sector && <span>{job.sector}</span>}
-        </div>
-
-        <p className="ticket-desc">{job.description}</p>
-
-        <div className="ticket-foot">
-          <small>{job.platform ? `Via ${job.platform}, added ` : "Added "}{formatDate(job.createdAt)}</small>
-          <a href={job.link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm btn-icon-mobile">
-            <span className="btn-text">Apply</span>
-            <HiExternalLink aria-hidden />
-          </a>
-        </div>
-      </div>
-
-      <DeadlineStub deadline={job.deadline} />
+    <OppCard
+      id={job._id}
+      kind={job.jobKind || "job"}
+      org={job.company}
+      title={job.title}
+      verified={job.verified === "Official" || job.verified === "Multi-source"}
+      facts={[
+        job.location,
+        job.type,
+        job.batch && `Batch ${job.batch}`,
+        job.salary,
+        !job.batch && job.eligibility,
+        job.experience && `Exp ${job.experience}`,
+      ]}
+      description={job.description}
+      deadline={job.deadline}
+      link={job.link}
+      added={job.createdAt}
+    >
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jobPostingJsonLd(job) }} />
-    </article>
+    </OppCard>
   );
 }
 

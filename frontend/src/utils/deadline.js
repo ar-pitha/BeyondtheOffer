@@ -13,14 +13,15 @@ export function daysUntil(deadline) {
 export const formatDate = (date, opts = { day: "numeric", month: "short" }) =>
   date ? new Date(date).toLocaleDateString("en-IN", opts) : "";
 
-// Text for the ticket stub: { big, small, tone }
-export function stubFor(deadline) {
-  const n = daysUntil(deadline);
-  if (n === null) return { big: "Open", small: "no deadline", tone: "open" };
-  if (n < 0) return { big: "Closed", small: formatDate(deadline), tone: "closed" };
-  if (n === 0) return { big: "Today", small: "last day", tone: "urgent" };
-  if (n <= 45) return { big: String(n), small: n === 1 ? "day left" : "days left", tone: n <= 3 ? "urgent" : n <= 7 ? "soon" : "later" };
-  return { big: formatDate(deadline), small: "closes", tone: "open" };
-}
 
-export const isOpen = (item) => item.isActive !== false && (daysUntil(item.deadline) ?? 0) >= 0;
+// Text and colour for the deadline pill on cards: { text, tone }
+// tone: urgent (≤3 days), soon (≤7), later, open (no deadline), closed
+export function pillFor(deadline) {
+  const n = daysUntil(deadline);
+  if (n === null) return { text: "Open now", tone: "open" };
+  if (n < 0) return { text: "Closed", tone: "closed" };
+  if (n === 0) return { text: "Last day today", tone: "urgent" };
+  if (n === 1) return { text: "1 day left", tone: "urgent" };
+  if (n <= 45) return { text: `${n} days left`, tone: n <= 3 ? "urgent" : n <= 7 ? "soon" : "later" };
+  return { text: `Closes ${formatDate(deadline)}`, tone: "later" };
+}

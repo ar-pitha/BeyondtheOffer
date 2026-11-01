@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
+import { useSearchParams } from "react-router-dom";
 import JobCard from "../components/JobCard";
 import Loader from "../components/Loader";
 import Pagination from "../components/Pagination";
@@ -26,13 +27,14 @@ function Jobs() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [kind, setKind] = useState("all");
+  const [params] = useSearchParams();
+  const [kind, setKind] = useState(["tech", "govt"].includes(params.get("kind")) ? params.get("kind") : "all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [sector, setSector] = useState("");
   const [location, setLocation] = useState("");
   const [batch, setBatch] = useState("");
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState(params.get("sort") === "closing" ? "closing" : "newest");
   const [page, setPage] = useState(1);
 
   useEffect(() => {

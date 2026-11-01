@@ -18,6 +18,8 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminJobs from "./pages/AdminJobs";
 import AdminQuizzes from "./pages/AdminQuizzes";
 import AdminFeed from "./pages/AdminFeed";
+import Saved from "./pages/Saved";
+import Links from "./pages/Links";
 
 // Set Axios base URL
 axios.defaults.baseURL = import.meta.env.VITE_API_URL;
@@ -91,11 +93,15 @@ function App() {
           },
         }}
       />
+      <div className="app">
       <Navbar user={user} onLogout={logoutUser} theme={theme} onToggleTheme={toggleTheme} />
+      <main className="app-main">
 
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={user ? <Navigate to={user.role === "admin" ? "/admin" : "/jobs"} /> : <Home />} />
+        <Route path="/" element={<Home user={user} />} />
+        <Route path="/links/:id" element={<Links />} />
+        <Route path="/saved" element={<ProtectedRoute user={user}><Saved /></ProtectedRoute>} />
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={loginUser} />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register onLogin={loginUser} />} />
         <Route path="/jobs" element={<ProtectedRoute user={user}><Jobs /></ProtectedRoute>} />
@@ -145,6 +151,8 @@ function App() {
       </Routes>
 
       <Footer />
+      </main>
+      </div>
     </>
   );
 }

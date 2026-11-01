@@ -55,9 +55,10 @@ export function thanksReply(seed = "") {
 export const PUBLIC_LINKS_REPLY = "Sent you the links in DM 📩";
 
 // DM text with apply links. Instagram caps DMs at 1000 characters.
-export function buildLinksMessage(items, websiteUrl) {
+export function buildLinksMessage(items, websiteUrl, postId) {
   const site = websiteUrl || "https://beyondtheoffer.vercel.app";
   const lines = ["Here are the links from our post 👇", ""];
+  if (postId) lines.push(`All in one page: ${site}/links/${postId}`, "");
   for (const item of items) {
     if (!item.link) continue;
     lines.push(`• ${item.label}`, `  ${item.link}`);

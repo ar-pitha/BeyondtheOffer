@@ -67,7 +67,7 @@ async function linksForMedia(mediaId) {
   const { rows: queue } = await readTab("Content_Queue");
   const row = queue.find((r) => r.IG_Post_Link && permalinkKey(r.IG_Post_Link) === key);
   const ids = new Set((row?.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
-  if (!ids.size) return { items: [], caption: media.caption };
+  if (!ids.size) return { items: [], caption: media.caption, postId: row?.ID };
 
   const tabs = [
     ["Tech_Jobs", (r) => [`${r.Role}, ${r.Company}`, r.Apply_Link]],
@@ -85,7 +85,7 @@ async function linksForMedia(mediaId) {
       items.push({ label, link });
     }
   }
-  return { items, caption: media.caption };
+  return { items, caption: media.caption, postId: row.ID };
 }
 
 async function handleComment(value) {
@@ -102,8 +102,8 @@ async function handleComment(value) {
   const { action, reason } = classifyComment(text);
   try {
     if (action === "links") {
-      const { items } = await linksForMedia(mediaId);
-      const dm = buildLinksMessage(items, WEBSITE_URL);
+      const { items, postId } = await linksForMedia(mediaId);
+      const dm = buildLinksMessage(items, WEBSITE_URL, postId);
       await sendPrivateReply(commentId, dm);
       await replyToComment(commentId, PUBLIC_LINKS_REPLY);
       await logComment({ ...base, Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
