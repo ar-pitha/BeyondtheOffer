@@ -10,3 +10,4 @@ automation/renders/
 automation/.venv/
 **/.env
 *.local
+.vercel
