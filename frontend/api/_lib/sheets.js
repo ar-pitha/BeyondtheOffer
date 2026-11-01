@@ -145,6 +145,24 @@ export async function ensureTab(tab, headers) {
   return true;
 }
 
+// Deletes whole rows (1-based sheet row numbers) from a tab.
+export async function deleteRows(tab, rowNumbers) {
+  if (!rowNumbers.length) return 0;
+  const meta = await sheetsFetch(`?fields=sheets.properties(sheetId,title)`);
+  const sheet = (meta.sheets || []).find((s) => s.properties.title === tab);
+  if (!sheet) return 0;
+  // Bottom-up so earlier deletions don't shift the rows still to delete
+  const requests = [...new Set(rowNumbers)]
+    .sort((a, b) => b - a)
+    .map((row) => ({
+      deleteDimension: {
+        range: { sheetId: sheet.properties.sheetId, dimension: "ROWS", startIndex: row - 1, endIndex: row },
+      },
+    }));
+  await sheetsFetch(`:batchUpdate`, { method: "POST", body: { requests } });
+  return requests.length;
+}
+
 // Current date and time in IST (or TIMEZONE), formatted for sheet cells.
 export function nowInZone(timeZone = process.env.TIMEZONE || "Asia/Kolkata", date = new Date()) {
   const parts = Object.fromEntries(

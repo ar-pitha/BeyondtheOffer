@@ -7,7 +7,7 @@
 // Documents an admin has edited (adminEdited=true) are left untouched.
 
 import { TABS, hasFlag, isDryRun } from "./lib/config.js";
-import { readTab, logRun } from "./lib/sheets.js";
+import { readTab, logRun, deleteRows } from "./lib/sheets.js";
 import {
   TRUSTED,
   techRowToJob,
@@ -81,6 +81,17 @@ function planRows(source, rows) {
     upserts.push({ id, doc });
   }
   return { upserts, expire, skipped };
+}
+
+async function pruneCommentsLog(dry) {
+  const { rows } = await readTab("Comments_Log").catch(() => ({ rows: [] }));
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - 12);
+  const cutoffKey = cutoff.toISOString().slice(0, 10);
+  // Time_IST looks like "2026-11-01 09:30"; compare the date part
+  const old = rows.filter((r) => /^\d{4}-\d{2}-\d{2}/.test(r.Time_IST) && r.Time_IST.slice(0, 10) < cutoffKey);
+  if (dry || !old.length) return old.length;
+  return deleteRows("Comments_Log", old.map((r) => r._row));
 }
 
 async function main() {
@@ -159,6 +170,13 @@ async function main() {
   }
 
   console.table(summary);
+
+  // Privacy policy promise: comment logs are kept for at most 12 months
+  const pruned = await pruneCommentsLog(dryRun).catch((err) => {
+    console.log(`Comments_Log pruning skipped: ${err.message}`);
+    return 0;
+  });
+  if (pruned) console.log(`${dryRun ? "Would delete" : "Deleted"} ${pruned} Comments_Log row(s) older than 12 months.`);
 
   if (!dryRun) {
     const created = Object.values(summary).reduce((n, s) => n + s.created, 0);

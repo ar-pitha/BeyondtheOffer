@@ -13,6 +13,7 @@ import Register from "./pages/Register";
 import Jobs from "./pages/Jobs";
 import Quizzes from "./pages/Quizzes";
 import News from "./pages/News";
+import { Privacy, Terms, DataDeletion } from "./pages/Legal";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminJobs from "./pages/AdminJobs";
 import AdminQuizzes from "./pages/AdminQuizzes";
@@ -99,6 +100,9 @@ function App() {
         <Route path="/jobs" element={<ProtectedRoute user={user}><Jobs /></ProtectedRoute>} />
         <Route path="/quizzes" element={<ProtectedRoute user={user}><Quizzes /></ProtectedRoute>} />
         <Route path="/news" element={<News />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/data-deletion" element={<DataDeletion />} />
 
         {/* Admin routes */}
         <Route

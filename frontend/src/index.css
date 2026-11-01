@@ -1449,6 +1449,63 @@ textarea.form-control {
   font-weight: 700;
 }
 
+.footer-links {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.footer-links a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* ── Legal pages ───────────────────────────────────────────────── */
+.legal {
+  max-width: 760px;
+}
+
+.legal h2 {
+  font-size: var(--font-xl);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 2rem 0 0.6rem;
+}
+
+.legal p,
+.legal li {
+  color: var(--ink-2);
+  max-width: 68ch;
+}
+
+.legal p + p {
+  margin-top: 0.75rem;
+}
+
+.legal ul,
+.legal ol {
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.legal ul {
+  list-style: disc;
+}
+
+.legal ol {
+  list-style: decimal;
+}
+
+.legal a {
+  color: var(--violet);
+  font-weight: 600;
+}
+
+.legal a:hover {
+  text-decoration: underline;
+}
+
 .footer-social a {
   display: inline-flex;
   align-items: center;

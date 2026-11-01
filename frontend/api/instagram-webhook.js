@@ -131,9 +131,30 @@ async function handleComment(value) {
 }
 
 // DMs: anyone who messages a keyword gets the website link.
+const DELETE_REQUEST = /\b(delete|remove|erase)\s+(my\s+)?(data|info|information|details)\b/i;
+
 async function handleMessage(event) {
   const msg = event.message;
   if (!msg?.text || msg.is_echo || event.sender?.id === process.env.IG_USER_ID) return;
+
+  // Data deletion requests (promised on /data-deletion): log for the team, confirm to the person
+  if (DELETE_REQUEST.test(msg.text)) {
+    const reply =
+      "Got it. We'll delete every comment log linked to your account within 30 days and confirm here. " +
+      `Details: ${WEBSITE_URL}/data-deletion`;
+    await sendDirectMessage(event.sender.id, reply);
+    await logComment({
+      Comment_ID: msg.mid || "",
+      Media_ID: "",
+      Username: `ig-scoped:${event.sender.id}`,
+      Text: msg.text.slice(0, 500),
+      Action: "deletion request",
+      Reply_Text: reply,
+      Status: "needs review",
+    });
+    return;
+  }
+
   if (classifyComment(msg.text).action !== "links") return;
   await sendDirectMessage(
     event.sender.id,
