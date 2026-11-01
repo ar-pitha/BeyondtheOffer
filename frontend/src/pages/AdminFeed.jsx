@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { HiArrowLeft, HiExternalLink, HiRefresh } from "react-icons/hi";
+import { HiExternalLink, HiRefresh } from "react-icons/hi";
 import Loader from "../components/Loader";
 import usePageMeta from "../hooks/usePageMeta";
 
@@ -203,7 +202,7 @@ function SheetTable({ data, onSave, busy }) {
 }
 
 function AdminFeed() {
-  usePageMeta("Feed and Instagram posts");
+  usePageMeta("Instagram");
   const [tab, setTab] = useState("Content_Queue");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -285,8 +284,7 @@ function AdminFeed() {
     <div className="page container">
       <div className="admin-header">
         <div>
-          <Link to="/admin" className="link-button"><HiArrowLeft aria-hidden /> Dashboard</Link>
-          <h1>Feed and Instagram posts</h1>
+          <h1>Instagram</h1>
           <p className="stat-note">
             Live from the BeyondTheOffer Feed sheet. Approved posts go out at {data?.slots || "09:00, 13:00, 19:00"} IST, or at the time you set.
           </p>

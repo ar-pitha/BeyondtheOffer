@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import axios from "axios";
-import { HiBriefcase, HiLightningBolt, HiTable } from "react-icons/hi";
 import Loader from "../components/Loader";
 
 function AdminDashboard() {
@@ -42,7 +40,7 @@ function AdminDashboard() {
   return (
     <div className="page container">
       <div className="admin-header">
-        <h1>Admin Dashboard</h1>
+        <h1>Overview</h1>
       </div>
 
       {/* Stats */}
@@ -68,33 +66,6 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <h2 className="admin-section-title" style={{ marginTop: 0 }}>Manage</h2>
-      <div className="quick-actions">
-        <Link to="/admin/jobs" className="quick-action-card">
-          <div className="quick-action-icon"><HiBriefcase /></div>
-          <div>
-            <h4>Manage Jobs</h4>
-            <p>Create, edit, and delete job postings</p>
-          </div>
-        </Link>
-        <Link to="/admin/quizzes" className="quick-action-card">
-          <div className="quick-action-icon"><HiLightningBolt /></div>
-          <div>
-            <h4>Manage events</h4>
-            <p>Hackathons, quizzes, CTFs and contests</p>
-          </div>
-        </Link>
-        <Link to="/admin/feed" className="quick-action-card">
-          <div className="quick-action-icon"><HiTable /></div>
-          <div>
-            <h4>Instagram posts and feed</h4>
-            <p>Approve drafts, schedule posts, edit the sheet</p>
-          </div>
-        </Link>
-      </div>
-
-      {/* Users Table */}
       <h2 className="admin-section-title">Registered users</h2>
       <div className="admin-table-wrapper">
         <table className="admin-table">

@@ -124,7 +124,7 @@ function AdminJobs() {
   return (
     <div className="page container">
       <div className="admin-header">
-        <h1>Manage Jobs</h1>
+        <h1>Jobs</h1>
         <button className="btn btn-primary" onClick={openCreate}>
           <HiPlus /> Add Job
         </button>

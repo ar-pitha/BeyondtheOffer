@@ -12,16 +12,3 @@ export function daysUntil(deadline) {
 
 export const formatDate = (date, opts = { day: "numeric", month: "short" }) =>
   date ? new Date(date).toLocaleDateString("en-IN", opts) : "";
-
-
-// Text and colour for the deadline pill on cards: { text, tone }
-// tone: urgent (≤3 days), soon (≤7), later, open (no deadline), closed
-export function pillFor(deadline) {
-  const n = daysUntil(deadline);
-  if (n === null) return { text: "Open now", tone: "open" };
-  if (n < 0) return { text: "Closed", tone: "closed" };
-  if (n === 0) return { text: "Last day today", tone: "urgent" };
-  if (n === 1) return { text: "1 day left", tone: "urgent" };
-  if (n <= 45) return { text: `${n} days left`, tone: n <= 3 ? "urgent" : n <= 7 ? "soon" : "later" };
-  return { text: `Closes ${formatDate(deadline)}`, tone: "later" };
-}

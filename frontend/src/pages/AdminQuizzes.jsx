@@ -117,7 +117,7 @@ function AdminQuizzes() {
   return (
     <div className="page container">
       <div className="admin-header">
-        <h1>Manage Quizzes</h1>
+        <h1>Events</h1>
         <button className="btn btn-primary" onClick={openCreate}>
           <HiPlus /> Add Quiz
         </button>

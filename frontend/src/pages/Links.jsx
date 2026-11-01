@@ -1,94 +1,80 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
-import { FaInstagram } from "react-icons/fa";
-import { HiExternalLink } from "react-icons/hi";
-import Loader from "../components/Loader";
 import usePageMeta from "../hooks/usePageMeta";
-import { pillFor } from "../utils/deadline";
+import { daysUntil } from "../utils/deadline";
 import { parseSheetDeadline } from "../utils/sheetDate";
 
-const KIND = { tech: "Tech job", govt: "Govt job", event: "Hackathon", news: "News" };
+const KIND = { tech: "Tech", govt: "Govt", event: "Event", news: "News" };
 
-// The page people land on from "Comment JOB" replies and the link in each caption.
+// Where "Comment JOB" replies and caption links land: the official links from one post.
 function Links() {
   const { id } = useParams();
   const [state, setState] = useState({ loading: true });
-  usePageMeta(state.data?.title ? `Links: ${state.data.title}` : "Apply links", "Official apply links for every opening in our Instagram post.");
+  usePageMeta(state.data?.title || "Apply links", "Official apply links from our Instagram post.");
 
   useEffect(() => {
     setState({ loading: true });
-    // This endpoint is a function on this site, not the backend API
+    // A function on this site, not the backend API
     axios
-      .get("/api/post-links", { baseURL: "", params: { id }, headers: { Authorization: undefined } })
+      .get("/api/post-links", { baseURL: "", params: { id } })
       .then(({ data }) => setState({ data }))
-      .catch((err) => setState({ error: err.response?.data?.message || "Links didn't load. Check your connection and try again." }));
+      .catch((err) => setState({ error: err.response?.data?.message || "Links didn't load. Try again." }));
   }, [id]);
 
-  if (state.loading) return <Loader />;
-
+  if (state.loading) return <p className="note">Loading links…</p>;
   if (state.error) {
     return (
-      <div className="page">
-        <div className="empty-state">
-          <h3>{state.error}</h3>
-          <Link to="/jobs" className="btn btn-primary">See all jobs</Link>
-        </div>
+      <div className="empty">
+        <p>{state.error}</p>
+        <Link to="/" className="text-link">See all openings</Link>
       </div>
     );
   }
 
   const { data } = state;
   return (
-    <div className="page links-page">
-      <header className="page-header">
-        <p className="eyebrow-ig"><FaInstagram aria-hidden /> From our post</p>
+    <>
+      <header className="screen-head">
         <h1>{data.title}</h1>
-        <p>
-          {data.items.length} official {data.items.length === 1 ? "link" : "links"}. Tap to open the source and apply.
-        </p>
-        {data.instagram && (
-          <a href={data.instagram} target="_blank" rel="noopener noreferrer" className="link-button">
-            View the post on Instagram
-          </a>
-        )}
       </header>
-
-      {data.items.length === 0 ? (
-        <div className="empty-state">
-          <h3>This post has no apply links</h3>
-          <Link to="/jobs" className="btn btn-primary">See all jobs</Link>
-        </div>
-      ) : (
-        <ol className="link-list">
-          {data.items.map((item) => {
-            const pill = item.deadline ? pillFor(parseSheetDeadline(item.deadline)) : null;
-            const closed = item.status === "Expired" || pill?.tone === "closed";
-            return (
-              <li key={item.id} className={`link-item link-${item.kind} ${closed ? "is-closed" : ""}`}>
-                <div className="link-body">
-                  <span className="link-kind">{KIND[item.kind] || "Opening"}</span>
-                  <strong>{item.title}</strong>
-                  <span className="link-org">{item.org}</span>
-                  {item.detail && <span className="link-detail">{item.detail}</span>}
-                </div>
-                <div className="link-side">
-                  {pill && <span className={`pill pill-${pill.tone}`}><span className="pill-dot" aria-hidden />{pill.text}</span>}
-                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-                    {item.kind === "news" ? "Read" : closed ? "View" : "Apply"} <HiExternalLink aria-hidden />
-                  </a>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+      {data.instagram && (
+        <a href={data.instagram} target="_blank" rel="noopener noreferrer" className="text-link">From our Instagram post</a>
       )}
 
-      <div className="links-more">
-        <p>New openings every morning, sorted by deadline.</p>
-        <Link to="/jobs" className="btn btn-ghost">Browse all jobs</Link>
-      </div>
-    </div>
+      <ul className="rows">
+        {data.items.map((item) => {
+          const n = item.deadline ? daysUntil(parseSheetDeadline(item.deadline)) : null;
+          const closed = item.status === "Expired" || (n !== null && n < 0);
+          const tone = n === null ? "open" : closed ? "closed" : n <= 3 ? "urgent" : n <= 7 ? "soon" : "later";
+          return (
+            <li key={item.id} className={`row row-${item.kind === "event" ? "event" : item.kind}`}>
+              <div className="row-body">
+                <a href={item.link} target="_blank" rel="noopener noreferrer" className="row-title">{item.title}</a>
+                <p className="row-org">
+                  <span className={`kind kind-${item.kind}`}>{KIND[item.kind]}</span>
+                  {item.org}
+                </p>
+                {item.detail && <p className="row-meta">{item.detail}</p>}
+                <div className="row-actions">
+                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="apply">
+                    {item.kind === "news" ? "Read" : closed ? "View" : "Apply"} →
+                  </a>
+                </div>
+              </div>
+              {item.kind !== "news" && (
+                <span className={`stub stub-${tone}`}>
+                  <b>{n === null || closed ? "–" : n}</b>
+                  <small>{closed ? "closed" : n === null ? "open" : n === 0 ? "today" : n === 1 ? "day" : "days"}</small>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <Link to="/" className="more">See every opening</Link>
+    </>
   );
 }
 
