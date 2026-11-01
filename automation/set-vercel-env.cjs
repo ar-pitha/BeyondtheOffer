@@ -22,6 +22,9 @@ const vars = {
   SHEET_ID: env.SHEET_ID,
   WEBSITE_URL: env.WEBSITE_URL,
   TIMEZONE: env.TIMEZONE,
+  POST_SLOTS_IST: env.POST_SLOTS_IST,
+  // Post now button in /admin/feed: fine-grained token, this repo only, Actions read and write
+  GH_DISPATCH_TOKEN: env.GH_DISPATCH_TOKEN,
 };
 const keyFile = path.join(dir, "secrets", "google-sa.json");
 if (fs.existsSync(keyFile)) vars.GOOGLE_SA_JSON_B64 = fs.readFileSync(keyFile).toString("base64");
