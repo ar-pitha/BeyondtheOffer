@@ -4,3 +4,9 @@ dist/
 build/
 .DS_Store
 *.log
+automation/.env
+automation/secrets/
+automation/renders/
+automation/.venv/
+**/.env
+*.local
