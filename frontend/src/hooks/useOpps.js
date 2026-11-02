@@ -32,20 +32,57 @@ export const fromEvent = (q) => ({
   raw: q,
 });
 
+// A fresh copy is shown instantly when moving between pages; the network
+// request is only repeated after the cache goes stale.
+const TTL = 60_000;
+let cache = null;
+let inflight = null;
+
+function loadOpps() {
+  if (!inflight) {
+    inflight = Promise.all([axios.get("/api/jobs"), axios.get("/api/quizzes")])
+      .then(([jobs, events]) => {
+        const items = [...jobs.data.map(fromJob), ...events.data.map(fromEvent)];
+        cache = { items, at: Date.now() };
+        return items;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
+}
+
 export default function useOpps() {
-  const [state, setState] = useState({ items: [], loading: true, error: "" });
+  // Captured once, so writing the cache does not re-run the effect.
+  const [fresh] = useState(() => Boolean(cache && Date.now() - cache.at < TTL));
+  const [state, setState] = useState(() => ({
+    items: fresh ? cache.items : [],
+    loading: !fresh,
+    error: "",
+  }));
 
   useEffect(() => {
+    if (fresh) return;
+
     let alive = true;
-    Promise.all([axios.get("/api/jobs"), axios.get("/api/quizzes")])
-      .then(([jobs, events]) => {
-        if (alive) setState({ items: [...jobs.data.map(fromJob), ...events.data.map(fromEvent)], loading: false, error: "" });
+    loadOpps()
+      .then((items) => {
+        if (alive) setState({ items, loading: false, error: "" });
       })
-      .catch(() => alive && setState({ items: [], loading: false, error: "Couldn't load openings. Check your connection and pull to refresh." }));
+      .catch(() => {
+        if (!alive) return;
+        setState((s) =>
+          s.items.length
+            ? { ...s, loading: false }
+            : { items: [], loading: false, error: "Couldn't load openings. Check your connection and pull to refresh." }
+        );
+      });
+
     return () => {
       alive = false;
     };
-  }, []);
+  }, [fresh]);
 
   return state;
 }

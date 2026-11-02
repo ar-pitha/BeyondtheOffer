@@ -5,6 +5,7 @@ import axios from "axios";
 
 import { PublicLayout, AuthLayout, AppLayout, AdminLayout } from "./components/Layouts";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { trackSiteView } from "./utils/siteViews";
 
 import Landing from "./pages/Landing";
 import Feed from "./pages/Feed";
@@ -36,6 +37,11 @@ function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  // Every page load/refresh counts one visit. SPA navigation does not.
+  useEffect(() => {
+    trackSiteView();
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem("user") || sessionStorage.getItem("user");

@@ -580,6 +580,9 @@ a.story-title:hover {
 }
 
 .public-head {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -587,6 +590,8 @@ a.story-title:hover {
   max-width: 960px;
   margin: 0 auto;
   padding: 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
 
 .public-actions {
@@ -594,6 +599,36 @@ a.story-title:hover {
   align-items: center;
   gap: 16px;
   font-size: 14px;
+}
+
+@media (max-width: 420px) {
+  .public-head {
+    padding: 14px 12px;
+  }
+
+  .public-actions {
+    gap: 8px;
+  }
+
+  .public-actions .btn-sm {
+    padding: 0 11px;
+  }
+}
+
+@media (max-width: 360px) {
+  .brand {
+    gap: 8px;
+    font-size: 15px;
+  }
+
+  .public-actions {
+    gap: 6px;
+  }
+
+  .public-actions .btn-sm {
+    padding: 0 10px;
+    font-size: 12px;
+  }
 }
 
 .public-main {
@@ -609,10 +644,14 @@ a.story-title:hover {
   flex-wrap: wrap;
   gap: 8px 20px;
   justify-content: center;
-  padding: 24px 16px 32px;
+  padding: 28px 16px 32px;
   border-top: 1px solid var(--line);
   font-size: 13px;
   color: var(--ink-3);
+}
+
+.public-foot-views {
+  font-variant-numeric: tabular-nums;
 }
 
 .public-foot a:hover {
@@ -648,6 +687,94 @@ a.story-title:hover {
   font-weight: 600;
   color: var(--ink-3);
   margin-bottom: 4px;
+}
+
+.hero-trust {
+  margin-top: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.landing-proof {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(28px, 7vw, 72px);
+  text-align: center;
+}
+
+.proof-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+}
+
+.proof-number {
+  font-size: clamp(40px, 9vw, 64px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.proof-label {
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+/* Loading placeholders: same size as a row, so content doesn't shift in */
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--soft) 25%, var(--line) 37%, var(--soft) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-row {
+  pointer-events: none;
+}
+
+.skeleton-title {
+  width: 72%;
+  height: 16px;
+}
+
+.skeleton-org {
+  width: 46%;
+  height: 13px;
+  margin-top: 7px;
+}
+
+.skeleton-meta {
+  width: 58%;
+  height: 12px;
+  margin-top: 7px;
+}
+
+.skeleton-action {
+  width: 64px;
+  height: 14px;
+  margin-top: 12px;
+}
+
+.skeleton-stub {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 38px;
+  align-self: center;
+  margin-left: 12px;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
 }
 
 /* ── Log in / sign up ──────────────────────────────────────────── */
@@ -1422,18 +1549,46 @@ select.form-control {
   .landing {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 72px;
-    align-items: start;
+    /* Both columns share one height: the hero sits centred beside the list */
+    grid-template-rows: minmax(480px, 62vh) auto;
+    column-gap: 72px;
+    align-items: stretch;
   }
 
   .landing .hero {
-    position: sticky;
-    top: 32px;
-    padding-top: 48px;
+    position: static;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0;
   }
 
-  .landing > section:last-child {
-    padding-top: 48px;
+  .landing-jobs {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* The list scrolls inside the column without showing a scrollbar */
+  .landing-jobs .rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .landing-jobs .rows::-webkit-scrollbar {
+    display: none;
+  }
+
+  .landing-jobs .more {
+    flex: none;
+  }
+
+  .landing-proof {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1546,5 +1701,102 @@ select.form-control {
   .table-actions .btn {
     height: 32px;
     padding: 0 10px;
+  }
+}
+
+/* Phones: type one step smaller across the app and admin console */
+@media (max-width: 600px) {
+  body {
+    font-size: 14px;
+  }
+
+  .brand {
+    font-size: 15px;
+  }
+
+  .btn {
+    font-size: 14px;
+  }
+
+  .btn-sm {
+    font-size: 12px;
+  }
+
+  .screen-head h1,
+  .form-card h2,
+  .legal .page-header h1 {
+    font-size: 26px;
+  }
+
+  .admin-header h1,
+  .stat-number {
+    font-size: 24px;
+  }
+
+  .hero h1 {
+    font-size: clamp(30px, 7.5vw, 40px);
+  }
+
+  .hero p {
+    font-size: 15px;
+  }
+
+  .proof-number {
+    font-size: 34px;
+  }
+
+  .row-title {
+    font-size: 15px;
+  }
+
+  .story-title {
+    font-size: 16px;
+  }
+
+  .row-org,
+  .note,
+  .apply,
+  .menu li > a,
+  .menu li > button,
+  .form-footer,
+  .proof-label {
+    font-size: 13px;
+  }
+
+  .row-meta,
+  .label,
+  .hero-trust,
+  .stat-label {
+    font-size: 12px;
+  }
+
+  .stat-note {
+    font-size: 11px;
+  }
+
+  .count,
+  .search input {
+    font-size: 14px;
+  }
+
+  .chip {
+    font-size: 13px;
+  }
+
+  .stub b {
+    font-size: 18px;
+  }
+
+  .admin-section-title,
+  .ticket-title {
+    font-size: 15px;
+  }
+
+  .modal-header h3 {
+    font-size: 16px;
+  }
+
+  .legal h2 {
+    font-size: 16px;
   }
 }

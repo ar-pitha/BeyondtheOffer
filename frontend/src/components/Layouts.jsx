@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Outlet, Link, NavLink } from "react-router-dom";
 import {
   HiOutlineHome, HiHome,
@@ -9,6 +10,7 @@ import {
   HiOutlineLightningBolt, HiLightningBolt,
 } from "react-icons/hi";
 import { FaInstagram } from "react-icons/fa";
+import { trackSiteView } from "../utils/siteViews";
 
 const Brand = ({ to = "/" }) => (
   <Link to={to} className="brand">
@@ -19,6 +21,14 @@ const Brand = ({ to = "/" }) => (
 
 // Visitors: landing, legal pages, post links
 export function PublicLayout({ user }) {
+  const [views, setViews] = useState(null);
+
+  useEffect(() => {
+    trackSiteView().then((total) => {
+      if (typeof total === "number") setViews(total);
+    });
+  }, []);
+
   return (
     <div className="public">
       <header className="public-head">
@@ -28,7 +38,7 @@ export function PublicLayout({ user }) {
             <Link to={user.role === "admin" ? "/admin" : "/"} className="btn btn-dark btn-sm">Open app</Link>
           ) : (
             <>
-              <Link to="/login" className="text-link">Log in</Link>
+              <Link to="/login" className="btn btn-secondary btn-sm">Log in</Link>
               <Link to="/register" className="btn btn-dark btn-sm">Sign up</Link>
             </>
           )}
@@ -39,9 +49,12 @@ export function PublicLayout({ user }) {
       </main>
       <footer className="public-foot">
         <span>© {new Date().getFullYear()} BeyondTheOffer</span>
+        <span className="public-foot-views">
+          Site visits: {views === null ? "000000" : String(views).padStart(6, "0")}
+        </span>
         <a href="https://www.instagram.com/beyond_the.offer" target="_blank" rel="noopener noreferrer">Instagram</a>
-        <Link to="/privacy">Privacy</Link>
-        <Link to="/terms">Terms</Link>
+          <Link to="/privacy">Privacy</Link>
+          <Link to="/terms">Terms</Link>
       </footer>
     </div>
   );
