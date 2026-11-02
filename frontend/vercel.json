@@ -12,6 +12,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/:path((?!instagram-webhook$|admin-sheet$|post-links$).*)",
+      "destination": "https://beyondthe-offer.vercel.app/api/:path"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

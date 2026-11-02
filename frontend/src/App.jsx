@@ -20,7 +20,10 @@ import AdminJobs from "./pages/AdminJobs";
 import AdminQuizzes from "./pages/AdminQuizzes";
 import AdminFeed from "./pages/AdminFeed";
 
-axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+// Same-origin /api: Vercel forwards it to the backend (frontend/vercel.json), and the
+// Vite dev server proxies it to localhost:5000. Browsers never call the backend domain
+// directly, which some Indian networks fail to reach.
+axios.defaults.baseURL = "";
 
 const homeFor = (user) => (user?.role === "admin" ? "/admin" : "/");
 
