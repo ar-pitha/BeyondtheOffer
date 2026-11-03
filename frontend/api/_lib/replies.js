@@ -54,7 +54,17 @@ export function thanksReply(seed = "") {
 
 export const PUBLIC_LINKS_REPLY = "Thanks for your comment, please check your DM!";
 
-// DM text with apply links. Instagram caps DMs at 1000 characters.
+function utf8Size(text) {
+  return new TextEncoder().encode(text).length;
+}
+
+function fitUtf8(text, maxBytes) {
+  let end = text.length;
+  while (end > 0 && utf8Size(text.slice(0, end)) > maxBytes) end -= 1;
+  return text.slice(0, end);
+}
+
+// DM text with apply links. Instagram caps message text at 1000 UTF-8 bytes.
 export function buildLinksMessage(items, websiteUrl, postId) {
   const site = websiteUrl || "https://beyondtheoffer.vercel.app";
   const lines = ["Here are the links from our post 👇", ""];
@@ -67,7 +77,10 @@ export function buildLinksMessage(items, websiteUrl, postId) {
   lines.push("", `More openings, updated daily: ${site}`);
 
   let text = lines.join("\n");
-  if (text.length > 1000) text = `${text.slice(0, 960).replace(/\n[^\n]*$/, "")}\n\nFull list: ${site}`;
+  if (utf8Size(text) > 1000) {
+    const fallback = `\n\nFull list: ${site}`;
+    text = `${fitUtf8(text, 1000 - utf8Size(fallback)).replace(/\n[^\n]*$/, "")}${fallback}`;
+  }
   return text;
 }
 
