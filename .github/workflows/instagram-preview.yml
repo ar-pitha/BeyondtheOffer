@@ -2,7 +2,7 @@ name: instagram-preview
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       id:
@@ -34,6 +34,6 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npx playwright install --with-deps chromium
         working-directory: automation
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - run: node preview.js ${{ inputs.id && format('--id {0}', inputs.id) || '--all' }}
         working-directory: automation

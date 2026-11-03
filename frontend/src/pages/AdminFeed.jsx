@@ -285,7 +285,7 @@ function AdminFeed() {
       return;
     }
     setPreviewRun({ id: row.ID, status: "waiting" });
-    toast("Preview generation runs automatically every 10 minutes. Refresh this post when it is ready.");
+    toast("Preview generation is running automatically. Refresh this post when the generated video or slides are ready.");
   };
 
   const onSyncComments = async () => {
