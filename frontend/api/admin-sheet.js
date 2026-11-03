@@ -91,6 +91,9 @@ async function syncInstagramComments() {
   for (const post of published) {
     const comments = (await listMediaComments(post.id)).data || [];
     for (const comment of comments) {
+      if (comment.from?.id === process.env.IG_USER_ID || comment.username === "beyond_the.offer") {
+        continue;
+      }
       const replies = comment.replies?.data || [];
       const existing = existingRows.find((row) => row.Comment_ID === comment.id);
       const alreadyReplied = replies.some((reply) => reply.from?.id === process.env.IG_USER_ID);
