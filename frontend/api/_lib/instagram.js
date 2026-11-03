@@ -66,9 +66,9 @@ export const replyToComment = (commentId, message) =>
 
 // Private reply: a DM sent to the person who wrote the comment
 export const sendPrivateReply = (commentId, text) =>
-  igRequest(`${igUserId()}/messages`, {
+  igRequest(`${commentId}/private_replies`, {
     method: "POST",
-    json: { recipient: { comment_id: commentId }, message: { text } },
+    params: { message: text },
   });
 
 // Normal DM inside an open conversation
