@@ -125,7 +125,7 @@ export async function updateRow(tab, headers, rowNumber, patch, { raw = false } 
 }
 
 export async function appendRow(tab, headers, obj) {
-  await sheetsFetch(`/values/${rangeOf(tab, "A1")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+  return sheetsFetch(`/values/${rangeOf(tab, "A1")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
     method: "POST",
     body: { values: [headers.map((h) => obj[h] ?? "")] },
   });

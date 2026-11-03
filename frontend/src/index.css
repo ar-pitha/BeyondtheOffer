@@ -1081,6 +1081,29 @@ select.form-control {
   color: var(--ink-3);
 }
 
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.admin-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-pagination .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .admin-title-cell,
 .table-actions {
   display: flex;

@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { HiPlus, HiPencil, HiTrash, HiX, HiCheck } from "react-icons/hi";
 import Modal from "../components/Modal";
 import Loader from "../components/Loader";
+import Pagination from "../components/Pagination";
 
 const emptyForm = {
   title: "",
@@ -31,6 +32,7 @@ function AdminJobs() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
 
   const fetchJobs = async () => {
     try {
@@ -46,6 +48,10 @@ function AdminJobs() {
   useEffect(() => {
     fetchJobs();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, originFilter]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -120,6 +126,7 @@ function AdminJobs() {
       (originFilter === "all" || (originFilter === "auto" ? j.origin === "auto" : j.origin !== "auto")) &&
       (j.title.toLowerCase().includes(search.toLowerCase()) || j.company.toLowerCase().includes(search.toLowerCase()))
   );
+  const visibleJobs = filteredJobs.slice((page - 1) * 10, page * 10);
 
   return (
     <div className="page container">
@@ -166,7 +173,7 @@ function AdminJobs() {
               </tr>
             </thead>
             <tbody>
-              {filteredJobs.map((job) => (
+              {visibleJobs.map((job) => (
                 <tr key={job._id} className={job.isActive === false ? "is-off" : ""}>
                   <td>
                     <span className="admin-title-cell">
@@ -207,6 +214,7 @@ function AdminJobs() {
               ))}
             </tbody>
           </table>
+          <Pagination page={page} total={filteredJobs.length} onChange={setPage} />
         </div>
       )}
 

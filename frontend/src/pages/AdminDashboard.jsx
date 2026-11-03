@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import Loader from "../components/Loader";
+import Pagination from "../components/Pagination";
 
 function AdminDashboard() {
   const [stats, setStats] = useState({ jobs: 0, quizzes: 0, news: 0, autoJobs: 0, autoQuizzes: 0, hidden: 0 });
   const [users, setUsers] = useState([]);
+  const [userPage, setUserPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,6 +38,7 @@ function AdminDashboard() {
   }, []);
 
   if (loading) return <Loader />;
+  const visibleUsers = users.slice((userPage - 1) * 10, userPage * 10);
 
   return (
     <div className="page container">
@@ -78,7 +81,7 @@ function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {users.map(u => (
+            {visibleUsers.map(u => (
               <tr key={u._id}>
                 <td style={{ fontWeight: 500 }}>{u.name}</td>
                 <td>{u.email}</td>
@@ -105,6 +108,7 @@ function AdminDashboard() {
             )}
           </tbody>
         </table>
+        <Pagination page={userPage} total={users.length} onChange={setUserPage} />
       </div>
     </div>
   );

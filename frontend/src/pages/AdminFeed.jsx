@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { HiExternalLink, HiRefresh } from "react-icons/hi";
 import Loader from "../components/Loader";
 import usePageMeta from "../hooks/usePageMeta";
+import Pagination from "../components/Pagination";
 
 // The admin sheet API is a Vercel function on this site, not the backend API
 const api = { baseURL: "" };
@@ -156,6 +157,13 @@ function PostCard({ row, slots, onSave, onPostNow, busy, posting }) {
 
 function SheetTable({ data, onSave, busy }) {
   const { headers, rows, editable } = data;
+  const [page, setPage] = useState(1);
+  const visibleRows = rows.slice((page - 1) * 10, page * 10);
+
+  useEffect(() => {
+    setPage(1);
+  }, [data.tab]);
+
   if (!rows.length) {
     return (
       <div className="empty-state">
@@ -171,7 +179,7 @@ function SheetTable({ data, onSave, busy }) {
           <tr>{headers.map((h) => <th key={h}>{h.replace(/_/g, " ")}</th>)}</tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
+          {visibleRows.map((r, i) => (
             <tr key={r.ID || i} className={r.Status === "Expired" ? "is-off" : ""}>
               {headers.map((h) => (
                 <td key={h}>
@@ -197,6 +205,7 @@ function SheetTable({ data, onSave, busy }) {
           ))}
         </tbody>
       </table>
+      <Pagination page={page} total={rows.length} onChange={setPage} />
     </div>
   );
 }
@@ -210,6 +219,7 @@ function AdminFeed() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("Draft");
   const [run, setRun] = useState(null); // { id, status, conclusion, url }
+  const [postPage, setPostPage] = useState(1);
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -254,6 +264,19 @@ function AdminFeed() {
     }
   };
 
+  const onSyncComments = async () => {
+    setBusy(true);
+    try {
+      const { data: result } = await axios.post("/api/admin-sheet", { action: "sync-comments" }, api);
+      toast.success(`Imported ${result.imported} existing comment${result.imported === 1 ? "" : "s"}.`);
+      await load("Comments_Log");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Couldn't sync Instagram comments.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (!run || run.status === "completed") return;
     const started = Date.now();
@@ -279,6 +302,11 @@ function AdminFeed() {
   const posts = data?.tab === "Content_Queue" ? data.rows : [];
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
+  const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
+
+  useEffect(() => {
+    setPostPage(1);
+  }, [tab, filter]);
 
   return (
     <div className="page container">
@@ -289,9 +317,16 @@ function AdminFeed() {
             Live from the BeyondTheOffer Feed sheet. Approved posts go out at {data?.slots || "09:00, 13:00, 19:00"} IST, or at the time you set.
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={() => load(tab)} disabled={loading}>
-          <HiRefresh aria-hidden /> Refresh
-        </button>
+        <div className="feed-row">
+          {tab === "Comments_Log" && (
+            <button className="btn btn-secondary" onClick={onSyncComments} disabled={loading || busy}>
+              Sync Instagram replies
+            </button>
+          )}
+          <button className="btn btn-secondary" onClick={() => load(tab)} disabled={loading}>
+            <HiRefresh aria-hidden /> Refresh
+          </button>
+        </div>
       </div>
 
       {run && (
@@ -339,11 +374,12 @@ function AdminFeed() {
             </div>
           ) : (
             <div className="feed-grid">
-              {visiblePosts.map((row) => (
+              {pagedPosts.map((row) => (
                 <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPostNow={onPostNow} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
             </div>
           )}
+          <Pagination page={postPage} total={visiblePosts.length} onChange={setPostPage} />
         </>
       ) : (
         <SheetTable data={data} onSave={onSave} busy={busy} />

@@ -5,7 +5,9 @@
 // Only signed-in admins: the bearer token is checked against the backend's /api/auth/me.
 // Env (frontend Vercel project): SHEET_ID, GOOGLE_SA_JSON_B64, and VITE_API_URL or ADMIN_API_URL.
 
-import { readTab, updateRow, nowInZone } from "./_lib/sheets.js";
+import { readTab, appendRow, updateRow, ensureTab, nowInZone } from "./_lib/sheets.js";
+import { listUserMedia, listMediaComments, permalinkKey } from "./_lib/instagram.js";
+import { COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS } from "./_lib/replies.js";
 
 const STATUS_DATA = ["Active", "Expired"];
 const VERIFIED = ["Official", "Multi-source", "Single-source"];
@@ -24,8 +26,8 @@ const TABS = {
   Govt_Jobs: { editable: { Status: (v) => STATUS_DATA.includes(v), Verified: (v) => VERIFIED.includes(v) } },
   Hackathons_Quizzes: { editable: { Status: (v) => STATUS_DATA.includes(v), Verified: (v) => VERIFIED.includes(v) } },
   Tech_News: { editable: {} },
-  Run_Log: { editable: {}, newestFirst: true, limit: 60 },
-  Comments_Log: { editable: {}, newestFirst: true, limit: 100 },
+  Run_Log: { editable: {}, newestFirst: true },
+  Comments_Log: { editable: {}, newestFirst: true },
 };
 
 // GitHub Actions (publish.yml) is where posts are rendered and published.
@@ -69,6 +71,42 @@ async function latestPublishRun() {
   return r
     ? { status: r.status, conclusion: r.conclusion, url: r.html_url, startedAt: r.run_started_at, event: r.event }
     : { status: "none" };
+}
+
+async function syncInstagramComments() {
+  await ensureTab(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS);
+  const [{ rows: queue }, { rows: existing }] = await Promise.all([
+    readTab("Content_Queue"),
+    readTab(COMMENTS_LOG_TAB).catch(() => ({ rows: [] })),
+  ]);
+  const known = new Set(existing.map((row) => row.Comment_ID).filter(Boolean));
+  const links = new Set(queue.map((row) => row.IG_Post_Link).filter((link) => /^https?:\/\//.test(link)).map(permalinkKey));
+  const media = (await listUserMedia()).data || [];
+  const published = media.filter((item) => links.has(permalinkKey(item.permalink)));
+  let imported = 0;
+
+  for (const post of published) {
+    const comments = (await listMediaComments(post.id)).data || [];
+    for (const comment of comments) {
+      if (known.has(comment.id)) continue;
+      const replies = comment.replies?.data || [];
+      const replyText = replies.map((reply) => reply.text).filter(Boolean).join(" | ");
+      await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, {
+        Time_IST: comment.timestamp ? new Date(comment.timestamp).toISOString().slice(0, 16).replace("T", " ") : nowInZone().date,
+        Comment_ID: comment.id,
+        Media_ID: post.id,
+        Username: comment.username || comment.from?.username || "",
+        Text: (comment.text || "").slice(0, 500),
+        Action: "existing",
+        Reply_Text: replyText.slice(0, 500),
+        Status: replyText ? "sent" : "received",
+      });
+      known.add(comment.id);
+      imported += 1;
+    }
+  }
+
+  return { imported, posts: published.length };
 }
 
 function backendBase() {
@@ -132,6 +170,10 @@ export default async function handler(req, res) {
 
     if (req.method === "POST") {
       const body = await readJson(req);
+
+      if (body.action === "sync-comments") {
+        return send(res, 200, await syncInstagramComments());
+      }
 
       // "Post now": start the publish workflow on GitHub for one approved row
       if (body.action === "publish-now") {

@@ -99,7 +99,7 @@ function SkeletonRow() {
 function Landing() {
   usePageMeta(
     null,
-    "Verified tech jobs, government notifications and hackathons for students in India. Updated every morning and sorted by deadline."
+    "Verified tech jobs, government notifications and hackathons for students in India."
   );
   const { items, loading } = useOpps();
   const [students, setStudents] = useState(0);

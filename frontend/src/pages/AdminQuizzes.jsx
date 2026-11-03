@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { HiPlus, HiPencil, HiTrash, HiX, HiCheck } from "react-icons/hi";
 import Modal from "../components/Modal";
 import Loader from "../components/Loader";
+import Pagination from "../components/Pagination";
 
 const emptyForm = {
   title: "",
@@ -25,6 +26,7 @@ function AdminQuizzes() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
 
   const fetchQuizzes = async () => {
     try {
@@ -40,6 +42,10 @@ function AdminQuizzes() {
   useEffect(() => {
     fetchQuizzes();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -113,6 +119,7 @@ function AdminQuizzes() {
     (q.platform && q.platform.toLowerCase().includes(search.toLowerCase())) ||
     (q.description && q.description.toLowerCase().includes(search.toLowerCase()))
   );
+  const visibleQuizzes = filteredQuizzes.slice((page - 1) * 10, page * 10);
 
   return (
     <div className="page container">
@@ -152,7 +159,7 @@ function AdminQuizzes() {
               </tr>
             </thead>
             <tbody>
-              {filteredQuizzes.map((quiz) => (
+              {visibleQuizzes.map((quiz) => (
                 <tr key={quiz._id} className={quiz.isActive === false ? "is-off" : ""}>
                   <td>
                     <span className="admin-title-cell">
@@ -190,6 +197,7 @@ function AdminQuizzes() {
               ))}
             </tbody>
           </table>
+          <Pagination page={page} total={filteredQuizzes.length} onChange={setPage} />
         </div>
       )}
 

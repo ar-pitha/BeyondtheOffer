@@ -47,6 +47,19 @@ export const igUserId = () => {
 export const getMedia = (mediaId, fields = "id,caption,permalink,media_type,timestamp") =>
   igRequest(mediaId, { params: { fields } });
 
+export const listUserMedia = (limit = 100) =>
+  igRequest(`${igUserId()}/media`, {
+    params: { fields: "id,permalink,caption", limit },
+  });
+
+export const listMediaComments = (mediaId) =>
+  igRequest(`${mediaId}/comments`, {
+    params: {
+      fields: "id,text,username,from,timestamp,replies.limit(50){id,text,username,from,timestamp}",
+      limit: 100,
+    },
+  });
+
 // Public reply under a comment
 export const replyToComment = (commentId, message) =>
   igRequest(`${commentId}/replies`, { method: "POST", params: { message } });

@@ -7,7 +7,7 @@
 // optional ANTHROPIC_API_KEY (AI answers to questions) and AI_REPLY_MODE=draft (log only).
 
 import crypto from "node:crypto";
-import { readTab, appendRow, ensureTab, nowInZone } from "./_lib/sheets.js";
+import { readTab, appendRow, ensureTab, updateRow, nowInZone } from "./_lib/sheets.js";
 import {
   getMedia,
   replyToComment,
@@ -48,7 +48,14 @@ function validSignature(raw, header) {
 async function logComment(entry) {
   await ensureTab(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS);
   const { date, time } = nowInZone();
-  await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, { Time_IST: `${date} ${time}`, ...entry });
+  const result = await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, { Time_IST: `${date} ${time}`, ...entry });
+  const match = result.updates?.updatedRange?.match(/![A-Z]+(\d+)(?::|$)/);
+  return match ? Number(match[1]) : null;
+}
+
+async function updateComment(rowNumber, entry) {
+  if (!rowNumber) return logComment(entry);
+  await updateRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, rowNumber, entry, { raw: true });
 }
 
 async function alreadyHandled(commentId) {
@@ -100,33 +107,41 @@ async function handleComment(value) {
   if (await alreadyHandled(commentId)) return;
 
   const { action, reason } = classifyComment(text);
+  let logRow = null;
+  try {
+    logRow = await logComment({ ...base, Action: "received", Reply_Text: "", Status: "processing" });
+  } catch {
+    // Continue the reply attempt; the final error path below still tries to log.
+  }
+  const finishLog = (entry) => updateComment(logRow, { ...base, ...entry });
+
   try {
     if (action === "links") {
       const { items, postId } = await linksForMedia(mediaId);
       const dm = buildLinksMessage(items, WEBSITE_URL, postId);
       await sendPrivateReply(commentId, dm);
       await replyToComment(commentId, PUBLIC_LINKS_REPLY);
-      await logComment({ ...base, Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
+      await finishLog({ Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
     } else if (action === "thanks") {
       const reply = thanksReply(commentId);
       await replyToComment(commentId, reply);
-      await logComment({ ...base, Action: "thanks", Reply_Text: reply, Status: "sent" });
+      await finishLog({ Action: "thanks", Reply_Text: reply, Status: "sent" });
     } else if (action === "question" && process.env.ANTHROPIC_API_KEY) {
       const { caption } = await getMedia(mediaId, "caption");
       const answer = await draftAnswer({ question: text, caption, websiteUrl: WEBSITE_URL });
       if (answer && process.env.AI_REPLY_MODE !== "draft") {
         await replyToComment(commentId, answer);
-        await logComment({ ...base, Action: "ai-answer", Reply_Text: answer, Status: "sent" });
+        await finishLog({ Action: "ai-answer", Reply_Text: answer, Status: "sent" });
       } else {
-        await logComment({ ...base, Action: "ai-answer", Reply_Text: answer || "", Status: "draft" });
+        await finishLog({ Action: "ai-answer", Reply_Text: answer || "", Status: "draft" });
       }
     } else if (action === "review") {
-      await logComment({ ...base, Action: `review: ${reason}`, Reply_Text: "", Status: "needs review" });
+      await finishLog({ Action: `review: ${reason}`, Reply_Text: "", Status: "needs review" });
     } else {
-      await logComment({ ...base, Action: action === "question" ? "question" : "none", Reply_Text: "", Status: "skipped" });
+      await finishLog({ Action: action === "question" ? "question" : "none", Reply_Text: "", Status: "skipped" });
     }
   } catch (err) {
-    await logComment({ ...base, Action: action, Reply_Text: err.message.slice(0, 300), Status: "error" }).catch(() => {});
+    await finishLog({ Action: action, Reply_Text: err.message.slice(0, 300), Status: "error" }).catch(() => {});
   }
 }
 
