@@ -96,7 +96,12 @@ function pickRow(rows, failures) {
   const inSlot = slotMinutes.some((slot) => Math.abs(now.minutes - slot) <= SLOT_WINDOW_MIN);
 
   const approved = rows.filter(
-    (r) => r.Status === "Approved" && FORMATS.includes((r.Format || "").toLowerCase()) && r.Slides_or_Script
+    (r) =>
+      r.Status === "Approved" &&
+      r.Publish_Confirmed === "Y" &&
+      r.Preview_Link &&
+      FORMATS.includes((r.Format || "").toLowerCase()) &&
+      r.Slides_or_Script
   );
   if (forcedId) return { row: approved.find((r) => r.ID === forcedId), reason: `--id ${forcedId}` };
 

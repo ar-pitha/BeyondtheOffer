@@ -370,6 +370,10 @@ by `.github/workflows/instagram-preview.yml` and stored in the queue row's
 `Preview_Link` column. It is a dry run only: Instagram publishing starts only
 after **Confirm and post**.
 
+Publishing is gated by both `Preview_Link` and `Publish_Confirmed=Y`. Approved
+rows without a reviewed preview are skipped by the scheduled publisher, so a
+post cannot reach Instagram before the admin confirms its generated output.
+
 If preview generation shows `GitHub 403`, update the Vercel
 `GH_DISPATCH_TOKEN`. For a fine-grained token, grant access to
 `ar-pitha/BeyondTheOffer`, enable **Actions: Read and write**, and ensure the

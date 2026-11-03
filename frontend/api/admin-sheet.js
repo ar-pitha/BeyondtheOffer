@@ -5,7 +5,7 @@
 // Only signed-in admins: the bearer token is checked against the backend's /api/auth/me.
 // Env (frontend Vercel project): SHEET_ID, GOOGLE_SA_JSON_B64, and VITE_API_URL or ADMIN_API_URL.
 
-import { readTab, appendRow, updateRow, ensureTab, nowInZone } from "./_lib/sheets.js";
+import { readTab, appendRow, updateRow, ensureTab, ensureColumns, nowInZone } from "./_lib/sheets.js";
 import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
 import { buildPublicLinksReply, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS } from "./_lib/replies.js";
 
@@ -270,8 +270,12 @@ export default async function handler(req, res) {
         const row = rows.find((r) => r.ID === body.id);
         if (!row) return send(res, 404, { message: `No post with ID ${body.id}.` });
         if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
+        if (!row.Preview_Link) return send(res, 409, { message: "Generate and review the preview before posting." });
+        const headers = await ensureColumns("Content_Queue", ["Preview_Link", "Publish_Confirmed"]);
         if (row.Status !== "Approved") {
-          await updateRow("Content_Queue", (await readTab("Content_Queue")).headers, row._row, { Status: "Approved" }, { raw: true });
+          await updateRow("Content_Queue", headers, row._row, { Status: "Approved", Publish_Confirmed: "Y" }, { raw: true });
+        } else {
+          await updateRow("Content_Queue", headers, row._row, { Publish_Confirmed: "Y" }, { raw: true });
         }
 
         await dispatchPublish(row.ID);

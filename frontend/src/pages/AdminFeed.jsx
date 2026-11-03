@@ -122,11 +122,11 @@ function PostCard({ row, slots, onSave, onPostNow, onPreview, busy, posting }) {
             {row.Preview_Link ? "View generated preview" : "Generate preview"}
           </button>
           {status !== "Approved" && (
-            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => save({ Status: "Approved" }, `Approved. It will post at the next slot (${slots} IST).`)}>
-              Approve for next slot
+            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => save({ Status: "Approved" }, "Approved. It still needs a generated preview and confirmation before posting.")}>
+              Approve draft
             </button>
           )}
-          <button className="btn btn-primary btn-sm" disabled={busy || posting} onClick={() => onPostNow(row)}>
+          <button className="btn btn-primary btn-sm" disabled={busy || posting || !row.Preview_Link} onClick={() => onPostNow(row)}>
             {posting ? "Posting…" : "Post now"}
           </button>
           {status !== "Rejected" && (
