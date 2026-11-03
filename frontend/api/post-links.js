@@ -29,10 +29,17 @@ export default async function handler(req, res) {
 
     const { rows } = await readTab("Content_Queue");
     const live = rows.filter((r) => r.Status === "Published" || r.Status === "Approved");
-    const row =
+    let row =
       id === "latest"
         ? live.filter((r) => r.Status === "Published").sort((a, b) => (b.Date || "").localeCompare(a.Date || "") || b._row - a._row)[0]
         : live.find((r) => r.ID === id);
+    // Accept a shortened CQ-YYYY prefix when it identifies a published post.
+    // Exact IDs remain preferred for post-specific links.
+    if (!row && id !== "latest") {
+      row = live
+        .filter((r) => r.ID && String(r.ID).startsWith(id))
+        .sort((a, b) => (b.Date || "").localeCompare(a.Date || "") || b._row - a._row)[0];
+    }
     if (!row) return send(res, 404, { message: "We couldn't find that post. All current openings are on the Jobs page." }, false);
 
     const ids = (row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
