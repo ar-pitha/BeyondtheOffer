@@ -159,6 +159,10 @@ function SheetTable({ data, onSave, busy }) {
   const { headers, rows, editable } = data;
   const [page, setPage] = useState(1);
   const visibleRows = rows.slice((page - 1) * 10, page * 10);
+  const cleanCommentReply = (value) => {
+    const match = String(value || "").match(/https:\/\/beyondtheoffer\.vercel\.app\/links\/[A-Za-z0-9_-]+/);
+    return match ? match[0] : value;
+  };
 
   useEffect(() => {
     setPage(1);
@@ -194,10 +198,12 @@ function SheetTable({ data, onSave, busy }) {
                       {!SELECT_OPTIONS[h].includes(r[h]) && <option value={r[h]}>{r[h] || "—"}</option>}
                       {SELECT_OPTIONS[h].map((o) => <option key={o}>{o}</option>)}
                     </select>
-                  ) : /^https?:\/\//.test(r[h]) ? (
-                    <a href={r[h]} target="_blank" rel="noopener noreferrer" className="link-button">Open</a>
+                  ) : /^https?:\/\//.test(data.tab === "Comments_Log" && h === "Reply_Text" ? cleanCommentReply(r[h]) : r[h]) ? (
+                    <a href={data.tab === "Comments_Log" && h === "Reply_Text" ? cleanCommentReply(r[h]) : r[h]} target="_blank" rel="noopener noreferrer" className="link-button">Open</a>
                   ) : (
-                    <span className="feed-cell" title={r[h]}>{r[h]}</span>
+                    <span className="feed-cell" title={r[h]}>
+                      {data.tab === "Comments_Log" && h === "Status" && ["partial", "error"].includes(r[h]) && /DM failed/i.test(r.Reply_Text || "") ? "sent" : r[h]}
+                    </span>
                   )}
                 </td>
               ))}

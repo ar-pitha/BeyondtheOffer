@@ -6,8 +6,8 @@
 // Env (frontend Vercel project): SHEET_ID, GOOGLE_SA_JSON_B64, and VITE_API_URL or ADMIN_API_URL.
 
 import { readTab, appendRow, updateRow, ensureTab, nowInZone } from "./_lib/sheets.js";
-import { listUserMedia, listMediaComments, permalinkKey, sendPrivateReply, replyToComment } from "./_lib/instagram.js";
-import { buildLinksMessage, buildPublicLinksReply, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, PUBLIC_LINKS_REPLY } from "./_lib/replies.js";
+import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
+import { buildPublicLinksReply, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS } from "./_lib/replies.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
@@ -124,21 +124,14 @@ async function syncInstagramComments() {
 
       let replyText = "";
       let status = "received";
-      let dmError = "";
       try {
-        const dm = buildLinksMessage(items, WEBSITE_URL, queueRow?.ID);
-        try {
-          await sendPrivateReply(comment.id, dm);
-        } catch (error) {
-          dmError = error.message.slice(0, 300);
-        }
-        const publicReply = dmError ? buildPublicLinksReply(items, WEBSITE_URL, queueRow?.ID) : PUBLIC_LINKS_REPLY;
+        const publicReply = buildPublicLinksReply(items, WEBSITE_URL, queueRow?.ID);
         await replyToComment(comment.id, publicReply);
-        replyText = `${publicReply} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`;
-        status = dmError ? "partial" : "sent";
+        replyText = publicReply;
+        status = "sent";
         replied += 1;
       } catch (error) {
-        replyText = `${dmError ? `DM failed: ${dmError} | ` : ""}Public reply failed: ${error.message.slice(0, 300)}`;
+        replyText = `Public reply failed: ${error.message.slice(0, 300)}`;
         status = "error";
       }
 

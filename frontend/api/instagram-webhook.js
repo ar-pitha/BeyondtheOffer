@@ -11,16 +11,13 @@ import { readTab, appendRow, ensureTab, updateRow, nowInZone } from "./_lib/shee
 import {
   getMedia,
   replyToComment,
-  sendPrivateReply,
   sendDirectMessage,
   permalinkKey,
 } from "./_lib/instagram.js";
 import {
   classifyComment,
-  buildLinksMessage,
   buildPublicLinksReply,
   draftAnswer,
-  PUBLIC_LINKS_REPLY,
   COMMENTS_LOG_TAB,
   COMMENTS_LOG_HEADERS,
 } from "./_lib/replies.js";
@@ -121,47 +118,33 @@ async function handleComment(value) {
   try {
     if (action === "links") {
       const { items, postId } = await linksForMedia(mediaId);
-      const dm = buildLinksMessage(items, WEBSITE_URL, postId);
-      let dmError = "";
       let publicError = "";
-      try {
-        await sendPrivateReply(commentId, dm);
-      } catch (error) {
-        dmError = error.message.slice(0, 300);
-      }
-      const publicReply = dmError ? buildPublicLinksReply(items, WEBSITE_URL, postId) : PUBLIC_LINKS_REPLY;
+      const publicReply = buildPublicLinksReply(items, WEBSITE_URL, postId);
       try {
         await replyToComment(commentId, publicReply);
       } catch (error) {
         publicError = error.message.slice(0, 300);
       }
-      if (publicError) throw new Error(`Public reply failed: ${publicError}${dmError ? ` | DM failed: ${dmError}` : ""}`);
+      if (publicError) throw new Error(`Public reply failed: ${publicError}`);
       await finishLog({
         Action: "links",
-        Reply_Text: publicReply + " | " + (dmError ? "DM failed: " + dmError : "DM: " + items.length + " link(s)"),
-        Status: dmError ? "partial" : "sent",
+        Reply_Text: publicReply,
+        Status: "sent",
       });
     } else if (action === "thanks") {
       const { items, postId } = await linksForMedia(mediaId);
-      const dm = buildLinksMessage(items, WEBSITE_URL, postId);
-      let dmError = "";
       let publicError = "";
-      try {
-        await sendPrivateReply(commentId, dm);
-      } catch (error) {
-        dmError = error.message.slice(0, 300);
-      }
-      const publicReply = dmError ? buildPublicLinksReply(items, WEBSITE_URL, postId) : PUBLIC_LINKS_REPLY;
+      const publicReply = buildPublicLinksReply(items, WEBSITE_URL, postId);
       try {
         await replyToComment(commentId, publicReply);
       } catch (error) {
         publicError = error.message.slice(0, 300);
       }
-      if (publicError) throw new Error(`Public reply failed: ${publicError}${dmError ? ` | DM failed: ${dmError}` : ""}`);
+      if (publicError) throw new Error(`Public reply failed: ${publicError}`);
       await finishLog({
         Action: "links",
-        Reply_Text: `${publicReply} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`,
-        Status: dmError ? "partial" : "sent",
+        Reply_Text: publicReply,
+        Status: "sent",
       });
     } else if (action === "question" && process.env.ANTHROPIC_API_KEY) {
       const { caption } = await getMedia(mediaId, "caption");
