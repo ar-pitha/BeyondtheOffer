@@ -1,9 +1,14 @@
 // Instagram Graph API (Instagram Login) helpers shared by the webhook and automation/.
 
-const base = () => process.env.IG_API_BASE || "https://graph.instagram.com";
-const version = () => process.env.IG_API_VERSION || "v21.0";
+const base = () => {
+  const loginType = process.env.IG_LOGIN_TYPE || "unified";
+  return loginType === "unified"
+    ? "https://graph.facebook.com"
+    : process.env.IG_API_BASE || "https://graph.instagram.com";
+};
+const version = () => process.env.IG_API_VERSION || "v26.0";
 
-export async function igRequest(path, { method = "GET", params = {}, json } = {}) {
+export async function igRequest(path, { method = "GET", params = {}, json, context = {} } = {}) {
   const token = process.env.IG_ACCESS_TOKEN;
   if (!token) throw new Error("IG_ACCESS_TOKEN is not set");
 
@@ -28,12 +33,22 @@ export async function igRequest(path, { method = "GET", params = {}, json } = {}
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) {
     const e = data.error || {};
+    const details = [
+      `HTTP ${res.status}`,
+      e.message || "error",
+      e.code ? `code ${e.code}` : "",
+      e.error_subcode ? `subcode ${e.error_subcode}` : "",
+      e.fbtrace_id ? `fbtrace_id ${e.fbtrace_id}` : "",
+      context.commentId ? `comment_id ${context.commentId}` : "",
+      process.env.IG_USER_ID ? `ig_user_id ${process.env.IG_USER_ID}` : "",
+    ].filter(Boolean).join("; ");
     const err = new Error(
-      `Instagram ${method} ${path} → ${res.status}: ${e.message || "error"}` +
-        (e.code ? ` (code ${e.code}${e.error_subcode ? `, subcode ${e.error_subcode}` : ""})` : "")
+      `Instagram ${method} ${path} → ${details}`
     );
     err.code = e.code;
     err.subcode = e.error_subcode;
+    err.fbtraceId = e.fbtrace_id;
+    err.commentId = context.commentId;
     throw err;
   }
   return data;
@@ -62,13 +77,18 @@ export const listMediaComments = (mediaId) =>
 
 // Public reply under a comment
 export const replyToComment = (commentId, message) =>
-  igRequest(`${commentId}/replies`, { method: "POST", params: { message } });
+  igRequest(`${commentId}/replies`, {
+    method: "POST",
+    params: { message },
+    context: { commentId },
+  });
 
 // Private reply: a DM sent to the person who wrote the comment
 export const sendPrivateReply = (commentId, text) =>
   igRequest(`${igUserId()}/messages`, {
     method: "POST",
     json: { recipient: { comment_id: commentId }, message: { text } },
+    context: { commentId },
   });
 
 // Normal DM inside an open conversation

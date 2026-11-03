@@ -41,7 +41,7 @@ export async function createReelContainer(filePath, caption) {
     params: { media_type: "REELS", upload_type: "resumable", caption },
   });
   const file = fs.readFileSync(filePath);
-  const res = await fetch(uri || `https://rupload.facebook.com/ig-api-upload/${process.env.IG_API_VERSION || "v21.0"}/${id}`, {
+  const res = await fetch(uri || `https://rupload.facebook.com/ig-api-upload/${process.env.IG_API_VERSION || "v26.0"}/${id}`, {
     method: "POST",
     headers: {
       Authorization: `OAuth ${process.env.IG_ACCESS_TOKEN}`,

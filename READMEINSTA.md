@@ -313,6 +313,9 @@ Dry-run one reel, show me the MP4, then STOP and summarize.
 ### Rules
 
 - Official Instagram API only. No bought followers, follow/unfollow bots or engagement pods.
+- For Unified Login, use `https://graph.facebook.com/v26.0/{IG_USER_ID}/messages` for private replies.
+  The JSON body is `{ "recipient": { "comment_id": "<webhook value.id>" }, "message": { "text": "..." } }`.
+  Do not substitute the Instagram account ID, media ID, username, or commenter ID for `comment_id`.
 - Don't scrape LinkedIn or Naukri. Every post links to an official source.
 - News is written in our own words.
 - Secrets live in `.env`, GitHub Secrets and Vercel env only, never in `VITE_` variables or git.
