@@ -83,7 +83,7 @@ export const replyToComment = (commentId, message) =>
     context: { commentId },
   });
 
-// Private reply: a DM sent to the person who wrote the comment
+// Private reply using the Unified Login Instagram messaging endpoint.
 export const sendPrivateReply = (commentId, text) =>
   igRequest(`${igUserId()}/messages`, {
     method: "POST",

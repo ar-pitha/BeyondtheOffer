@@ -127,8 +127,9 @@ IG_USER_ID=
 IG_ACCESS_TOKEN=
 IG_APP_ID=
 IG_APP_SECRET=
-IG_API_BASE=https://graph.instagram.com
-IG_API_VERSION=v21.0
+IG_LOGIN_TYPE=unified
+IG_API_BASE=https://graph.facebook.com
+IG_API_VERSION=v26.0
 
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -153,6 +154,21 @@ ANTHROPIC_API_KEY=               # optional, for AI-written replies
 ```
 
 > Anything starting with `VITE_` is bundled into the browser code. Never put secrets in `VITE_` variables.
+
+For Unified Login, private replies use the Instagram-only messaging endpoint:
+
+```text
+POST https://graph.facebook.com/v26.0/{IG_USER_ID}/messages
+Authorization: Bearer {IG_PAGE_ACCESS_TOKEN}
+{
+  "recipient": { "comment_id": "{COMMENT_ID}" },
+  "message": { "text": "..." }
+}
+```
+
+Use the comment ID from `entry[].changes[].value.id`. The Unified Login
+Business Integration System User token must include `instagram_basic`,
+`instagram_manage_comments`, and `instagram_manage_messages`.
 
 Make the base64 value with:
 
