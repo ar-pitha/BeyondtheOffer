@@ -28,6 +28,38 @@ const forcedId = argv.includes("--id") ? argv[argv.indexOf("--id") + 1] : null;
 const FORMATS = ["carousel", "story", "reel"];
 const MAX_FAILURES = 3;
 const SLOT_WINDOW_MIN = 20;
+const ROTATION = (process.env.CONTENT_ROTATION_IST || "tech,news,govt,events,ai")
+  .split(",")
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean);
+
+const CATEGORY_HASHTAGS = {
+  tech: "#techjobs #softwarejobs #engineeringjobs #freshers #careers",
+  news: "#technews #technology #futureoftech #innovation #studentcommunity",
+  govt: "#governmentjobs #sarkarijob #ssc #bankjobs #freshers",
+  events: "#hackathon #quiz #codingchallenge #studentdevelopers #techstudents",
+  ai: "#ainews #artificialintelligence #machinelearning #techupdates #futureofwork",
+};
+
+function categoryForRow(row) {
+  const text = `${row.Title || ""} ${row.Slides_or_Script || ""} ${row.Hashtags || ""}`.toLowerCase();
+  const ids = String(row.Item_IDs || "").toUpperCase();
+  if (ids.split(/[,\s]+/).some((id) => id.startsWith("GJ-")) || /\b(government|govt|ssc|upsc|banking)\b/.test(text)) return "govt";
+  if (ids.split(/[,\s]+/).some((id) => id.startsWith("HQ-")) || /\b(hackathon|quiz|ctf|contest)\b/.test(text)) return "events";
+  if (ids.split(/[,\s]+/).some((id) => id.startsWith("TN-"))) return /\b(ai|artificial intelligence|machine learning|llm|model)\b/.test(text) ? "ai" : "news";
+  return "tech";
+}
+
+function rotationForDate(date) {
+  const day = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / 86400000;
+  return ROTATION[Math.abs(Math.floor(day)) % ROTATION.length];
+}
+
+function withCategoryHashtags(row, category) {
+  const existing = String(row.Hashtags || "").match(/#[\p{L}\p{N}_]+/gu) || [];
+  const defaults = CATEGORY_HASHTAGS[category].match(/#[\p{L}\p{N}_]+/gu) || [];
+  return [...new Set([...existing, ...defaults])].slice(0, 20).join(" ");
+}
 
 const slotMinutes = (process.env.POST_SLOTS_IST || "09:00,13:00,19:00")
   .split(",")
@@ -60,6 +92,7 @@ function failureCounts(runLogRows) {
 function pickRow(rows, failures) {
   const now = nowInZone();
   const nowKey = `${now.date} ${now.time}`;
+  const rotation = rotationForDate(now.date);
   const inSlot = slotMinutes.some((slot) => Math.abs(now.minutes - slot) <= SLOT_WINDOW_MIN);
 
   const approved = rows.filter(
@@ -77,10 +110,10 @@ function pickRow(rows, failures) {
     .sort((a, b) => a.key.localeCompare(b.key));
   if (scheduled.length) return { row: scheduled[0].r, reason: `scheduled for ${scheduled[0].key} IST` };
 
-  const unscheduled = usable.filter((r) => !r.Scheduled_Time_IST);
+  const unscheduled = usable.filter((r) => !r.Scheduled_Time_IST && categoryForRow(r) === rotation);
   if (ignoreSlots) return { row: unscheduled[0], reason: "time slots ignored (--dry-run / --now)" };
-  if (!inSlot) return { row: null, reason: `outside posting slots (${process.env.POST_SLOTS_IST || "09:00,13:00,19:00"} IST ±${SLOT_WINDOW_MIN} min)` };
-  return { row: unscheduled[0], reason: "posting slot" };
+  if (!inSlot) return { row: null, reason: `outside posting slots (${process.env.POST_SLOTS_IST || "19:00"} IST ±${SLOT_WINDOW_MIN} min)` };
+  return { row: unscheduled[0], reason: `${rotation} rotation at posting slot` };
 }
 
 async function loadRows() {
@@ -114,8 +147,9 @@ async function publishToInstagram(row, imageUrls, video) {
   const ig = await import("./lib/instagram.js");
   // Every post gets its own links page, which comment-to-DM replies can point to
   const linksLine = /\/links\//.test(row.Caption || "") ? "" : `🔗 All apply links: ${WEBSITE_URL.replace(/^https?:\/\//, "")}/links/${row.ID}`;
-  const caption = [row.Caption, linksLine, row.Hashtags].filter(Boolean).join("\n\n");
   const format = row.Format.toLowerCase();
+  const category = categoryForRow(row);
+  const caption = [row.Caption, linksLine, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
 
   const { used, total } = await ig.getPublishingLimit();
   const needed = format === "story" ? imageUrls.length : 1;

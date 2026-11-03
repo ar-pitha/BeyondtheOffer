@@ -36,7 +36,8 @@ jobs:
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       TIMEZONE: Asia/Kolkata
-      POST_SLOTS_IST: ${{ vars.POST_SLOTS_IST || '09:00,13:00,19:00' }}
+      POST_SLOTS_IST: ${{ vars.POST_SLOTS_IST || '19:00' }}
+      CONTENT_ROTATION_IST: ${{ vars.CONTENT_ROTATION_IST || 'tech,news,govt,events,ai' }}
       WEBSITE_URL: ${{ vars.WEBSITE_URL || 'https://beyondtheoffer.vercel.app' }}
       # Scheduled runs read the repository variable DRY_RUN (Settings → Variables). Set it to "false" to go live.
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || vars.DRY_RUN || 'true' }}

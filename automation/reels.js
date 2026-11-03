@@ -70,8 +70,11 @@ export async function buildReel(script, outDir) {
   const video = images
     .map(
       (_, i) =>
-        `[${i}:v]scale=1080:1920,setsar=1,format=yuv420p,fade=t=in:st=0:d=${FADE},` +
-        `fade=t=out:st=${(durations[i] - FADE).toFixed(2)}:d=${FADE}[v${i}]`
+        `[${i}:v]scale=1188:2112,crop=1080:1920:` +
+        `x='(iw-1080)*${i % 2 ? "0.72" : "0.28"}':y='(ih-1920)*${i % 3 / 2}',` +
+        `setsar=1,format=yuv420p,zoompan=z='min(zoom+0.0007,1.06)':` +
+        `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,` +
+        `fade=t=in:st=0:d=${FADE},fade=t=out:st=${(durations[i] - FADE).toFixed(2)}:d=${FADE}[v${i}]`
     )
     .join(";");
   const concat = `${images.map((_, i) => `[v${i}]`).join("")}concat=n=${n}:v=1:a=0[v]`;

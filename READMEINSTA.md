@@ -136,7 +136,8 @@ CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
 TIMEZONE=Asia/Kolkata
-POST_SLOTS_IST=09:00,13:00,19:00
+POST_SLOTS_IST=19:00
+CONTENT_ROTATION_IST=tech,news,govt,events,ai
 DRY_RUN=true
 WEBSITE_URL=https://beyondtheoffer.vercel.app
 ```
@@ -194,6 +195,7 @@ Don't rename tabs or reorder columns; the daily Claude task depends on them. Add
 
 - `Verified`: `Official`, `Multi-source` or `Single-source`
 - `Status`: `Active` or `Expired` on data tabs; `Draft` → `Approved` → `Published` (or `Rejected`) on Content_Queue
+- Unscheduled posts follow `CONTENT_ROTATION_IST`: one focused category per day (`tech`, `news`, `govt`, `events`, `ai`). Use `Format=Reel` with `HOOK:`, `POINT:` and `CTA:` lines for the daily professional Reel; do not combine unrelated categories.
 
 ### Build phases (prompts for your coding agent)
 
