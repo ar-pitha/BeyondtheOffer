@@ -245,6 +245,17 @@ export default async function handler(req, res) {
         return send(res, 200, await syncInstagramComments());
       }
 
+      if (body.action === "preview-now") {
+        const { rows } = await readTab("Content_Queue");
+        if (!rows.some((r) => r.ID === body.id)) return send(res, 404, { message: `No post with ID ${body.id}.` });
+        await dispatchPreview(body.id);
+        return send(res, 202, { message: "Preview generation started" });
+      }
+
+      if (body.action === "preview-status") {
+        return send(res, 200, await latestPreviewRun());
+      }
+
       // "Post now": start the publish workflow on GitHub for one approved row
       if (body.action === "publish-now") {
         const { rows } = await readTab("Content_Queue");
@@ -255,16 +266,6 @@ export default async function handler(req, res) {
           await updateRow("Content_Queue", (await readTab("Content_Queue")).headers, row._row, { Status: "Approved" }, { raw: true });
         }
 
-        if (body.action === "preview-now") {
-          const { rows } = await readTab("Content_Queue");
-          if (!rows.some((r) => r.ID === body.id)) return send(res, 404, { message: `No post with ID ${body.id}.` });
-          await dispatchPreview(body.id);
-          return send(res, 202, { message: "Preview generation started" });
-        }
-
-        if (body.action === "preview-status") {
-          return send(res, 200, await latestPreviewRun());
-        }
         await dispatchPublish(row.ID);
         return send(res, 202, { message: "Posting started", runsUrl: `https://github.com/${repo()}/actions/workflows/publish.yml` });
       }
