@@ -284,14 +284,8 @@ function AdminFeed() {
       setPreviewRun(null);
       return;
     }
-    setPreviewRun({ id: row.ID, status: "starting", requestedAt: Date.now() });
-    try {
-      await axios.post("/api/admin-sheet", { action: "preview-now", id: row.ID }, api);
-      toast.success("Generating the real Reel/slide preview.");
-    } catch (err) {
-      setPreviewRun(null);
-      toast.error(err.response?.data?.message || "Couldn't generate preview.");
-    }
+    setPreviewRun({ id: row.ID, status: "waiting" });
+    toast("Preview generation runs automatically every 10 minutes. Refresh this post when it is ready.");
   };
 
   const onSyncComments = async () => {
@@ -333,25 +327,19 @@ function AdminFeed() {
     if (!previewRun || previewRun.status === "completed") return;
     const timer = setInterval(async () => {
       try {
-        const { data: status } = await axios.post("/api/admin-sheet", { action: "preview-status" }, api);
-        if (status.startedAt && new Date(status.startedAt).getTime() < previewRun.requestedAt - 60_000) return;
-        setPreviewRun((current) => ({ ...current, ...status }));
-        if (status.status === "completed") {
+        const result = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
+        const updated = result.data.rows.find((item) => item.ID === previewRow?.ID);
+        if (updated?.Preview_Link) {
           clearInterval(timer);
-          if (status.conclusion === "success") {
-            const result = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
-            const updated = result.data.rows.find((item) => item.ID === previewRow?.ID);
-            if (updated) setPreviewRow(updated);
-            setData(result.data);
-            toast.success("Generated preview is ready.");
-          } else {
-            toast.error("Preview generation failed.");
-          }
+          setPreviewRow(updated);
+          setData(result.data);
+          setPreviewRun({ id: updated.ID, status: "completed" });
+          toast.success("Generated preview is ready.");
         }
       } catch {
-        /* keep polling */
+        /* keep waiting */
       }
-    }, 8000);
+    }, 30000);
     return () => clearInterval(timer);
   }, [previewRun?.status, previewRow?.ID]);
 

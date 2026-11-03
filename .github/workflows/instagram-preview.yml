@@ -1,11 +1,13 @@
 name: instagram-preview
 
 on:
+  schedule:
+    - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       id:
-        description: "Content_Queue ID to render"
-        required: true
+        description: "Optional Content_Queue ID to render"
+        required: false
         type: string
 
 jobs:
@@ -33,5 +35,5 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: automation
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: node preview.js --id "${{ inputs.id }}"
+      - run: node preview.js ${{ inputs.id && format('--id {0}', inputs.id) || '--all' }}
         working-directory: automation

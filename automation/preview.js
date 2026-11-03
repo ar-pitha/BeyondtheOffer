@@ -1,32 +1,48 @@
 import path from "node:path";
 import { ROOT } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns } from "./lib/sheets.js";
-import { renderSlides, closeBrowser, parseReelScript } from "./lib/render.js";
+import { renderSlides, closeBrowser, parseSlides } from "./lib/render.js";
 import { buildReel } from "./reels.js";
 import { uploadSlides, uploadVideo, hasCloudinary } from "./lib/cloudinary.js";
 
-const id = process.argv[process.argv.indexOf("--id") + 1];
-if (!id) throw new Error("Usage: node preview.js --id <Content_Queue_ID>");
-
-const { headers, rows } = await readTab("Content_Queue");
-const row = rows.find((item) => item.ID === id);
-if (!row) throw new Error(`No Content_Queue row with ID ${id}`);
 if (!hasCloudinary()) throw new Error("Cloudinary is required for admin previews");
 
-const outDir = path.join(ROOT, "renders", "preview", id);
-let previewLinks;
-try {
-  if (String(row.Format).toLowerCase() === "reel") {
-    const result = await buildReel(row.Slides_or_Script, outDir);
-    previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${id}/preview`, publicId: "reel" })];
-  } else {
-    const slides = String(row.Slides_or_Script || "").split(/\r?\n/).filter(Boolean);
-    const images = await renderSlides(slides.map((text, index) => ({ text, fields: [text], variant: index === 0 ? "cover" : "item" })), outDir);
-    previewLinks = await uploadSlides(images, `${id}/preview`);
-  }
-  const nextHeaders = await ensureColumns("Content_Queue", ["Preview_Link"]);
-  await updateRow("Content_Queue", nextHeaders, row._row, { Preview_Link: previewLinks.join("\n") }, { raw: true });
-  console.log(`Preview ready for ${id}`);
-} finally {
-  await closeBrowser();
+const argv = process.argv.slice(2);
+const requestedId = argv.includes("--id") ? argv[argv.indexOf("--id") + 1] : null;
+const all = argv.includes("--all");
+if (!requestedId && !all) throw new Error("Usage: node preview.js --id <Content_Queue_ID> or --all");
+
+const { headers, rows } = await readTab("Content_Queue");
+const targets = rows.filter((row) =>
+  (!requestedId || row.ID === requestedId) &&
+  row.Format &&
+  row.Slides_or_Script &&
+  row.Status !== "Published" &&
+  !row.Preview_Link
+);
+if (requestedId && !targets.length) {
+  const row = rows.find((item) => item.ID === requestedId);
+  if (!row) throw new Error(`No Content_Queue row with ID ${requestedId}`);
+  console.log(`${requestedId} already has a preview or is not eligible.`);
 }
+
+for (const row of targets) {
+  const outDir = path.join(ROOT, "renders", "preview", row.ID);
+  try {
+    let previewLinks;
+    if (String(row.Format).toLowerCase() === "reel") {
+      const result = await buildReel(row.Slides_or_Script, outDir);
+      previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "reel" })];
+    } else {
+      const images = await renderSlides(parseSlides(row.Slides_or_Script), outDir);
+      previewLinks = await uploadSlides(images, `${row.ID}/preview`);
+    }
+    const nextHeaders = headers.includes("Preview_Link") ? headers : await ensureColumns("Content_Queue", ["Preview_Link"]);
+    await updateRow("Content_Queue", nextHeaders, row._row, { Preview_Link: previewLinks.join("\n") }, { raw: true });
+    console.log(`Preview ready for ${row.ID}`);
+  } catch (error) {
+    console.error(`Preview failed for ${row.ID}: ${error.message}`);
+  }
+}
+
+await closeBrowser();
