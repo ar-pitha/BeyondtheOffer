@@ -52,7 +52,7 @@ export function thanksReply(seed = "") {
   return THANK_REPLIES[h % THANK_REPLIES.length];
 }
 
-export const PUBLIC_LINKS_REPLY = "Sent you the links in DM 📩";
+export const PUBLIC_LINKS_REPLY = "Thanks for your comment, please check your DM!";
 
 // DM text with apply links. Instagram caps DMs at 1000 characters.
 export function buildLinksMessage(items, websiteUrl, postId) {

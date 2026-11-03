@@ -17,7 +17,6 @@ import {
 } from "./_lib/instagram.js";
 import {
   classifyComment,
-  thanksReply,
   buildLinksMessage,
   draftAnswer,
   PUBLIC_LINKS_REPLY,
@@ -61,7 +60,10 @@ async function updateComment(rowNumber, entry) {
 async function alreadyHandled(commentId) {
   try {
     const { rows } = await readTab(COMMENTS_LOG_TAB);
-    return rows.some((r) => r.Comment_ID === commentId && r.Status !== "error");
+    return rows.some((r) =>
+      r.Comment_ID === commentId &&
+      ["sent", "draft", "skipped", "needs review"].includes(r.Status)
+    );
   } catch {
     return false; // tab does not exist yet
   }
@@ -123,9 +125,11 @@ async function handleComment(value) {
       await replyToComment(commentId, PUBLIC_LINKS_REPLY);
       await finishLog({ Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
     } else if (action === "thanks") {
-      const reply = thanksReply(commentId);
-      await replyToComment(commentId, reply);
-      await finishLog({ Action: "thanks", Reply_Text: reply, Status: "sent" });
+      const { items, postId } = await linksForMedia(mediaId);
+      const dm = buildLinksMessage(items, WEBSITE_URL, postId);
+      await sendPrivateReply(commentId, dm);
+      await replyToComment(commentId, PUBLIC_LINKS_REPLY);
+      await finishLog({ Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
     } else if (action === "question" && process.env.ANTHROPIC_API_KEY) {
       const { caption } = await getMedia(mediaId, "caption");
       const answer = await draftAnswer({ question: text, caption, websiteUrl: WEBSITE_URL });

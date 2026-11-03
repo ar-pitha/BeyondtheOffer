@@ -6,8 +6,10 @@
 // Env (frontend Vercel project): SHEET_ID, GOOGLE_SA_JSON_B64, and VITE_API_URL or ADMIN_API_URL.
 
 import { readTab, appendRow, updateRow, ensureTab, nowInZone } from "./_lib/sheets.js";
-import { listUserMedia, listMediaComments, permalinkKey } from "./_lib/instagram.js";
-import { COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS } from "./_lib/replies.js";
+import { listUserMedia, listMediaComments, permalinkKey, sendPrivateReply, replyToComment } from "./_lib/instagram.js";
+import { buildLinksMessage, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, PUBLIC_LINKS_REPLY } from "./_lib/replies.js";
+
+const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
 const STATUS_DATA = ["Active", "Expired"];
 const VERIFIED = ["Official", "Multi-source", "Single-source"];
@@ -75,38 +77,84 @@ async function latestPublishRun() {
 
 async function syncInstagramComments() {
   await ensureTab(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS);
-  const [{ rows: queue }, { rows: existing }] = await Promise.all([
+  const [{ rows: queue }, { rows: existingRows }] = await Promise.all([
     readTab("Content_Queue"),
     readTab(COMMENTS_LOG_TAB).catch(() => ({ rows: [] })),
   ]);
-  const known = new Set(existing.map((row) => row.Comment_ID).filter(Boolean));
+  const known = new Set(existingRows.map((row) => row.Comment_ID).filter(Boolean));
   const links = new Set(queue.map((row) => row.IG_Post_Link).filter((link) => /^https?:\/\//.test(link)).map(permalinkKey));
   const media = (await listUserMedia()).data || [];
   const published = media.filter((item) => links.has(permalinkKey(item.permalink)));
   let imported = 0;
+  let replied = 0;
 
   for (const post of published) {
     const comments = (await listMediaComments(post.id)).data || [];
     for (const comment of comments) {
-      if (known.has(comment.id)) continue;
       const replies = comment.replies?.data || [];
-      const replyText = replies.map((reply) => reply.text).filter(Boolean).join(" | ");
-      await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, {
+      const existing = existingRows.find((row) => row.Comment_ID === comment.id);
+      const alreadyReplied = replies.some((reply) => reply.from?.id === process.env.IG_USER_ID);
+      if (existing?.Reply_Text || alreadyReplied) {
+        known.add(comment.id);
+        continue;
+      }
+
+      const queueRow = queue.find((row) => permalinkKey(row.IG_Post_Link) === permalinkKey(post.permalink));
+      const ids = new Set((queueRow?.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
+      const tabs = [
+        ["Tech_Jobs", (row) => [`${row.Role}, ${row.Company}`, row.Apply_Link]],
+        ["Govt_Jobs", (row) => [`${row.Post_Exam}, ${row.Organisation}`, row.Official_Link || row.Notification_Link]],
+        ["Hackathons_Quizzes", (row) => [row.Name, row.Link]],
+        ["Tech_News", (row) => [row.Headline, row.Link]],
+      ];
+      const items = [];
+      for (const [tab, pick] of tabs) {
+        if (items.length === ids.size) break;
+        const { rows } = await readTab(tab).catch(() => ({ rows: [] }));
+        for (const row of rows) {
+          if (ids.has(row.ID)) {
+            const [label, link] = pick(row);
+            items.push({ label, link });
+          }
+        }
+      }
+
+      let replyText = "";
+      let status = "received";
+      try {
+        const dm = buildLinksMessage(items, WEBSITE_URL, queueRow?.ID);
+        await sendPrivateReply(comment.id, dm);
+        await replyToComment(comment.id, PUBLIC_LINKS_REPLY);
+        replyText = `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`;
+        status = "sent";
+        replied += 1;
+      } catch (error) {
+        replyText = error.message.slice(0, 300);
+        status = "error";
+      }
+
+      const rowData = {
         Time_IST: comment.timestamp ? new Date(comment.timestamp).toISOString().slice(0, 16).replace("T", " ") : nowInZone().date,
         Comment_ID: comment.id,
         Media_ID: post.id,
         Username: comment.username || comment.from?.username || "",
         Text: (comment.text || "").slice(0, 500),
-        Action: "existing",
+        Action: "links",
         Reply_Text: replyText.slice(0, 500),
-        Status: replyText ? "sent" : "received",
-      });
+        Status: status,
+      };
+
+      if (existing?._row) {
+        await updateRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, existing._row, rowData, { raw: true });
+      } else {
+        await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, rowData);
+      }
       known.add(comment.id);
       imported += 1;
     }
   }
 
-  return { imported, posts: published.length };
+  return { imported, replied, posts: published.length };
 }
 
 function backendBase() {
