@@ -192,7 +192,15 @@ const send = (res, status, body) => {
 
 export default async function handler(req, res) {
   try {
-    if (!(await requireAdmin(req))) return send(res, 401, { message: "Sign in as an admin to manage the feed." });
+    let body = null;
+    if (req.method === "POST") body = await readJson(req);
+    const isScheduledCommentSync =
+      body?.action === "sync-comments" &&
+      process.env.INSTAGRAM_SYNC_SECRET &&
+      req.headers["x-instagram-sync-secret"] === process.env.INSTAGRAM_SYNC_SECRET;
+    if (!isScheduledCommentSync && !(await requireAdmin(req))) {
+      return send(res, 401, { message: "Sign in as an admin to manage the feed." });
+    }
 
     if (req.method === "GET") {
       const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
@@ -219,8 +227,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "POST") {
-      const body = await readJson(req);
-
       if (body.action === "sync-comments") {
         return send(res, 200, await syncInstagramComments());
       }

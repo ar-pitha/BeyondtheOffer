@@ -1,0 +1,27 @@
+name: instagram-replies
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: instagram-replies
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Sync Instagram comments automatically
+        env:
+          WEBSITE_URL: ${{ vars.WEBSITE_URL || 'https://beyondtheoffer.vercel.app' }}
+          INSTAGRAM_SYNC_SECRET: ${{ secrets.INSTAGRAM_SYNC_SECRET }}
+        run: |
+          test -n "$INSTAGRAM_SYNC_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --request POST "${WEBSITE_URL%/}/api/admin-sheet" \
+            --header "Content-Type: application/json" \
+            --header "x-instagram-sync-secret: $INSTAGRAM_SYNC_SECRET" \
+            --data '{"action":"sync-comments"}'

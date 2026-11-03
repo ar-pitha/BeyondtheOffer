@@ -1449,6 +1449,24 @@ select.form-control {
   border-top: 1px solid var(--line);
 }
 
+.feed-preview-modal {
+  max-width: 720px;
+}
+
+.feed-preview-copy {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.feed-preview-copy p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  color: var(--ink-2);
+}
+
 /* ── Loader ────────────────────────────────────────────────────── */
 .app-loader {
   display: flex;
