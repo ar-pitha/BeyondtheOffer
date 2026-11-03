@@ -121,15 +121,45 @@ async function handleComment(value) {
     if (action === "links") {
       const { items, postId } = await linksForMedia(mediaId);
       const dm = buildLinksMessage(items, WEBSITE_URL, postId);
-      await sendPrivateReply(commentId, dm);
-      await replyToComment(commentId, PUBLIC_LINKS_REPLY);
-      await finishLog({ Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
+      let dmError = "";
+      let publicError = "";
+      try {
+        await sendPrivateReply(commentId, dm);
+      } catch (error) {
+        dmError = error.message.slice(0, 300);
+      }
+      try {
+        await replyToComment(commentId, PUBLIC_LINKS_REPLY);
+      } catch (error) {
+        publicError = error.message.slice(0, 300);
+      }
+      if (publicError) throw new Error(`Public reply failed: ${publicError}${dmError ? ` | DM failed: ${dmError}` : ""}`);
+      await finishLog({
+        Action: "links",
+        Reply_Text: `${PUBLIC_LINKS_REPLY} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`,
+        Status: dmError ? "partial" : "sent",
+      });
     } else if (action === "thanks") {
       const { items, postId } = await linksForMedia(mediaId);
       const dm = buildLinksMessage(items, WEBSITE_URL, postId);
-      await sendPrivateReply(commentId, dm);
-      await replyToComment(commentId, PUBLIC_LINKS_REPLY);
-      await finishLog({ Action: "links", Reply_Text: `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`, Status: "sent" });
+      let dmError = "";
+      let publicError = "";
+      try {
+        await sendPrivateReply(commentId, dm);
+      } catch (error) {
+        dmError = error.message.slice(0, 300);
+      }
+      try {
+        await replyToComment(commentId, PUBLIC_LINKS_REPLY);
+      } catch (error) {
+        publicError = error.message.slice(0, 300);
+      }
+      if (publicError) throw new Error(`Public reply failed: ${publicError}${dmError ? ` | DM failed: ${dmError}` : ""}`);
+      await finishLog({
+        Action: "links",
+        Reply_Text: `${PUBLIC_LINKS_REPLY} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`,
+        Status: dmError ? "partial" : "sent",
+      });
     } else if (action === "question" && process.env.ANTHROPIC_API_KEY) {
       const { caption } = await getMedia(mediaId, "caption");
       const answer = await draftAnswer({ question: text, caption, websiteUrl: WEBSITE_URL });

@@ -121,15 +121,20 @@ async function syncInstagramComments() {
 
       let replyText = "";
       let status = "received";
+      let dmError = "";
       try {
         const dm = buildLinksMessage(items, WEBSITE_URL, queueRow?.ID);
-        await sendPrivateReply(comment.id, dm);
+        try {
+          await sendPrivateReply(comment.id, dm);
+        } catch (error) {
+          dmError = error.message.slice(0, 300);
+        }
         await replyToComment(comment.id, PUBLIC_LINKS_REPLY);
-        replyText = `${PUBLIC_LINKS_REPLY} | DM: ${items.length} link(s)`;
-        status = "sent";
+        replyText = `${PUBLIC_LINKS_REPLY} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`;
+        status = dmError ? "partial" : "sent";
         replied += 1;
       } catch (error) {
-        replyText = error.message.slice(0, 300);
+        replyText = `${dmError ? `DM failed: ${dmError} | ` : ""}Public reply failed: ${error.message.slice(0, 300)}`;
         status = "error";
       }
 
