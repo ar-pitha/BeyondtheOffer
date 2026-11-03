@@ -46,7 +46,7 @@ const parseSlides = (script = "") =>
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, onSave, onPreview, busy, posting }) {
+function PostCard({ row, slots, onSave, onPostNow, busy, posting }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -120,8 +120,8 @@ function PostCard({ row, slots, onSave, onPreview, busy, posting }) {
               Approve for next slot
             </button>
           )}
-          <button className="btn btn-primary btn-sm" disabled={busy || posting} onClick={() => onPreview(row)}>
-            {posting ? "Posting…" : "Preview & post"}
+          <button className="btn btn-primary btn-sm" disabled={busy || posting} onClick={() => onPostNow(row)}>
+            {posting ? "Posting…" : "Post now"}
           </button>
           {status !== "Rejected" && (
             <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.")}>
@@ -226,7 +226,6 @@ function AdminFeed() {
   const [filter, setFilter] = useState("Draft");
   const [run, setRun] = useState(null); // { id, status, conclusion, url }
   const [postPage, setPostPage] = useState(1);
-  const [previewRow, setPreviewRow] = useState(null);
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -258,9 +257,9 @@ function AdminFeed() {
     }
   };
 
-  // Start the GitHub publish run only after the admin confirms the preview.
-  const onConfirmPost = async (row) => {
-    setPreviewRow(null);
+  // Start the GitHub publish run only after the admin confirms the post.
+  const onPostNow = async (row) => {
+    if (!window.confirm(`Post "${row.Title || row.ID}" to Instagram now?`)) return;
     setRun({ id: row.ID, status: "starting" });
     try {
       await axios.post("/api/admin-sheet", { action: "publish-now", id: row.ID }, api);
@@ -382,7 +381,7 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPreview={setPreviewRow} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPostNow={onPostNow} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
             </div>
           )}
@@ -392,37 +391,6 @@ function AdminFeed() {
         <SheetTable data={data} onSave={onSave} busy={busy} />
       )}
 
-      {previewRow && (
-        <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setPreviewRow(null);
-        }}>
-          <section className="modal feed-preview-modal" role="dialog" aria-modal="true" aria-labelledby="feed-preview-title">
-            <header className="modal-header">
-              <h3 id="feed-preview-title">Preview before posting</h3>
-              <p className="stat-note">{previewRow.ID} · {previewRow.Format || "Post"} · {previewRow.Status || "Draft"}</p>
-            </header>
-            <div className="modal-body">
-              <h2 className="ticket-title">{previewRow.Title || "Untitled post"}</h2>
-              <ol className="feed-slides">
-                {parseSlides(previewRow.Slides_or_Script).map((slide, index) => <li key={index}>{slide}</li>)}
-              </ol>
-              <div className="feed-preview-copy">
-                <strong>Caption</strong>
-                <p>{previewRow.Caption || "No caption yet."}</p>
-                <strong>Hashtags</strong>
-                <p>{previewRow.Hashtags || "No hashtags yet."}</p>
-                {previewRow.Scheduled_Time_IST && <p className="stat-note">Scheduled: {previewRow.Scheduled_Time_IST} IST</p>}
-              </div>
-            </div>
-            <footer className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setPreviewRow(null)}>Close preview</button>
-              <button className="btn btn-primary" disabled={busy || !!run} onClick={() => onConfirmPost(previewRow)}>
-                Confirm and post
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

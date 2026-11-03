@@ -350,10 +350,9 @@ Dry-run one reel, show me the MP4, then STOP and summarize.
 | `/api/instagram-webhook` returns the React page | SPA rewrite is catching `/api/*`; exclude it in `vercel.json` |
 | Auto items not on site | Check the sync workflow log; only Official/Multi-source + Active rows sync |
 | Admin edits overwritten | Check that `adminEdited` is set by the admin update controller |
-### Admin preview and automatic comment sync
+### Automatic comment sync
 
-The Instagram admin page opens a post preview before publishing. Instagram
-publishing is dispatched only after clicking **Confirm and post** in the preview.
+The existing **Post now** action still asks for confirmation before publishing.
 The existing manual **Sync Instagram replies** button remains available.
 
 Automatic comment synchronization runs every 10 minutes through
