@@ -369,3 +369,9 @@ carousel/story rows it renders the actual JPEG slides. The preview is created
 by `.github/workflows/instagram-preview.yml` and stored in the queue row's
 `Preview_Link` column. It is a dry run only: Instagram publishing starts only
 after **Confirm and post**.
+
+If preview generation shows `GitHub 403`, update the Vercel
+`GH_DISPATCH_TOKEN`. For a fine-grained token, grant access to
+`ar-pitha/BeyondTheOffer`, enable **Actions: Read and write**, and ensure the
+token owner can run workflows. A classic token needs the repository workflow
+permission. Do not paste the token into chat or source code.

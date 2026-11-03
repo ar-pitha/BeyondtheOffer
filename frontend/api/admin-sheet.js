@@ -54,6 +54,14 @@ async function github(path, init = {}) {
   });
   if (!res.ok) {
     const detail = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      const err = new Error(
+        `GitHub ${res.status}: GH_DISPATCH_TOKEN cannot dispatch workflows in ${repo()}. ` +
+        `Update the token with repository access and Actions: Read and write permission.`
+      );
+      err.status = 502;
+      throw err;
+    }
     const err = new Error(`GitHub ${res.status}: ${detail.slice(0, 200)}`);
     err.status = 502;
     throw err;
