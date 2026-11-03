@@ -108,6 +108,18 @@ export async function updateRowById(tab, id, patch, { idColumn = "ID" } = {}) {
   return true;
 }
 
+export async function ensureColumns(tab, required) {
+  const { headers } = await readTab(tab);
+  const missing = required.filter((name) => !headers.includes(name));
+  if (!missing.length) return headers;
+  const nextHeaders = [...headers, ...missing];
+  await sheetsFetch(`/values/${rangeOf(tab, `A1:${columnLetter(nextHeaders.length - 1)}1`)}?valueInputOption=RAW`, {
+    method: "PUT",
+    body: { values: [nextHeaders] },
+  });
+  return nextHeaders;
+}
+
 // raw: true stores values as typed text, so "2026-11-02 19:00" isn't reformatted
 // into a locale date that reads back differently.
 export async function updateRow(tab, headers, rowNumber, patch, { raw = false } = {}) {

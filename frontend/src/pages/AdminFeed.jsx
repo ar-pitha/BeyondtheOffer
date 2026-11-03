@@ -46,7 +46,7 @@ const parseSlides = (script = "") =>
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, onSave, onPostNow, busy, posting }) {
+function PostCard({ row, slots, onSave, onPostNow, onPreview, busy, posting }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -102,6 +102,9 @@ function PostCard({ row, slots, onSave, onPostNow, busy, posting }) {
 
       {published ? (
         <div className="feed-actions">
+          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
+            {row.Preview_Link ? "View generated preview" : "Generate preview"}
+          </button>
           {row.IG_Post_Link?.startsWith("http") ? (
             <a className="btn btn-secondary btn-sm" href={row.IG_Post_Link} target="_blank" rel="noopener noreferrer">
               View on Instagram <HiExternalLink aria-hidden />
@@ -226,6 +229,8 @@ function AdminFeed() {
   const [filter, setFilter] = useState("Draft");
   const [run, setRun] = useState(null); // { id, status, conclusion, url }
   const [postPage, setPostPage] = useState(1);
+  const [previewRow, setPreviewRow] = useState(null);
+  const [previewRun, setPreviewRun] = useState(null);
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -270,6 +275,22 @@ function AdminFeed() {
     }
   };
 
+  const onPreview = async (row) => {
+    setPreviewRow(row);
+    if (row.Preview_Link) {
+      setPreviewRun(null);
+      return;
+    }
+    setPreviewRun({ id: row.ID, status: "starting", requestedAt: Date.now() });
+    try {
+      await axios.post("/api/admin-sheet", { action: "preview-now", id: row.ID }, api);
+      toast.success("Generating the real Reel/slide preview.");
+    } catch (err) {
+      setPreviewRun(null);
+      toast.error(err.response?.data?.message || "Couldn't generate preview.");
+    }
+  };
+
   const onSyncComments = async () => {
     setBusy(true);
     try {
@@ -304,6 +325,32 @@ function AdminFeed() {
     }, 8000);
     return () => clearInterval(timer);
   }, [run?.id, run?.status === "completed"]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!previewRun || previewRun.status === "completed") return;
+    const timer = setInterval(async () => {
+      try {
+        const { data: status } = await axios.post("/api/admin-sheet", { action: "preview-status" }, api);
+        if (status.startedAt && new Date(status.startedAt).getTime() < previewRun.requestedAt - 60_000) return;
+        setPreviewRun((current) => ({ ...current, ...status }));
+        if (status.status === "completed") {
+          clearInterval(timer);
+          if (status.conclusion === "success") {
+            const result = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
+            const updated = result.data.rows.find((item) => item.ID === previewRow?.ID);
+            if (updated) setPreviewRow(updated);
+            setData(result.data);
+            toast.success("Generated preview is ready.");
+          } else {
+            toast.error("Preview generation failed.");
+          }
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [previewRun?.status, previewRow?.ID]);
 
   const posts = data?.tab === "Content_Queue" ? data.rows : [];
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
@@ -381,7 +428,7 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPostNow={onPostNow} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPostNow={onPostNow} onPreview={onPreview} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
             </div>
           )}
@@ -389,6 +436,38 @@ function AdminFeed() {
         </>
       ) : (
         <SheetTable data={data} onSave={onSave} busy={busy} />
+      )}
+
+      {previewRow && (
+        <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) { setPreviewRow(null); setPreviewRun(null); }
+        }}>
+          <section className="modal feed-preview-modal" role="dialog" aria-modal="true" aria-labelledby="generated-preview-title">
+            <header className="modal-header">
+              <h3 id="generated-preview-title">Generated preview</h3>
+              <p className="stat-note">{previewRow.Title || previewRow.ID}</p>
+            </header>
+            <div className="modal-body">
+              {previewRun && previewRun.status !== "completed" ? (
+                <p>Rendering the actual Reel/slides with the same pipeline used for publishing…</p>
+              ) : previewRow.Preview_Link ? (
+                String(previewRow.Format).toLowerCase() === "reel" ? (
+                  <video className="feed-preview-video" src={previewRow.Preview_Link.split("\n")[0]} controls playsInline />
+                ) : (
+                  <div className="feed-preview-images">
+                    {previewRow.Preview_Link.split(/\r?\n/).filter(Boolean).map((src) => <img key={src} src={src} alt="" />)}
+                  </div>
+                )
+              ) : <p>No generated preview yet.</p>}
+            </div>
+            <footer className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => { setPreviewRow(null); setPreviewRun(null); }}>Close</button>
+              <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link} onClick={() => { setPreviewRow(null); onPostNow(previewRow); }}>
+                Confirm and post
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
 
     </div>

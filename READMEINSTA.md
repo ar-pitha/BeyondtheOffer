@@ -360,3 +360,12 @@ Automatic comment synchronization runs every 10 minutes through
 GitHub Actions secret `INSTAGRAM_SYNC_SECRET` and the Vercel environment variable
 `INSTAGRAM_SYNC_SECRET`. The workflow calls the existing admin-sheet endpoint and
 does not send Instagram DMs.
+
+### Generated admin previews
+
+The Instagram admin page can generate a real preview before posting. For Reel
+rows it renders and uploads the same MP4 pipeline used by publishing; for
+carousel/story rows it renders the actual JPEG slides. The preview is created
+by `.github/workflows/instagram-preview.yml` and stored in the queue row's
+`Preview_Link` column. It is a dry run only: Instagram publishing starts only
+after **Confirm and post**.

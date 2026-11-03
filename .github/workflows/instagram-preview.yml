@@ -1,0 +1,37 @@
+name: instagram-preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "Content_Queue ID to render"
+        required: true
+        type: string
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SHEET_ID: ${{ secrets.SHEET_ID }}
+      GOOGLE_SA_JSON_B64: ${{ secrets.GOOGLE_SA_JSON_B64 }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      TIMEZONE: Asia/Kolkata
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: automation/package-lock.json
+      - run: npm ci
+        working-directory: automation
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - run: npx playwright install --with-deps chromium
+        working-directory: automation
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: node preview.js --id "${{ inputs.id }}"
+        working-directory: automation

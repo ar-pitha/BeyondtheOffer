@@ -67,11 +67,25 @@ const dispatchPublish = (id) =>
     body: JSON.stringify({ ref: "main", inputs: { dry_run: "false", id } }),
   });
 
+const dispatchPreview = (id) =>
+  github("/actions/workflows/instagram-preview.yml/dispatches", {
+    method: "POST",
+    body: JSON.stringify({ ref: "main", inputs: { id } }),
+  });
+
 async function latestPublishRun() {
   const { workflow_runs: runs = [] } = await github("/actions/workflows/publish.yml/runs?per_page=1");
   const r = runs[0];
   return r
     ? { status: r.status, conclusion: r.conclusion, url: r.html_url, startedAt: r.run_started_at, event: r.event }
+    : { status: "none" };
+}
+
+async function latestPreviewRun() {
+  const { workflow_runs: runs = [] } = await github("/actions/workflows/instagram-preview.yml/runs?per_page=1");
+  const r = runs[0];
+  return r
+    ? { status: r.status, conclusion: r.conclusion, url: r.html_url, startedAt: r.run_started_at }
     : { status: "none" };
 }
 
@@ -239,6 +253,17 @@ export default async function handler(req, res) {
         if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
         if (row.Status !== "Approved") {
           await updateRow("Content_Queue", (await readTab("Content_Queue")).headers, row._row, { Status: "Approved" }, { raw: true });
+        }
+
+        if (body.action === "preview-now") {
+          const { rows } = await readTab("Content_Queue");
+          if (!rows.some((r) => r.ID === body.id)) return send(res, 404, { message: `No post with ID ${body.id}.` });
+          await dispatchPreview(body.id);
+          return send(res, 202, { message: "Preview generation started" });
+        }
+
+        if (body.action === "preview-status") {
+          return send(res, 200, await latestPreviewRun());
         }
         await dispatchPublish(row.ID);
         return send(res, 202, { message: "Posting started", runsUrl: `https://github.com/${repo()}/actions/workflows/publish.yml` });
