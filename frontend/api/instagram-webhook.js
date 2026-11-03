@@ -18,6 +18,7 @@ import {
 import {
   classifyComment,
   buildLinksMessage,
+  buildPublicLinksReply,
   draftAnswer,
   PUBLIC_LINKS_REPLY,
   COMMENTS_LOG_TAB,
@@ -128,15 +129,16 @@ async function handleComment(value) {
       } catch (error) {
         dmError = error.message.slice(0, 300);
       }
+      const publicReply = dmError ? buildPublicLinksReply(items, WEBSITE_URL, postId) : PUBLIC_LINKS_REPLY;
       try {
-        await replyToComment(commentId, PUBLIC_LINKS_REPLY);
+        await replyToComment(commentId, publicReply);
       } catch (error) {
         publicError = error.message.slice(0, 300);
       }
       if (publicError) throw new Error(`Public reply failed: ${publicError}${dmError ? ` | DM failed: ${dmError}` : ""}`);
       await finishLog({
         Action: "links",
-        Reply_Text: `${PUBLIC_LINKS_REPLY} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`,
+        Reply_Text: publicReply + " | " + (dmError ? "DM failed: " + dmError : "DM: " + items.length + " link(s)"),
         Status: dmError ? "partial" : "sent",
       });
     } else if (action === "thanks") {
@@ -149,15 +151,16 @@ async function handleComment(value) {
       } catch (error) {
         dmError = error.message.slice(0, 300);
       }
+      const publicReply = dmError ? buildPublicLinksReply(items, WEBSITE_URL, postId) : PUBLIC_LINKS_REPLY;
       try {
-        await replyToComment(commentId, PUBLIC_LINKS_REPLY);
+        await replyToComment(commentId, publicReply);
       } catch (error) {
         publicError = error.message.slice(0, 300);
       }
       if (publicError) throw new Error(`Public reply failed: ${publicError}${dmError ? ` | DM failed: ${dmError}` : ""}`);
       await finishLog({
         Action: "links",
-        Reply_Text: `${PUBLIC_LINKS_REPLY} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`,
+        Reply_Text: `${publicReply} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`,
         Status: dmError ? "partial" : "sent",
       });
     } else if (action === "question" && process.env.ANTHROPIC_API_KEY) {

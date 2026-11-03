@@ -84,6 +84,21 @@ export function buildLinksMessage(items, websiteUrl, postId) {
   return text;
 }
 
+// Public fallback when a private reply is unavailable. Keep each link intact.
+export function buildPublicLinksReply(items, websiteUrl, postId) {
+  const site = websiteUrl || "https://beyondtheoffer.vercel.app";
+  const lines = ["Here are the links from this post:"];
+  for (const item of items) {
+    if (item.link) lines.push(`${item.label}: ${item.link}`);
+  }
+  if (postId) lines.push(`All links: ${site}/links/${postId}`);
+  if (lines.length === 1) lines.push(`All openings: ${site}`);
+
+  const text = lines.join("\n");
+  if (text.length <= 2000) return text;
+  return `The full list of links is here: ${site}/links/${postId || "latest"}`;
+}
+
 // Short answer drafted by Claude using only the post caption and the website link.
 export async function draftAnswer({ question, caption, websiteUrl }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;

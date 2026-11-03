@@ -7,7 +7,7 @@
 
 import { readTab, appendRow, updateRow, ensureTab, nowInZone } from "./_lib/sheets.js";
 import { listUserMedia, listMediaComments, permalinkKey, sendPrivateReply, replyToComment } from "./_lib/instagram.js";
-import { buildLinksMessage, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, PUBLIC_LINKS_REPLY } from "./_lib/replies.js";
+import { buildLinksMessage, buildPublicLinksReply, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, PUBLIC_LINKS_REPLY } from "./_lib/replies.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
@@ -132,8 +132,9 @@ async function syncInstagramComments() {
         } catch (error) {
           dmError = error.message.slice(0, 300);
         }
-        await replyToComment(comment.id, PUBLIC_LINKS_REPLY);
-        replyText = `${PUBLIC_LINKS_REPLY} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`;
+        const publicReply = dmError ? buildPublicLinksReply(items, WEBSITE_URL, queueRow?.ID) : PUBLIC_LINKS_REPLY;
+        await replyToComment(comment.id, publicReply);
+        replyText = `${publicReply} | ${dmError ? `DM failed: ${dmError}` : `DM: ${items.length} link(s)`}`;
         status = dmError ? "partial" : "sent";
         replied += 1;
       } catch (error) {
