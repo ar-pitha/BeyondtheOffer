@@ -87,16 +87,7 @@ export function buildLinksMessage(items, websiteUrl, postId) {
 // Public fallback when a private reply is unavailable. Keep each link intact.
 export function buildPublicLinksReply(items, websiteUrl, postId) {
   const site = websiteUrl || "https://beyondtheoffer.vercel.app";
-  const lines = ["Links from this post:"];
-  for (const item of items) {
-    if (item.link) lines.push(item.link);
-  }
-  if (postId) lines.push(`${site}/links/${postId}`);
-  if (lines.length === 1) lines.push(site);
-
-  const text = lines.join("\n");
-  if (text.length <= 2000) return text;
-  return `The full list of links is here: ${site}/links/${postId || "latest"}`;
+  return `${site}/links/${postId || "latest"}`;
 }
 
 // Short answer drafted by Claude using only the post caption and the website link.
