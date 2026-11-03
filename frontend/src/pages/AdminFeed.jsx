@@ -118,6 +118,9 @@ function PostCard({ row, slots, onSave, onPostNow, onPreview, busy, posting }) {
         </div>
       ) : (
         <div className="feed-actions">
+          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
+            {row.Preview_Link ? "View generated preview" : "Generate preview"}
+          </button>
           {status !== "Approved" && (
             <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => save({ Status: "Approved" }, `Approved. It will post at the next slot (${slots} IST).`)}>
               Approve for next slot
