@@ -81,6 +81,13 @@ const dispatchPreview = (id) =>
     body: JSON.stringify({ ref: "main", inputs: { id } }),
   });
 
+// Clears a post's preview (and any posting confirmation tied to it) and starts a new build
+async function resetPreview(row) {
+  const headers = await ensureColumns("Content_Queue", ["Preview_Link", "Publish_Confirmed"]);
+  await updateRow("Content_Queue", headers, row._row, { Preview_Link: "", Publish_Confirmed: "" }, { raw: true });
+  await dispatchPreview(row.ID);
+}
+
 async function latestPublishRun() {
   const { workflow_runs: runs = [] } = await github("/actions/workflows/publish.yml/runs?per_page=1");
   const r = runs[0];
@@ -260,6 +267,16 @@ export default async function handler(req, res) {
         return send(res, 202, { message: "Preview generation started" });
       }
 
+      // Throws away the current preview and builds a new one in its place
+      if (body.action === "regenerate-preview") {
+        const { rows } = await readTab("Content_Queue");
+        const row = rows.find((r) => r.ID === body.id);
+        if (!row) return send(res, 404, { message: `No post with ID ${body.id}.` });
+        if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
+        await resetPreview(row);
+        return send(res, 202, { message: "Building a new preview", row: { ...row, Preview_Link: "", Publish_Confirmed: "" } });
+      }
+
       if (body.action === "preview-status") {
         return send(res, 200, await latestPreviewRun());
       }
@@ -306,6 +323,12 @@ export default async function handler(req, res) {
       }
 
       await updateRow(tab, headers, row._row, patch, { raw: true });
+
+      // Approving a post always builds a fresh preview of it
+      if (tab === "Content_Queue" && patch.Status === "Approved" && row.Status !== "Approved") {
+        const previewStarted = await resetPreview(row).then(() => true, () => false);
+        return send(res, 200, { row: { ...row, ...patch, Preview_Link: "", Publish_Confirmed: "" }, previewStarted });
+      }
       return send(res, 200, { row: { ...row, ...patch } });
     }
 
