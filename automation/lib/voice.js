@@ -9,6 +9,12 @@ const VOICE = process.env.REEL_VOICE || "en-US-AvaMultilingualNeural";
 const RATE = process.env.REEL_VOICE_RATE || "+0%";
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+const MONTH = /^(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?(\W*)$/i;
+const monthName = (abbr) => MONTHS.find((m) => m.toLowerCase().startsWith(abbr.slice(0, 3).toLowerCase()));
+const CURRENCY = /^(~?)(rs\.?|₹|inr|us\$|\$)$/i;
+const UNIT = /^(lpa|lakhs?|crores?|cr|k)(\W*)$/i;
+const UNIT_WORD = { lpa: "lakh per annum", lakh: "lakh", lakhs: "lakh", crore: "crore", crores: "crore", cr: "crore", k: "thousand" };
+
 // One display token → what the voice should say for it ("" = silent)
 function speakToken(token) {
   let t = token;
@@ -18,7 +24,46 @@ function speakToken(token) {
   if (/^[-–—|·→]+$/.test(t)) return "";
   t = t.replace(/^(\d{4})-(\d{2})-(\d{2})(\W*)$/, (_, y, m, d, p) => `${MONTHS[Number(m) - 1]} ${Number(d)}${p}`);
   t = t.replace(/\bB\.Tech\b/gi, "B Tech").replace(/\bM\.Tech\b/gi, "M Tech");
-  return t.replace(/\p{Extended_Pictographic}/gu, "");
+  // Said the way Indian students say them, not "eye eye tee"
+  t = t.replace(/\bIIITs?\b/g, (m) => (m.endsWith("s") ? "triple I Ts" : "triple I T")).replace(/\bIIT(s?)\b/g, "I I T$1").replace(/\bNIT(s?)\b/g, "N I T$1");
+  t = t.replace(/^(\d[\d,.]*)[-–](\d[\d,.]*)/, "$1 to $2"); // 10-30, 2024-26
+  t = t.replace(/(\d[\d,.]*)[kK]\b/g, "$1 thousand").replace(/(\d[\d,.]*)L\b/g, "$1 lakh");
+  t = t.replace(/\/(month|mo)\b/i, " a month").replace(/\/(year|yr)\b/i, " a year");
+  const unit = t.match(UNIT);
+  if (unit) t = UNIT_WORD[unit[1].toLowerCase()] + unit[2];
+  const month = t.match(MONTH);
+  // Only capitalised words are months ("you may apply" stays a verb); "Nov." keeps its full stop
+  if (month && /^[A-Z]/.test(t)) t = monthName(month[1]) + (month[2] || (t.endsWith(".") ? "." : ""));
+  t = t.replace(/^([A-Z]{2,4})(?:\/[A-Z]{2,4})+(\W*)$/, (m) => m.split("/").join(", ")); // CS/IT/ECE
+  t = t.replace(/([a-z])\/([A-Za-z])/g, "$1 or $2"); // Bangalore/Hyderabad
+  return t.replace(/[()]/g, "").replace(/\p{Extended_Pictographic}/gu, "");
+}
+
+// What a card made of fields ("Name | online, free | by 8 Nov") should sound like:
+// "Name. Online and free. Register by 8 Nov." instead of each field read as its own clipped line.
+export function fluentLine(text, { category = "tech" } = {}) {
+  const [name = "", ...rest] = String(text).split(/\s*\|\s*/).map((f) => f.trim()).filter(Boolean);
+  const items = [];
+  let deadline = "";
+  for (const field of rest) {
+    for (const part of field.split(/,\s+|\s+[-–]\s+/).map((p) => p.trim()).filter(Boolean)) {
+      const by = part.match(/^(?:register\s+|apply\s+)?(?:by|before|till|until)\s+(.+)$/i);
+      const last = part.match(/^last\s+date\s*[:\-–]?\s*(.+)$/i);
+      if (by) deadline = `${category === "events" ? "Register" : "Apply"} by ${by[1]}`;
+      else if (last) deadline = `The last date is ${last[1]}`;
+      else items.push(part.replace(/^(.*\d[kKlL]?)\s+(prizes?|prize pool|stipend)\b/i, "$1 in $2"));
+    }
+  }
+  // Short words run together ("Online and free"); anything with a number gets its own sentence
+  const groups = [];
+  for (const item of items) {
+    if (/\d/.test(item) || !groups.length || /\d/.test(groups[groups.length - 1].at(-1))) groups.push([item]);
+    else groups[groups.length - 1].push(item);
+  }
+  const join = (g) => (g.length === 1 ? g[0] : `${g.slice(0, -1).join(", ")} and ${g.at(-1)}`);
+  const said = groups.map(join).map((l) => l[0].toUpperCase() + l.slice(1));
+  const lines = [name.replace(/\s*\(([^)]+)\)/g, ", $1"), ...said, deadline].filter(Boolean);
+  return lines.map((l) => l.replace(/[.!?]*$/, ".")).join(" ");
 }
 
 // Splits text into display tokens and a matching spoken line; tokens[i].at is the token's
@@ -35,17 +80,31 @@ export function narrate(text) {
   const tokens = [];
   let spoken = "";
   let field = 0;
-  for (const word of clean.split(" ")) {
+  const words = clean.split(" ");
+  let day = "";
+  let currency = "";
+  words.forEach((word, i) => {
     if (word === "·") {
       // Field separator: a sentence break for the voice, not shown on screen
       spoken = spoken.replace(/[,.!?;:]?\s*$/, ". ");
       field += 1;
-      continue;
+      return;
     }
-    const say = speakToken(word);
+    const next = words[i + 1] || "";
+    let say = speakToken(word);
+    // "4 Nov" → "November 4"
+    if (/^\d{1,2}$/.test(word) && MONTH.test(next)) { day = word; say = ""; }
+    else if (day && MONTH.test(word)) { say = say.replace(/^(\w+)/, `$1 ${day}`); day = ""; }
+    // "Rs 50K" / "~Rs 13 LPA" / "US$20,000" → "50 thousand rupees" / "about 13 lakh rupees per annum" / "20,000 dollars"
+    const glued = word.match(/^(~?)(rs\.?|₹|us\$|\$)(\d.*)$/i);
+    if (glued) { currency = /\$/.test(glued[2]) ? "dollars" : "rupees"; say = (glued[1] ? "about " : "") + speakToken(glued[3]); }
+    const sign = word.match(CURRENCY);
+    if (sign && /^\d/.test(next)) { currency = /\$/.test(sign[2]) ? "dollars" : "rupees"; say = sign[1] ? "about" : ""; }
+    else if (currency && /\d/.test(word) && !UNIT.test(next)) { say = say.replace(/^(.*\d(?: (?:thousand|lakh|crore))?)/, `$1 ${currency}`); currency = ""; }
+    else if (currency && UNIT.test(word)) { say = say.replace(/^(lakh|crore|thousand)/, `$1 ${currency}`); currency = ""; }
     tokens.push({ text: word, at: spoken.length, field });
     if (say) spoken += `${say} `;
-  }
+  });
   return { tokens, spoken: spoken.trim() };
 }
 
