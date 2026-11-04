@@ -1,0 +1,594 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800;900&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@500;700;800&display=block" rel="stylesheet">
+<style>
+  /* 1080x1920 reel frame. Everything moves from seek(t) below, never from CSS transitions, so
+     every frame renders the same way twice. Text stays inside Instagram's safe zone
+     (y 230–1440, right 160 px clear of the action rail). One file, five looks: the theme class
+     on <body> swaps backgrounds, type, the point "container" and the transition. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; }
+  body { font-family: "Schibsted Grotesk", "Segoe UI", Arial, sans-serif; -webkit-font-smoothing: antialiased;
+    --fg: #f4f4fb; --dim: rgba(244,244,251,.22); --accent: #F5B254; --accent2: #8F86FF; --ink: #0b0c22;
+    background: #07081a; color: var(--fg); }
+  .layer { position: absolute; inset: 0; }
+  .scene { position: absolute; inset: 0; opacity: 0; will-change: transform, opacity, filter; }
+  .box { position: absolute; left: 70px; right: 150px; top: 330px; height: 1080px; display: flex; flex-direction: column; justify-content: center; }
+
+  /* Shared type */
+  .kin { font-weight: 900; line-height: 1.03; letter-spacing: -2px; }
+  .kin .w { display: inline-block; white-space: pre; transform-origin: 50% 80%; }
+  .hl { color: var(--accent); }
+  .say .w { color: var(--dim); }
+  .say .w.on { color: var(--fg); }
+  .say .w.on.hl { color: var(--accent); }
+  .say .w.now { color: var(--ink); background: var(--accent); border-radius: 12px; box-shadow: 0 0 40px rgba(245,178,84,.5); }
+  .say .w.on.now, .say .w.on.now.hl { color: var(--now-fg, var(--ink)); }
+  .label { display: inline-flex; align-self: flex-start; font-size: 30px; font-weight: 800; letter-spacing: 6px; text-transform: uppercase;
+    color: var(--ink); background: var(--accent); padding: 14px 26px; border-radius: 999px; margin-bottom: 40px; }
+  .ghost { position: absolute; left: -30px; top: -10px; font-size: 520px; line-height: .8; font-weight: 900; letter-spacing: -20px;
+    color: transparent; -webkit-text-stroke: 4px rgba(143,134,255,.4); }
+  .bar { height: 8px; border-radius: 8px; background: rgba(255,255,255,.12); margin-top: 52px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+  .chips { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 40px; }
+  .chip { font-size: 40px; font-weight: 700; padding: 18px 30px; border-radius: 20px; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.14); }
+  .stub { margin-top: 44px; display: flex; align-items: center; gap: 28px; background: var(--accent); color: var(--ink); border-radius: 28px; padding: 26px 40px; align-self: flex-start; }
+  .stub .n { font-size: 116px; font-weight: 900; line-height: 1; letter-spacing: -4px; font-variant-numeric: tabular-nums; }
+  .stub .t { font-size: 36px; font-weight: 800; line-height: 1.15; }
+
+  /* Hook: the opening line in a speech bubble */
+  .bubble { position: absolute; left: 70px; right: 150px; top: 520px; padding: 46px 50px; border-radius: 48px; background: rgba(255,255,255,.07);
+    border: 2px solid rgba(255,255,255,.14); box-shadow: 0 30px 90px rgba(0,0,0,.35); transform-origin: 30% 100%; }
+  .bubble::after { content: ""; position: absolute; left: 330px; bottom: -34px; width: 0; height: 0; border: 34px solid transparent;
+    border-top-color: rgba(255,255,255,.1); border-bottom: 0; }
+  .bubble .kicker { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 54px; color: var(--accent); margin-bottom: 18px; }
+  .bubble .sub { margin-top: 26px; font-size: 48px; font-weight: 700; color: var(--fg); opacity: .85; }
+
+  /* CTA */
+  .cta .box { justify-content: flex-start; top: 360px; }
+  .cta .kicker { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 60px; color: var(--accent); margin-bottom: 24px; }
+  .pill { margin-top: 50px; align-self: flex-start; display: inline-flex; align-items: center; gap: 22px; font-size: 52px; font-weight: 800;
+    background: var(--accent2); color: #fff; padding: 26px 44px; border-radius: 999px; box-shadow: 0 20px 80px rgba(143,134,255,.5); }
+  .pill b { background: #fff; color: #2a2370; padding: 4px 24px; border-radius: 16px; font-weight: 900; }
+  .site { margin-top: 44px; font-size: 40px; font-weight: 800; color: var(--accent); }
+
+  /* HUD */
+  #hud { padding: 150px 160px 0 70px; }
+  .brand { display: flex; align-items: center; gap: 16px; font-size: 32px; font-weight: 800; color: var(--fg); }
+  .brand .dot { width: 34px; height: 34px; border-radius: 50%; border: 5px solid var(--accent); }
+  .segs { display: flex; gap: 10px; margin-top: 24px; width: 640px; }
+  .segs span { flex: 1; height: 6px; border-radius: 6px; background: var(--dim); overflow: hidden; }
+  .segs i { display: block; height: 100%; width: 0; background: var(--fg); }
+
+  #flash { background: radial-gradient(60% 40% at 50% 45%, rgba(255,240,220,.9), rgba(143,134,255,.25) 60%, transparent 80%); opacity: 0; }
+  #sweep { background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.16) 48%, rgba(245,178,84,.12) 52%, transparent 65%); opacity: 0; }
+  #vignette { background: radial-gradient(130% 90% at 50% 45%, transparent 55%, rgba(0,0,0,.7) 100%); }
+  .t-notes #vignette { background: radial-gradient(130% 90% at 50% 45%, transparent 60%, rgba(80,60,20,.25) 100%); }
+  .bars { position: absolute; left: 0; right: 0; height: 0; background: #000; }
+
+  /* ---------- cinematic ---------- */
+  .orb { position: absolute; width: 1400px; height: 1400px; margin: -250px; border-radius: 50%; opacity: .5; }
+  #grid { position: absolute; left: -540px; right: -540px; bottom: -200px; height: 1100px;
+    background-image: linear-gradient(rgba(143,134,255,.22) 2px, transparent 2px), linear-gradient(90deg, rgba(143,134,255,.22) 2px, transparent 2px);
+    background-size: 120px 120px; transform-origin: 50% 0; transform: perspective(700px) rotateX(64deg);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 35%, #000 70%, transparent); }
+  .ring { position: absolute; border-radius: 50%; }
+
+  /* ---------- terminal ---------- */
+  body.t-terminal { --now-fg: #39ff88; --fg: #d7ffe4; --dim: rgba(120,255,170,0); --accent: #39ff88; --accent2: #1fae5c; --ink: #021a0b; background: #020604; }
+  .t-terminal .kin, .t-terminal .chip, .t-terminal .label, .t-terminal .stub { font-family: "JetBrains Mono", monospace; letter-spacing: -1px; }
+  .t-terminal .say .w { opacity: 0; }
+  .t-terminal .say .w.on { opacity: 1; }
+  .t-terminal .say .w.now { background: none; box-shadow: none; color: var(--accent); }
+  .t-terminal .say .w.now::after { content: "▋"; color: var(--accent); margin-left: -.3em; }
+  .t-terminal .label { background: none; color: var(--accent); border: 3px solid var(--accent); border-radius: 8px; }
+  .t-terminal .bubble { background: rgba(5,30,15,.8); border-color: rgba(57,255,136,.4); border-radius: 18px; }
+  .t-terminal .bubble::after { border-top-color: rgba(5,30,15,.8); }
+  .t-terminal .bubble .kicker, .t-terminal .cta .kicker { font-family: "JetBrains Mono", monospace; font-style: normal; font-size: 40px; }
+  .t-terminal .chip { background: rgba(57,255,136,.08); border-color: rgba(57,255,136,.3); }
+  .win { position: relative; border-radius: 26px; overflow: hidden; box-shadow: 0 40px 120px rgba(0,0,0,.6); }
+  .term { background: rgba(4,14,8,.92); border: 2px solid rgba(57,255,136,.35); }
+  .tb { height: 70px; display: flex; align-items: center; gap: 14px; padding: 0 26px; }
+  .term .tb { background: rgba(57,255,136,.08); font: 600 26px "JetBrains Mono", monospace; color: rgba(215,255,228,.7); }
+  .tb i { width: 20px; height: 20px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .term .pad { padding: 46px 46px 56px; }
+  .term .prompt { font: 700 34px "JetBrains Mono", monospace; color: var(--accent); margin-bottom: 26px; }
+  #scan { background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 3px, rgba(0,0,0,.28) 3px 6px); }
+  .code { position: absolute; left: 40px; right: 40px; top: 0; font: 500 26px/1.7 "JetBrains Mono", monospace; color: rgba(57,255,136,.12); white-space: pre; }
+
+  /* ---------- notes ---------- */
+  body.t-notes { --now-fg: #1d1b16; --fg: #1d1b16; --dim: rgba(29,27,22,.2); --accent: #b8760c; --accent2: #e8a317; --ink: #1d1b16; background: #efe6d2; }
+  .t-notes .say .w.now, .t-notes .say .w.on.hl { color: var(--fg); background: linear-gradient(transparent 55%, #ffd84d 55%); box-shadow: none; border-radius: 0; }
+  .t-notes .label { background: #ffd84d; color: #1d1b16; }
+  .t-notes .bubble { background: #fffdf6; border-color: rgba(0,0,0,.08); box-shadow: 0 24px 60px rgba(80,60,20,.18); }
+  .t-notes .bubble::after { border-top-color: #fffdf6; }
+  .t-notes .chip { background: #fff8e1; border-color: rgba(0,0,0,.08); color: #1d1b16; }
+  .t-notes .bar { background: rgba(0,0,0,.08); }
+  .note { position: relative; background: #fffdf6; border-radius: 34px; box-shadow: 0 30px 80px rgba(80,60,20,.2);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 82px, rgba(70,110,200,.13) 82px 84px); }
+  .note .nh { display: flex; justify-content: space-between; padding: 40px 44px 10px; font-size: 32px; font-weight: 700; color: #e8a317; }
+  .note .nd { padding: 0 44px; font-size: 26px; color: rgba(29,27,22,.45); font-weight: 600; }
+  .note .pad { padding: 30px 44px 60px; }
+  .paper { background: radial-gradient(120% 80% at 30% 20%, #fbf5e6, #e9dcc0); }
+  .tape { position: absolute; width: 220px; height: 64px; background: rgba(255,216,77,.75); transform: rotate(-6deg); top: -26px; left: 50%; margin-left: -110px; }
+
+  /* ---------- browser (screen-recording) ---------- */
+  body.t-browser { --fg: #f4f4fb; --dim: rgba(244,244,251,.22); --accent: #F5B254; --accent2: #5b4cf0; --ink: #0b0c22; background: #1b1d3a; }
+  .browser { --fg: #0f1222; --dim: rgba(15,18,34,.2); --accent: #5b4cf0; --ink: #fff; background: #fff; border-radius: 30px; color: var(--fg); }
+  .browser .say .w.now { box-shadow: 0 0 30px rgba(91,76,240,.4); }
+  .browser .tb { height: 76px; background: #eceef5; }
+  .browser .url { flex: 1; margin-left: 20px; height: 48px; border-radius: 24px; background: #fff; display: flex; align-items: center; padding: 0 24px;
+    font: 600 24px "Schibsted Grotesk"; color: #5b6075; white-space: nowrap; overflow: hidden; }
+  .browser .page { padding: 46px 46px 60px; }
+  .browser .crumb { font-size: 26px; font-weight: 700; color: #5b4cf0; margin-bottom: 20px; letter-spacing: 1px; text-transform: uppercase; }
+  .browser .chip { background: #f1f0ff; border-color: #dcd8ff; color: #2b2560; }
+  .browser .stub { background: #5b4cf0; color: #fff; }
+  .browser .bar { background: #eceef5; }
+  #cursor { position: absolute; width: 64px; height: 64px; left: 0; top: 0; opacity: 0; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+  #ripple { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 6px solid #5b4cf0; opacity: 0; }
+  .wall { background: radial-gradient(70% 50% at 20% 20%, #6c5cff 0%, transparent 70%), radial-gradient(60% 50% at 90% 80%, #ff9f43 0%, transparent 70%), linear-gradient(160deg, #1b1d3a, #2c1f4a); }
+
+  /* ---------- news ---------- */
+  body.t-news { --now-fg: #fff; --fg: #ffffff; --dim: rgba(255,255,255,.25); --accent: #ffd23f; --accent2: #ff3b3b; --ink: #08122e; background: #08122e; }
+  .t-news .say .w.now { background: #ff3b3b; color: #fff; box-shadow: none; border-radius: 6px; }
+  .t-news .label { background: #ff3b3b; color: #fff; border-radius: 6px; }
+  .lower { background: rgba(8,18,46,.86); border-left: 14px solid #ff3b3b; padding: 46px 46px 56px; box-shadow: 0 30px 90px rgba(0,0,0,.5); }
+  .stripes { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.035) 0 40px, transparent 40px 80px), radial-gradient(80% 60% at 50% 30%, #13306e, #08122e); }
+  #ticker { position: absolute; left: 0; right: 0; top: 1470px; height: 74px; background: #ff3b3b; overflow: hidden; display: flex; align-items: center; }
+  #ticker span { white-space: nowrap; font-size: 34px; font-weight: 800; color: #fff; letter-spacing: 1px; }
+  .breaking { position: absolute; left: 70px; top: 250px; background: #ff3b3b; color: #fff; font-weight: 900; font-size: 34px; padding: 10px 22px; letter-spacing: 4px; }
+  .t-news .bubble { top: 330px; border-radius: 10px; border-left: 14px solid #ff3b3b; background: rgba(8,18,46,.86); }
+  .t-news .bubble::after { display: none; }
+
+  /* Browser: the address is typed, the page loads, then the cursor clicks through */
+  .browser .url .caret { display: inline-block; width: 3px; height: 28px; background: #5b4cf0; margin-left: 3px; }
+  .browser .load { height: 6px; background: #eceef5; }
+  .browser .load i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #5b4cf0, #ff9f43); }
+  .browser .page { display: flex; flex-direction: column; }
+  .go { margin-top: 40px; align-self: flex-start; padding: 22px 34px; border-radius: 18px; background: #5b4cf0; color: #fff; font-size: 34px; font-weight: 800; opacity: 0; }
+
+  /* CTA: a phone showing the profile; the cursor taps Follow */
+  #stage { perspective: 1800px; }
+  .cta .box { top: 290px; align-items: center; justify-content: flex-start; }
+  .cta-head { text-align: center; margin-bottom: 26px; }
+  .phone { width: 640px; border-radius: 66px; background: #0b0b10; padding: 16px; box-shadow: 0 50px 120px rgba(0,0,0,.55), 0 0 0 3px rgba(255,255,255,.08); }
+  .screen { position: relative; border-radius: 52px; background: #fff; color: #111; overflow: hidden; padding: 34px 30px 0; font-family: "Schibsted Grotesk", Arial, sans-serif; }
+  .ig-top { display: flex; justify-content: space-between; font-size: 30px; font-weight: 800; }
+  .ig-row { display: flex; align-items: center; gap: 28px; margin-top: 24px; }
+  .ig-pic { width: 150px; height: 150px; border-radius: 50%; padding: 6px; flex-shrink: 0; background: conic-gradient(#F5B254, #ff4f7b, #8F86FF, #F5B254); }
+  .ig-pic div { width: 100%; height: 100%; border-radius: 50%; background: #15162A; border: 6px solid #fff; display: flex; align-items: center; justify-content: center; }
+  .ig-pic div i { width: 58px; height: 58px; border-radius: 50%; border: 9px solid #F5B254; }
+  .ig-stats { flex: 1; display: flex; justify-content: space-around; text-align: center; font-size: 21px; color: #555; }
+  .ig-stats b { display: block; font-size: 28px; color: #111; }
+  .ig-name { margin-top: 18px; font-size: 28px; font-weight: 800; }
+  .ig-bio { font-size: 23px; line-height: 1.4; color: #333; }
+  .ig-bio b { color: #2a5bd7; }
+  .ig-btns { display: flex; gap: 12px; margin-top: 20px; }
+  .ig-btns span { flex: 1; text-align: center; padding: 16px 0; border-radius: 14px; font-size: 26px; font-weight: 800; background: #efefef; }
+  .ig-btns .follow { background: #0095f6; color: #fff; }
+  .ig-btns .follow.done { background: #efefef; color: #111; }
+  .ig-hl { display: flex; gap: 20px; margin-top: 22px; }
+  .ig-hl span { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 19px; color: #333; }
+  .ig-hl i { width: 92px; height: 92px; border-radius: 50%; border: 3px solid #ddd; }
+  .ig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 22px -30px 0; }
+  .ig-grid i { aspect-ratio: 1; }
+  .cta .pill { margin-top: -40px; align-self: center; position: relative; }
+  .heart { position: absolute; left: 0; top: 0; font-size: 56px; opacity: 0; }
+</style>
+</head>
+<body>
+<div class="layer" id="bg"></div>
+<div class="layer" id="stage"></div>
+<svg id="cursor" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+<div id="ripple"></div>
+<div class="layer" id="sweep"></div>
+<div class="layer" id="hud"></div>
+<div class="layer" id="flash"></div>
+<div class="layer" id="vignette"></div>
+<div class="bars" id="barTop" style="top:0"></div>
+<div class="bars" id="barBottom" style="bottom:0"></div>
+<script>
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const outExpo = (x) => (x >= 1 ? 1 : 1 - 2 ** (-10 * x));
+  const outBack = (x) => 1 + 2.70158 * (x - 1) ** 3 + 1.70158 * (x - 1) ** 2;
+  const inOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const DEADLINE = /^(apply by|last date|register by|closes|deadline|ends|by)\b[:\s-]*/i;
+  const IMPORTANT = /\d|₹|\$|%|^[A-Z]{2,}[\W]*$/;
+  const showToken = (t) => t.replace(/^(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => `${Number(d)} ${MON[Number(m) - 1]}`);
+  const words = (tokens) => tokens.map((t) => `<span class="w${IMPORTANT.test(t.text) ? " hl" : ""}">${esc(showToken(t.text))} </span>`).join("");
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 26);
+
+  // Largest font size (px) at which the element fits its box
+  function fit(el, maxH, sizes) {
+    for (const s of sizes) {
+      el.style.fontSize = `${s}px`;
+      if (el.scrollHeight <= maxH && el.scrollWidth <= el.clientWidth + 2) return s;
+    }
+    return sizes[sizes.length - 1];
+  }
+  function daysLeft(text, today) {
+    const raw = text.replace(DEADLINE, "");
+    const d = new Date(/\d{4}/.test(raw) ? raw : `${raw} ${new Date(today).getFullYear()}`);
+    return isNaN(d) ? null : Math.ceil((d - today) / 86400000);
+  }
+
+  // ---------- theme backgrounds ----------
+  const CODE = `const offers = await fetch("/api/jobs?fresher=true");
+for (const job of offers) {
+  if (job.deadline > today) shortlist.push(job);
+}
+git commit -m "apply before the deadline"
+npm run interview-prep
+// batch 2025 · batch 2026
+SELECT * FROM jobs WHERE verified = 'official';
+while (!offer) { learn(); build(); apply(); }`;
+  const BG = {
+    cinematic: () => `<div class="layer" style="background:radial-gradient(120% 80% at 50% 30%,#1a1c3d 0%,#0b0c22 55%,#05060f 100%)"></div>
+      <div class="orb" id="o1" style="background:radial-gradient(closest-side,#8F86FF,rgba(143,134,255,.35) 45%,transparent)"></div>
+      <div class="orb" id="o2" style="background:radial-gradient(closest-side,#F5B254,rgba(245,178,84,.3) 45%,transparent)"></div>
+      <div class="orb" id="o3" style="background:radial-gradient(closest-side,#2fb6a0,rgba(47,182,160,.3) 45%,transparent)"></div>
+      <div id="grid"></div>
+      <div class="ring" id="r1" style="width:1240px;height:1240px;right:-560px;top:-520px;border:5px solid #F5B254;opacity:.35"></div>
+      <div class="ring" id="r2" style="width:1600px;height:1600px;right:-740px;top:-700px;border:2px dashed rgba(245,178,84,.35)"></div>`,
+    terminal: () => `<div class="layer" style="background:radial-gradient(90% 60% at 50% 40%,#06301a,#020604 70%)"></div>
+      <div class="code" id="code">${esc(Array(8).fill(CODE).join("\n"))}</div>
+      <div class="layer" id="scan"></div>`,
+    notes: () => `<div class="layer paper"></div>
+      <div class="orb" id="o1" style="opacity:.35;background:radial-gradient(closest-side,#ffd84d,transparent)"></div>
+      <div class="orb" id="o2" style="opacity:.25;background:radial-gradient(closest-side,#f3a6a0,transparent)"></div>`,
+    browser: () => `<div class="layer wall"></div>
+      <div class="orb" id="o1" style="opacity:.35;background:radial-gradient(closest-side,#8F86FF,transparent)"></div>
+      <div class="orb" id="o2" style="opacity:.3;background:radial-gradient(closest-side,#ff9f43,transparent)"></div>`,
+    news: () => `<div class="layer stripes" id="stripes"></div>
+      <div class="orb" id="o1" style="opacity:.3;background:radial-gradient(closest-side,#2f6bff,transparent)"></div>
+      <div id="ticker"><span id="tickerText"></span></div>`,
+  };
+
+  // ---------- point containers per theme ----------
+  const GO = { tech: "Apply on official site →", govt: "Apply on official site →", events: "Register now →", news: "Read the full story →", ai: "Read the full story →" };
+  const dots = `<i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>`;
+  function wrapPoint(theme, sc, inner, data) {
+    const n = String(sc.index).padStart(2, "0");
+    if (theme === "terminal")
+      return `<div class="win term"><div class="tb">${dots}<span style="margin-left:16px">beyond@offer: ~/updates</span></div>
+        <div class="pad"><div class="prompt">$ cat update_${n}.md</div>${inner}</div></div>`;
+    if (theme === "notes")
+      return `<div class="note"><div class="tape"></div><div class="nh"><span>‹ Notes</span><span>Share</span></div>
+        <div class="nd">${esc(new Date(data.today).toDateString())}</div><div class="pad">${inner}</div></div>`;
+    if (theme === "browser") {
+      const url = `${data.brand.website}/updates/${slug(sc.tokens.slice(0, 4).map((t) => t.text).join(" "))}`;
+      return `<div class="win browser"><div class="tb">${dots}
+        <div class="url"><svg viewBox="0 0 24 24" width="22" height="22" style="margin-right:10px"><path d="M7 10V7a5 5 0 0110 0v3h1v11H6V10zm2 0h6V7a3 3 0 00-6 0z" fill="#5b6075"/></svg><span class="typed" data-full="${esc(url)}"></span><span class="caret"></span></div></div>
+        <div class="load"><i></i></div>
+        <div class="page"><div class="crumb">Update ${sc.index} of ${sc.count}</div>${inner}<div class="go">${GO[data.category] || GO.tech}</div></div></div>`;
+    }
+    if (theme === "news") return `<div class="lower">${inner}</div>`;
+    return `<div class="ghost">${n}</div>${inner}`;
+  }
+
+  let R = null;
+
+  window.setupReel = (data) => {
+    R = { ...data, els: [], cur: { x: 900, y: 1500 } };
+    const theme = data.theme;
+    document.body.className = `t-${theme}`;
+    $("#bg").innerHTML = BG[theme]();
+    $("#barTop").style.height = $("#barBottom").style.height = "0px";
+    if ($("#tickerText")) $("#tickerText").textContent = ` ${data.brand.handle.toUpperCase()} • FRESHER JOBS • GOVT NOTIFICATIONS • HACKATHONS • TECH NEWS • `.repeat(6);
+    $("#hud").innerHTML = `<div class="brand"><span class="dot"></span>${esc(data.brand.handle)}</div>
+      <div class="segs">${data.scenes.map(() => "<span><i></i></span>").join("")}</div>`;
+    const stage = $("#stage");
+    stage.innerHTML = "";
+
+    for (const sc of data.scenes) {
+      const el = document.createElement("div");
+      el.className = `scene ${sc.kind}`;
+      const fields = [...new Set(sc.tokens.map((t) => t.field))];
+      const byField = (f) => sc.tokens.filter((t) => t.field === f);
+      let html = "";
+      if (sc.kind === "hook") {
+        html = `${theme === "news" ? `<div class="breaking">BREAKING</div>` : ""}
+          <div class="bubble"><div class="kicker">${esc(data.kicker)}</div>
+          <h1 class="kin">${words(byField(fields[0]))}</h1>
+          ${fields.slice(1).map((f) => `<div class="sub kin">${words(byField(f))}</div>`).join("")}</div>`;
+      } else if (sc.kind === "point") {
+        const label = theme === "browser" || theme === "terminal" ? "" : `<div class="label">${sc.count > 1 ? `${sc.index} of ${sc.count}` : "Update"}</div>`;
+        let inner;
+        if (sc.structured) {
+          const rest = fields.slice(1).map((f) => ({ f, text: byField(f).map((t) => t.text).join(" ") }));
+          const deadline = rest.find((r) => DEADLINE.test(r.text));
+          const chips = rest.filter((r) => r !== deadline);
+          const n = deadline ? daysLeft(deadline.text, data.today) : null;
+          inner = `${label}<h1 class="kin">${words(byField(fields[0]))}</h1>
+            <div class="chips">${chips.map((c) => `<span class="chip" data-f="${c.f}">${esc(showToken(c.text))}</span>`).join("")}</div>
+            ${deadline ? `<div class="stub" data-f="${deadline.f}" data-days="${n ?? ""}">${
+              n !== null && n >= 0 && n <= 60
+                ? `<span class="n">0</span><span class="t">days left<br>to apply</span>`
+                : `<span class="t">${esc(showToken(deadline.text))}</span>`}</div>` : ""}`;
+        } else {
+          inner = `${label}<h1 class="kin say">${words(sc.tokens)}</h1><div class="bar"><i></i></div>`;
+        }
+        html = `<div class="box">${wrapPoint(theme, sc, inner, data)}</div>`;
+      } else {
+        // Headline is everything before "Comment …"; the keyword gets its own pill
+        const cut = sc.tokens.findIndex((t) => /^comment$/i.test(t.text));
+        const head = cut > 0 ? sc.tokens.slice(0, cut) : sc.tokens;
+        const kw = sc.tokens.map((t) => t.text).join(" ").match(/\bcomment\s+([A-Z][A-Z0-9]{0,11})\b/i);
+        sc.kwAt = kw && cut >= 0 ? sc.tokens[cut].start : 0;
+        const tiles = ["#8F86FF,#5b4cf0", "#F5B254,#ff7a59", "#2fb6a0,#1d6f8f", "#ff4f7b,#8F86FF", "#15162A,#3a3d7a", "#F5B254,#2fb6a0"];
+        html = `<div class="box"><h1 class="kin cta-head">${words(head)}</h1>
+          <div class="phone"><div class="screen">
+            <div class="ig-top"><span>${esc(data.brand.handle.replace(/^@/, ""))}</span><span>☰</span></div>
+            <div class="ig-row"><div class="ig-pic"><div><i></i></div></div>
+              <div class="ig-stats"><span><b>Daily</b>updates</span><span><b>Free</b>always</span><span><b>Verified</b>links</span></div></div>
+            <div class="ig-name">Beyond The Offer</div>
+            <div class="ig-bio">Fresher jobs · Govt alerts · Hackathons · Tech news<br><b>${esc(data.brand.website)}</b></div>
+            <div class="ig-btns"><span class="follow">Follow</span><span>Message</span></div>
+            <div class="ig-hl">${["Jobs", "Govt", "Events", "AI", "News"].map((h, k) =>
+              `<span><i style="background:linear-gradient(135deg,${tiles[k].split(",")[0]},${tiles[k].split(",")[1]})"></i>${h}</span>`).join("")}</div>
+            <div class="ig-grid">${tiles.map((g) => `<i style="background:linear-gradient(135deg,${g})"></i>`).join("")}</div>
+          </div></div>
+          ${kw ? `<div class="pill">Comment <b>${esc(kw[1].toUpperCase())}</b> for the links</div>` : ""}</div>
+          ${Array.from({ length: 9 }, (_, k) => `<svg class="heart" viewBox="0 0 24 24" width="56" height="56"><path d="M12 21s-7-4.4-9.5-8.6C.8 9.3 2.4 5.5 6 5.1c2-.2 3.4.8 4.3 2.1h1.4c.9-1.3 2.3-2.3 4.3-2.1 3.6.4 5.2 4.2 3.5 7.3C19 16.6 12 21 12 21z" fill="${k % 3 ? "#ff3b5c" : "#8F86FF"}"/></svg>`).join("")}`;
+        sc.followAt = sc.tokens.find((t) => /^follow$/i.test(t.text))?.start ?? 0.4;
+      }
+      el.innerHTML = html;
+      stage.appendChild(el);
+
+      const h1 = $("h1", el);
+      el.style.opacity = 1;
+      if (sc.kind === "hook") fit(h1, 700, [112, 104, 96, 88, 80, 72, 64, 56]);
+      else if (sc.kind === "cta") fit(h1, 150, [72, 64, 58, 52, 46]);
+      else fit(h1, sc.structured ? 460 : theme === "cinematic" || theme === "news" ? 760 : 660, [96, 88, 80, 72, 66, 60, 54, 48, 44]);
+      el.style.opacity = 0;
+      R.els.push({ el, ws: [...el.querySelectorAll("h1 .w")], extra: [...el.querySelectorAll(".sub .w")] });
+    }
+  };
+
+  // Reveal a token: rises, sharpens and settles as it is spoken
+  function pop(w, age, strong) {
+    const p = clamp(age / (strong ? 0.42 : 0.3));
+    const e = outExpo(p);
+    w.style.opacity = p <= 0 ? 0 : clamp(age / 0.12);
+    w.style.transform = `translateY(${(1 - e) * 46}px) scale(${strong ? 1 + (1 - outBack(p)) * 0.35 : 1})`;
+    w.style.filter = e < 0.98 ? `blur(${(1 - e) * 14}px)` : "none";
+  }
+
+  // Each look has a signature cut plus a few more; cuts rotate through them so no two in a row match.
+  const STYLES = {
+    cinematic: ["zoom", "circle", "spin"],
+    terminal: ["glitch", "slideUp", "punch"],
+    notes: ["swipe", "flip", "slideUp"],
+    browser: ["whip", "punch", "circle"],
+    news: ["wipe", "slideUp", "flip"],
+  };
+
+  // Scene entrance/exit. p: 0→1 entering, q: 0→1 leaving.
+  function transition(style, el, p, q, lt, drift) {
+    const e = outExpo(p);
+    let tf = "", op = 1, fl = "none", clip = "none", blur = 0;
+    switch (style) {
+      case "glitch": {
+        // Jitter, flicker and an RGB split that settles
+        const g = 1 - e + q;
+        const j = g > 0.02 ? Math.sin(lt * 90) * 26 * g : 0;
+        tf = `translateX(${j}px) skewX(${j * 0.15}deg)`;
+        op = (p < 1 && Math.sin(lt * 70) < -0.3 ? 0.3 : 1) * Math.min(1, p * 3) * (1 - q);
+        if (g > 0.02) fl = `drop-shadow(${10 * g}px 0 #ff2bd6) drop-shadow(${-10 * g}px 0 #00e5ff)`;
+        break;
+      }
+      case "swipe": // page swipe in from the right, off to the left
+        tf = `translateX(${(1 - e) * 1100 - inOut(q) * 500}px) rotate(${(1 - e) * 4}deg)`;
+        op = 1 - q;
+        break;
+      case "whip": // fast pan with motion blur
+        tf = `translateX(${(1 - e) * 900 - inOut(q) * 900}px) scale(${1 + drift * 0.05})`;
+        blur = (1 - e) * 18 + q * 16;
+        op = Math.min(1, p * 2) * (1 - q * 0.6);
+        break;
+      case "wipe": // hard wipe from the left
+        clip = `inset(0 ${(1 - e) * 100}% 0 0)`;
+        tf = `translateY(${-drift * 14}px)`;
+        op = 1 - q;
+        break;
+      case "circle": // iris opens from the centre
+        clip = p < 1 ? `circle(${e * 120}% at 50% 48%)` : "none";
+        tf = `scale(${(1.08 - 0.08 * e) * (1 - q * 0.12)})`;
+        op = 1 - q;
+        break;
+      case "flip": // card turns over in 3D
+        tf = `rotateY(${(1 - e) * -75 + inOut(q) * 75}deg) scale(${0.9 + 0.1 * e})`;
+        op = Math.min(1, p * 2) * (1 - q);
+        break;
+      case "spin": // spin-zoom in, push out
+        tf = `rotate(${(1 - e) * -14}deg) scale(${(0.55 + 0.45 * outBack(p)) * (1 + q * 0.35)})`;
+        blur = q * 14;
+        op = Math.min(1, p * 2) * (1 - q);
+        break;
+      case "slideUp": // rises from below, leaves upwards
+        tf = `translateY(${(1 - e) * 1300 - inOut(q) * 700}px)`;
+        op = 1 - q;
+        break;
+      case "punch": // pops in with overshoot
+        tf = `scale(${(0.45 + 0.55 * outBack(p)) * (1 - q * 0.15)})`;
+        blur = q * 12;
+        op = Math.min(1, p * 2.5) * (1 - q);
+        break;
+      default: // zoom-blur push (with a light flash on the cut)
+        tf = `scale(${(1.14 - 0.14 * e) * (1 + drift * 0.035) * (1 + q * 0.12)}) translateY(${(1 - e) * 60 - drift * 18}px)`;
+        blur = (1 - e) * 22 + q * 18;
+        op = Math.min(e * 1.2, 1) * (1 - q);
+    }
+    if (blur > 0.3) fl = fl === "none" ? `blur(${blur}px)` : `${fl} blur(${blur}px)`;
+    el.style.transform = tf;
+    el.style.opacity = op;
+    el.style.filter = fl;
+    el.style.clipPath = clip;
+  }
+
+  window.seek = (t) => {
+    const { scenes, theme } = R;
+
+    // Background motion
+    const orb = (id, ax, ay, sx, sy, ph) => { const o = $(id); if (o) o.style.transform = `translate(${ax + Math.sin(t * sx + ph) * 260}px, ${ay + Math.cos(t * sy + ph) * 340}px)`; };
+    orb("#o1", -200, 200, 0.23, 0.17, 0);
+    orb("#o2", 420, 1100, 0.19, 0.21, 2);
+    orb("#o3", -100, 1500, 0.15, 0.27, 4);
+    if ($("#grid")) $("#grid").style.backgroundPosition = `0 ${t * 70}px`;
+    if ($("#r1")) $("#r1").style.transform = `rotate(${t * 4}deg) scale(${1 + Math.sin(t * 0.6) * 0.03})`;
+    if ($("#r2")) $("#r2").style.transform = `rotate(${-t * 6}deg)`;
+    if ($("#code")) $("#code").style.transform = `translateY(${-((t * 40) % 1400)}px)`;
+    if ($("#stripes")) $("#stripes").style.backgroundPosition = `${t * 60}px 0, 0 0`;
+    if ($("#tickerText")) $("#tickerText").style.transform = `translateX(${-t * 160}px)`;
+    if (theme === "cinematic") $("#barTop").style.height = $("#barBottom").style.height = `${110 * inOut(clamp(t / 1.2))}px`;
+
+    let flash = 0, sweep = -1, shake = 0, cursorTarget = null, ctaCursor = false, clickNow = false;
+    scenes.forEach((sc, i) => {
+      const { el, ws, extra } = R.els[i];
+      const lt = t - sc.start;
+      $(`#hud .segs span:nth-child(${i + 1}) i`).style.width = `${clamp(lt / sc.dur) * 100}%`;
+      if (lt <= -0.05 || lt >= sc.dur + 0.02) { el.style.opacity = 0; return; }
+
+      const p = clamp(lt / 0.55);
+      const q = i === scenes.length - 1 ? 0 : inOut(clamp((lt - (sc.dur - 0.32)) / 0.32));
+      const drift = clamp(lt / sc.dur);
+      const style = STYLES[theme][i % STYLES[theme].length];
+      transition(style, el, p, q, lt, drift);
+      if (style === "zoom") flash = Math.max(flash, i > 0 ? Math.exp(-Math.abs(lt) * 9) : 0);
+      if (lt >= 0) shake = Math.max(shake, Math.exp(-lt * 14) * (i === 0 ? 1.4 : 0.7)); // impact on every cut
+      if ((theme === "cinematic" || theme === "browser") && lt >= 0 && lt < 1.3) sweep = lt / 1.3;
+
+      const ghost = $(".ghost", el);
+      if (ghost) ghost.style.transform = `translateX(${(1 - outExpo(p)) * -120 + drift * 40}px) scale(${1 + drift * 0.06})`;
+      const label = $(".label", el);
+      if (label) { label.style.transform = `scale(${outBack(clamp((lt - 0.1) / 0.45))})`; label.style.opacity = clamp((lt - 0.1) / 0.2); }
+      const bubble = $(".bubble", el);
+      if (bubble) bubble.style.transform = `scale(${0.7 + 0.3 * outBack(clamp((lt - 0.15) / 0.5))})`;
+
+      const vt = t - sc.voiceAt; // time since this scene's voice started
+      if (sc.kind === "point" && !sc.structured) {
+        // Karaoke: words light up as they are spoken; the current word is marked
+        ws.forEach((w, k) => {
+          const tok = sc.tokens[k], next = sc.tokens[k + 1];
+          const on = vt >= tok.start;
+          const now = on && (!next || vt < next.start) && vt < tok.start + 0.9;
+          w.classList.toggle("on", on);
+          w.classList.toggle("now", now);
+          if (now && lt >= 0 && lt < sc.dur) cursorTarget = w;
+          // Numbers and key terms punch in as they are said
+          const age = vt - tok.start;
+          const lift = age >= 0 && age < 0.25 ? (1 - outExpo(age / 0.25)) * -10 : 0;
+          const punch = w.classList.contains("hl") && age >= 0 && age < 0.35 ? 1 + 0.3 * (1 - outExpo(age / 0.35)) : 1;
+          w.style.transform = lift || punch !== 1 ? `translateY(${lift}px) scale(${punch})` : "";
+        });
+        const bar = $(".bar i", el);
+        if (bar) bar.style.width = `${clamp(vt / sc.voiceDur) * 100}%`;
+      } else {
+        // Headline words are the first field's tokens, in order; hook sub-lines are the rest
+        ws.forEach((w, k) => pop(w, vt - (sc.tokens[k]?.start ?? 0), sc.kind === "hook"));
+        const later = sc.tokens.filter((tok) => tok.field !== sc.tokens[0].field);
+        extra.forEach((w, k) => pop(w, vt - (later[k]?.start ?? 0), false));
+        if (sc.kind === "point" && lt >= 0 && lt < sc.dur) {
+          const shown = ws.filter((w, k) => vt >= (sc.tokens[k]?.start ?? 0));
+          cursorTarget = shown[shown.length - 1] || null;
+        }
+      }
+      el.querySelectorAll("[data-f]").forEach((c) => {
+        const at = sc.tokens.find((tok) => tok.field === Number(c.dataset.f))?.start ?? 0;
+        const pp = clamp((vt - at) / 0.45);
+        c.style.opacity = clamp((vt - at) / 0.15);
+        c.style.transform = `translateY(${(1 - outBack(pp)) * 40}px) scale(${0.9 + 0.1 * outExpo(pp)})`;
+        const n = c.querySelector(".n");
+        if (n && c.dataset.days !== "") n.textContent = Math.round(Number(c.dataset.days) * outExpo(clamp((vt - at) / 1.1)));
+        if (vt >= at && vt < at + 1.2 && lt >= 0 && lt < sc.dur) cursorTarget = c;
+      });
+      if (theme === "browser" && sc.kind === "point") {
+        // Type the address, load the page, then click the action button at the end
+        const typed = $(".typed", el), full = typed.dataset.full;
+        typed.textContent = full.slice(0, Math.floor(clamp((lt - 0.05) / 0.5) * full.length));
+        $(".caret", el).style.opacity = lt < 0.6 || Math.floor(lt * 2.5) % 2 ? 1 : 0;
+        const load = $(".load i", el);
+        load.style.width = `${clamp((lt - 0.4) / 0.35) * 100}%`;
+        load.style.opacity = 1 - clamp((lt - 0.8) / 0.2);
+        const page = $(".page", el);
+        page.style.opacity = clamp((lt - 0.55) / 0.25);
+        page.style.transform = `translateY(${(1 - outExpo(clamp((lt - 0.55) / 0.4))) * 30}px)`;
+        if (lt < 0.7) cursorTarget = null;
+        const go = $(".go", el), goAt = sc.dur - 1.3, clickAt = sc.dur - 0.7;
+        go.style.opacity = clamp((lt - goAt + 0.6) / 0.3);
+        go.style.transform = `scale(${lt > clickAt && lt < clickAt + 0.18 ? 0.93 : 1})`;
+        if (lt >= goAt && lt < sc.dur) {
+          cursorTarget = go;
+          R.lastTarget = go;
+          if (!sc.clicked && lt >= clickAt) { sc.clicked = true; clickNow = true; }
+        }
+      }
+
+      if (sc.kind === "cta") {
+        // The profile slides up on a phone; the cursor taps Follow as the voice says it
+        const phone = $(".phone", el);
+        const pe = clamp((lt - 0.1) / 0.7);
+        phone.style.opacity = clamp(pe * 3);
+        phone.style.transform = `translateY(${(1 - outBack(pe)) * 900 + Math.sin(t * 1.4) * 6}px) rotate(${(1 - outExpo(pe)) * 6}deg)`;
+        const btn = $(".follow", el), tapAt = Math.max(sc.followAt, 0.75) + 0.35;
+        if (lt > 0.6 && vt < tapAt + 0.7) { cursorTarget = btn; R.lastTarget = btn; ctaCursor = true; }
+        if (!sc.tapped && vt >= tapAt) { sc.tapped = true; clickNow = true; }
+        const done = vt >= tapAt;
+        btn.classList.toggle("done", done);
+        btn.textContent = done ? "Following" : "Follow";
+        btn.style.transform = done && vt < tapAt + 0.25 ? `scale(${1 + 0.12 * Math.sin(((vt - tapAt) / 0.25) * Math.PI)})` : "";
+        const b = btn.getBoundingClientRect();
+        el.querySelectorAll(".heart").forEach((h, k) => {
+          const age = vt - tapAt - k * 0.04;
+          if (age < 0 || age > 1.1) { h.style.opacity = 0; return; }
+          const ang = -Math.PI / 2 + (k - 4) * 0.32, dist = 60 + 300 * outExpo(age / 1.1);
+          h.style.opacity = 1 - age / 1.1;
+          h.style.transform = `translate(${b.left + b.width / 2 - 28 + Math.cos(ang) * dist}px, ${b.top - 10 + Math.sin(ang) * dist}px) scale(${0.5 + 0.6 * outBack(clamp(age / 0.3))})`;
+        });
+      }
+
+      const pill = $(".pill", el);
+      if (pill) {
+        const pp = clamp((vt - sc.kwAt) / 0.5);
+        pill.style.opacity = clamp((vt - sc.kwAt) / 0.15);
+        pill.style.transform = `scale(${(0.6 + 0.4 * outBack(pp)) * (1 + (pp >= 1 ? Math.max(0, Math.sin((vt - sc.kwAt) * 5)) * 0.04 : 0))})`;
+      }
+    });
+    $("#stage").style.transform = shake > 0.02 ? `translate(${Math.sin(t * 85) * 14 * shake}px, ${Math.cos(t * 71) * 10 * shake}px)` : "";
+
+    // Cursor: in the browser look it follows what is being said and clicks through; in every
+    // look it taps Follow on the profile at the end
+    if (theme === "browser" || ctaCursor) {
+      const cur = $("#cursor"), rip = $("#ripple");
+      if (cursorTarget && (theme === "browser" || ctaCursor)) {
+        const r = cursorTarget.getBoundingClientRect();
+        const tx = r.left + Math.min(r.width * 0.7, 160), ty = r.top + r.height * 0.75;
+        R.cur.x += (tx - R.cur.x) * 0.22;
+        R.cur.y += (ty - R.cur.y) * 0.22;
+        cur.style.opacity = 1;
+        // Glide along the words; click only when landing on a new detail chip
+        if (cursorTarget !== R.lastTarget) { R.lastTarget = cursorTarget; if (cursorTarget.dataset?.f) R.clickAt = t; }
+      } else cur.style.opacity = 0;
+      if (clickNow) R.clickAt = t;
+      cur.style.transform = `translate(${R.cur.x}px, ${R.cur.y}px)`;
+      const ca = t - (R.clickAt ?? -9);
+      rip.style.opacity = ca < 0.45 ? 1 - ca / 0.45 : 0;
+      rip.style.transform = `translate(${R.cur.x}px, ${R.cur.y}px) scale(${0.3 + ca * 2})`;
+    } else {
+      $("#cursor").style.opacity = 0;
+      $("#ripple").style.opacity = 0;
+    }
+
+    $("#flash").style.opacity = flash * 0.75;
+    $("#sweep").style.opacity = sweep < 0 ? 0 : Math.sin(sweep * Math.PI) * 0.9;
+    $("#sweep").style.transform = `translateX(${(sweep - 0.5) * 1800}px)`;
+  };
+</script>
+</body>
+</html>
