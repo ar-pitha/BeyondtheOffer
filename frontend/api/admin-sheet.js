@@ -81,11 +81,18 @@ const dispatchPreview = (id) =>
     body: JSON.stringify({ ref: "main", inputs: { id } }),
   });
 
-// Clears a post's preview (and any posting confirmation tied to it) and starts a new build
+// Clears a post's preview (and any posting confirmation tied to it) and starts a new build.
+// If the build can't be started, the old preview is put back.
 async function resetPreview(row) {
   const headers = await ensureColumns("Content_Queue", ["Preview_Link", "Publish_Confirmed"]);
   await updateRow("Content_Queue", headers, row._row, { Preview_Link: "", Publish_Confirmed: "" }, { raw: true });
-  await dispatchPreview(row.ID);
+  try {
+    await dispatchPreview(row.ID);
+  } catch (err) {
+    const old = { Preview_Link: row.Preview_Link || "", Publish_Confirmed: row.Publish_Confirmed || "" };
+    await updateRow("Content_Queue", headers, row._row, old, { raw: true }).catch(() => {});
+    throw err;
+  }
 }
 
 async function latestPublishRun() {
@@ -326,8 +333,9 @@ export default async function handler(req, res) {
 
       // Approving a post always builds a fresh preview of it
       if (tab === "Content_Queue" && patch.Status === "Approved" && row.Status !== "Approved") {
-        const previewStarted = await resetPreview(row).then(() => true, () => false);
-        return send(res, 200, { row: { ...row, ...patch, Preview_Link: "", Publish_Confirmed: "" }, previewStarted });
+        const previewError = await resetPreview(row).then(() => null, (err) => err.message);
+        const fresh = previewError ? {} : { Preview_Link: "", Publish_Confirmed: "" };
+        return send(res, 200, { row: { ...row, ...patch, ...fresh }, previewStarted: !previewError, previewError });
       }
       return send(res, 200, { row: { ...row, ...patch } });
     }
