@@ -20,7 +20,7 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { ROOT } from "./lib/config.js";
 import { parseReelScript, getBrowser, closeBrowser } from "./lib/render.js";
-import { narrate, evenTiming, speak } from "./lib/voice.js";
+import { narrate, evenTiming, speak, fluentLine } from "./lib/voice.js";
 import { writeScore } from "./lib/score.js";
 
 const FPS = 30;
@@ -156,14 +156,16 @@ function connector(c, cards) {
   return i === 0 ? "First up," : i === points.length - 1 ? "And finally," : i === 1 ? "Next," : "Also,";
 }
 
-async function voiceCards(cards, outDir, ffmpeg, rate) {
+async function voiceCards(cards, outDir, ffmpeg, { rate, category } = {}) {
   const voiced = [];
   for (let i = 0; i < cards.length; i++) {
     const c = cards[i];
     const file = path.join(outDir, "voice", `vo-${String(i + 1).padStart(2, "0")}.mp3`);
-    const vo = await speak(c.voice || c.text, file, { ffmpeg, rate, prefix: connector(c, cards) });
+    // Cards made of fields (stories, carousels) are said as sentences, not read field by field
+    const line = c.voice || (c.kind === "point" && c.text.includes("|") ? fluentLine(c.text, { category }) : "");
+    const vo = await speak(line || c.text, file, { ffmpeg, rate, prefix: connector(c, cards) });
     // A separate VO line can't be matched word for word, so spread the on-screen words over it
-    const tokens = c.voice ? evenTiming(narrate(c.text).tokens, vo.seconds * 0.9) : vo.tokens;
+    const tokens = line ? evenTiming(narrate(c.text).tokens, vo.seconds * 0.9) : vo.tokens;
     voiced.push({ ...c, tokens, voiceFile: vo.file, voiceDur: vo.seconds });
   }
   return voiced;
@@ -196,7 +198,7 @@ function timeline(cards, silent) {
   });
 }
 
-async function renderFrames(scenes, total, file, ffmpeg, { theme, category }) {
+async function renderFrames(scenes, total, file, ffmpeg, { theme, category, variant = 0 }) {
   const browser = await getBrowser();
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   await page.goto(pathToFileURL(TEMPLATE).href, { waitUntil: "networkidle" }).catch(() => page.goto(pathToFileURL(TEMPLATE).href));
@@ -209,6 +211,7 @@ async function renderFrames(scenes, total, file, ffmpeg, { theme, category }) {
     kicker: process.env.REEL_KICKER || "this week, for freshers",
     theme,
     category,
+    variant,
     scenes: scenes.map(({ voiceFile, ...s }) => s),
   };
   await page.evaluate(() => document.fonts.ready);
@@ -239,9 +242,9 @@ async function renderFrames(scenes, total, file, ffmpeg, { theme, category }) {
   await done;
 }
 
-async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme }) {
+async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant = 0 }) {
   const track = pickTrack();
-  const bed = track || writeScore(path.join(outDir, "score.wav"), { seconds: total, cuts: scenes.map((s) => s.start), mood: theme });
+  const bed = track || writeScore(path.join(outDir, "score.wav"), { seconds: total, cuts: scenes.map((s) => s.start), mood: theme, variant });
   const voices = scenes.filter((s) => s.voiceFile);
 
   const args = ["-y", "-i", video];
@@ -279,7 +282,7 @@ async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme })
   return track;
 }
 
-export async function buildReel(script, outDir, { category, cards: given } = {}) {
+export async function buildReel(script, outDir, { category, cards: given, variant = 0 } = {}) {
   const cards = given || parseReelScript(script);
   if (cards.length < 2) throw new Error("Reel script needs at least a HOOK and a CTA line");
   fs.mkdirSync(outDir, { recursive: true });
@@ -287,9 +290,9 @@ export async function buildReel(script, outDir, { category, cards: given } = {})
 
   let voiced = null;
   try {
-    voiced = await voiceCards(cards, outDir, ffmpeg);
+    voiced = await voiceCards(cards, outDir, ffmpeg, { category });
     // Too long for a reel: one faster take before giving up
-    if (timeline(voiced, false).reduce((t, s) => t + s.dur, 0) > MAX_SECONDS) voiced = await voiceCards(cards, outDir, ffmpeg, "+22%");
+    if (timeline(voiced, false).reduce((t, s) => t + s.dur, 0) > MAX_SECONDS) voiced = await voiceCards(cards, outDir, ffmpeg, { rate: "+22%", category });
   } catch (err) {
     if (String(process.env.REEL_ALLOW_SILENT).toLowerCase() !== "true") throw err;
     console.warn(`${err.message}; building the reel without a voiceover (REEL_ALLOW_SILENT=true)`);
@@ -302,8 +305,8 @@ export async function buildReel(script, outDir, { category, cards: given } = {})
   const theme = pickTheme(script, category);
   const video = path.join(outDir, "video.mp4");
   const output = path.join(outDir, "reel.mp4");
-  await renderFrames(scenes, total, video, ffmpeg, { theme, category: category || "tech" });
-  const track = await mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme });
+  await renderFrames(scenes, total, video, ffmpeg, { theme, category: category || "tech", variant });
+  const track = await mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant });
   fs.rmSync(video, { force: true });
   return { file: output, seconds: total, cards: cards.length, track: track ? path.basename(track) : "score", voice: !!voiced, theme };
 }
