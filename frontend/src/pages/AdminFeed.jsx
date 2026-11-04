@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { HiExternalLink, HiRefresh } from "react-icons/hi";
@@ -46,7 +46,7 @@ const parseSlides = (script = "") =>
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, onSave, onPostNow, onPreview, busy, posting }) {
+function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, busy, posting }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -102,9 +102,6 @@ function PostCard({ row, slots, onSave, onPostNow, onPreview, busy, posting }) {
 
       {published ? (
         <div className="feed-actions">
-          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
-            {row.Preview_Link ? "View generated preview" : "Generate preview"}
-          </button>
           {row.IG_Post_Link?.startsWith("http") ? (
             <a className="btn btn-secondary btn-sm" href={row.IG_Post_Link} target="_blank" rel="noopener noreferrer">
               View on Instagram <HiExternalLink aria-hidden />
@@ -118,17 +115,20 @@ function PostCard({ row, slots, onSave, onPostNow, onPreview, busy, posting }) {
         </div>
       ) : (
         <div className="feed-actions">
-          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
-            {row.Preview_Link ? "View generated preview" : "Generate preview"}
-          </button>
-          {status !== "Approved" && (
-            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => save({ Status: "Approved" }, "Approved. It still needs a generated preview and confirmation before posting.")}>
-              Approve draft
+          {status === "Approved" ? (
+            <>
+              <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
+                {row.Preview_Link ? "View preview" : "Generate preview"}
+              </button>
+              <button className="btn btn-primary btn-sm" disabled={busy || posting || !row.Preview_Link} onClick={() => onPostNow(row)}>
+                {posting ? "Posting…" : "Post to Instagram"}
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onApprove(row)}>
+              Approve
             </button>
           )}
-          <button className="btn btn-primary btn-sm" disabled={busy || posting || !row.Preview_Link} onClick={() => onPostNow(row)}>
-            {posting ? "Posting…" : "Post now"}
-          </button>
           {status !== "Rejected" && (
             <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.")}>
               Reject
@@ -234,6 +234,7 @@ function AdminFeed() {
   const [postPage, setPostPage] = useState(1);
   const [previewRow, setPreviewRow] = useState(null);
   const [previewRun, setPreviewRun] = useState(null);
+  const building = useRef({}); // post ID → when its preview build was started
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -265,9 +266,8 @@ function AdminFeed() {
     }
   };
 
-  // Start the GitHub publish run only after the admin confirms the post.
+  // Posts straight to Instagram (GitHub publish run) once the approved post has a preview
   const onPostNow = async (row) => {
-    if (!window.confirm(`Post "${row.Title || row.ID}" to Instagram now?`)) return;
     setRun({ id: row.ID, status: "starting" });
     try {
       await axios.post("/api/admin-sheet", { action: "publish-now", id: row.ID }, api);
@@ -278,14 +278,46 @@ function AdminFeed() {
     }
   };
 
+  // Starts a preview build, unless one for this post started in the last 15 minutes
+  const startPreview = async (id) => {
+    if (Date.now() - (building.current[id] || 0) > 15 * 60_000) {
+      await axios.post("/api/admin-sheet", { action: "preview-now", id }, api);
+      building.current[id] = Date.now();
+    }
+    setPreviewRun({ id, status: "waiting" });
+  };
+
+  // Approving builds the preview straight away so it's ready to review
+  const onApprove = async (row) => {
+    await onSave(row.ID, { Status: "Approved" }, "Approved. Building the preview…");
+    if (!row.Preview_Link) {
+      try {
+        await startPreview(row.ID);
+      } catch (err) {
+        toast.error(err.response?.data?.message || "Couldn't start the preview.");
+      }
+    }
+  };
+
+  // Always shows the newest preview: re-reads the row first, and builds it now if it's missing
   const onPreview = async (row) => {
     setPreviewRow(row);
-    if (row.Preview_Link) {
+    setPreviewRun({ id: row.ID, status: "loading" });
+    try {
+      const { data: fresh } = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
+      const latest = fresh.rows.find((r) => r.ID === row.ID) || row;
+      setData(fresh);
+      setPreviewRow(latest);
+      if (latest.Preview_Link) {
+        setPreviewRun(null);
+        return;
+      }
+      await startPreview(row.ID);
+      toast("Building the preview. It appears here in about 5 minutes.");
+    } catch (err) {
       setPreviewRun(null);
-      return;
+      toast.error(err.response?.data?.message || "Couldn't load the preview.");
     }
-    setPreviewRun({ id: row.ID, status: "waiting" });
-    toast("Preview generation is running automatically. Refresh this post when the generated video or slides are ready.");
   };
 
   const onSyncComments = async () => {
@@ -324,7 +356,7 @@ function AdminFeed() {
   }, [run?.id, run?.status === "completed"]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!previewRun || previewRun.status === "completed") return;
+    if (!previewRun || previewRun.status !== "waiting") return;
     const timer = setInterval(async () => {
       try {
         const result = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
@@ -339,7 +371,7 @@ function AdminFeed() {
       } catch {
         /* keep waiting */
       }
-    }, 30000);
+    }, 20000);
     return () => clearInterval(timer);
   }, [previewRun?.status, previewRow?.ID]);
 
@@ -419,7 +451,7 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onPostNow={onPostNow} onPreview={onPreview} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPostNow={onPostNow} onPreview={onPreview} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
             </div>
           )}
@@ -439,11 +471,13 @@ function AdminFeed() {
               <p className="stat-note">{previewRow.Title || previewRow.ID}</p>
             </header>
             <div className="modal-body">
-              {previewRun && previewRun.status !== "completed" ? (
-                <p>Rendering the actual Reel/slides with the same pipeline used for publishing…</p>
+              {previewRun?.status === "loading" ? (
+                <p>Loading the latest preview…</p>
+              ) : previewRun && previewRun.status !== "completed" ? (
+                <p>Building the preview with the same pipeline used for posting (about 5 minutes)…</p>
               ) : previewRow.Preview_Link ? (
                 String(previewRow.Format).toLowerCase() === "reel" ? (
-                  <video className="feed-preview-video" src={previewRow.Preview_Link.split("\n")[0]} controls playsInline />
+                  <video key={previewRow.Preview_Link} className="feed-preview-video" src={previewRow.Preview_Link.split(/\s+/)[0]} controls playsInline />
                 ) : (
                   <div className="feed-preview-images">
                     {previewRow.Preview_Link.split(/\r?\n/).filter(Boolean).map((src) => <img key={src} src={src} alt="" />)}
@@ -453,9 +487,11 @@ function AdminFeed() {
             </div>
             <footer className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setPreviewRow(null); setPreviewRun(null); }}>Close</button>
-              <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link} onClick={() => { setPreviewRow(null); onPostNow(previewRow); }}>
-                Confirm and post
-              </button>
+              {previewRow.Status === "Approved" && (
+                <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPostNow(previewRow); }}>
+                  Post to Instagram
+                </button>
+              )}
             </footer>
           </section>
         </div>
