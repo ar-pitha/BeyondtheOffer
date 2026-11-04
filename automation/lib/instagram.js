@@ -26,6 +26,12 @@ export const createStoryContainer = (imageUrl) =>
     (d) => d.id
   );
 
+// Video stories from a public MP4 URL (Cloudinary), like reels
+export const createStoryVideoContainer = (videoUrl) =>
+  igRequest(`${igUserId()}/media`, { method: "POST", params: { media_type: "STORIES", video_url: videoUrl } }).then(
+    (d) => d.id
+  );
+
 // Reels from a public MP4 URL (Cloudinary). This works with unified-login tokens,
 // where rupload.facebook.com rejects direct uploads.
 export const createReelContainerFromUrl = (videoUrl, caption) =>

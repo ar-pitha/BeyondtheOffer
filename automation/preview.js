@@ -1,8 +1,8 @@
 import path from "node:path";
 import { ROOT } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns } from "./lib/sheets.js";
-import { renderSlides, closeBrowser, parseSlides } from "./lib/render.js";
-import { buildReel } from "./reels.js";
+import { closeBrowser, parseSlides } from "./lib/render.js";
+import { buildReel, renderPostSlides, slidesToCards } from "./reels.js";
 import { categoryForRow } from "./lib/category.js";
 import { uploadSlides, uploadVideo, hasCloudinary } from "./lib/cloudinary.js";
 
@@ -30,12 +30,16 @@ if (requestedId && !targets.length) {
 for (const row of targets) {
   const outDir = path.join(ROOT, "renders", "preview", row.ID);
   try {
+    // Same renderers as publishing: reels and stories are voiced videos, carousels themed slides
     let previewLinks;
-    if (String(row.Format).toLowerCase() === "reel") {
-      const result = await buildReel(row.Slides_or_Script, outDir, { category: categoryForRow(row) });
+    const format = String(row.Format).toLowerCase();
+    const category = categoryForRow(row);
+    if (format === "reel" || format === "story") {
+      const cards = format === "story" ? slidesToCards(parseSlides(row.Slides_or_Script), { title: row.Title, category, complete: true }) : undefined;
+      const result = await buildReel(row.Slides_or_Script, outDir, { category, cards });
       previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "reel" })];
     } else {
-      const images = await renderSlides(parseSlides(row.Slides_or_Script), outDir);
+      const images = await renderPostSlides(parseSlides(row.Slides_or_Script), outDir, { category, script: row.Slides_or_Script });
       previewLinks = await uploadSlides(images, `${row.ID}/preview`);
     }
     const nextHeaders = headers.includes("Preview_Link") ? headers : await ensureColumns("Content_Queue", ["Preview_Link"]);

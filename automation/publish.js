@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, nowInZone, logRun } from "./lib/sheets.js";
-import { parseSlides, renderSlides, closeBrowser } from "./lib/render.js";
+import { parseSlides, closeBrowser } from "./lib/render.js";
 import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
 import { categoryForRow } from "./lib/category.js";
 
@@ -126,17 +126,23 @@ async function loadRows() {
   return { rows, headers, failures: failureCounts(runLog.rows) };
 }
 
-// Renders the row and returns local files (+ the reel video when Format=Reel).
+// Renders the row: reels and stories become voiced videos, carousels themed slides.
 async function renderRow(row, outDir) {
   const format = row.Format.toLowerCase();
+  const category = categoryForRow(row);
+  const { buildReel, renderPostSlides, slidesToCards } = await import("./reels.js");
   if (format === "reel") {
-    const { buildReel } = await import("./reels.js");
-    const reel = await buildReel(row.Slides_or_Script, outDir, { category: categoryForRow(row) });
+    const reel = await buildReel(row.Slides_or_Script, outDir, { category });
     return { images: [], video: reel.file, note: `${reel.seconds}s reel` };
   }
   const slides = parseSlides(row.Slides_or_Script);
+  if (format === "story") {
+    const cards = slidesToCards(slides, { title: row.Title, category, complete: true });
+    const story = await buildReel(row.Slides_or_Script, outDir, { category, cards });
+    return { images: [], video: story.file, note: `${story.seconds}s story video` };
+  }
   if (slides.length > 20) throw new Error(`Carousel has ${slides.length} slides; Instagram allows 20`);
-  const images = await renderSlides(slides, outDir, { format: format === "story" ? "story" : "post" });
+  const images = await renderPostSlides(slides, outDir, { category, script: row.Slides_or_Script });
   return { images, video: null, note: `${images.length} slide(s)` };
 }
 
@@ -149,8 +155,15 @@ async function publishToInstagram(row, imageUrls, video) {
   const caption = [row.Caption, linksLine, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
 
   const { used, total } = await ig.getPublishingLimit();
-  const needed = format === "story" ? imageUrls.length : 1;
+  const needed = format === "story" && !video ? imageUrls.length : 1;
   if (used + needed > total) throw new Error(`Publishing limit reached (${used}/${total} in 24 h)`);
+
+  if (format === "story" && video) {
+    const id = await ig.createStoryVideoContainer(video);
+    await ig.waitUntilFinished(id, { intervalMs: 20_000, maxMs: 10 * 60_000 });
+    const mediaId = await ig.publish(id);
+    return { mediaId, permalink: `story:${mediaId}` };
+  }
 
   if (format === "story") {
     let firstId = null;
@@ -218,8 +231,8 @@ async function main() {
   }
 
   const outDir = path.join(ROOT, "renders", row.ID);
-  // A reel posts the exact video approved in the admin preview
-  const approvedVideo = row.Format.toLowerCase() === "reel"
+  // Reels and stories post the exact video approved in the admin preview
+  const approvedVideo = ["reel", "story"].includes(row.Format.toLowerCase())
     ? (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u))
     : null;
   try {
