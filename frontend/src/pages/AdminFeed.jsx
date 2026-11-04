@@ -476,7 +476,7 @@ function AdminFeed() {
               ) : previewRun && previewRun.status !== "completed" ? (
                 <p>Building the preview with the same pipeline used for posting (about 5 minutes)…</p>
               ) : previewRow.Preview_Link ? (
-                String(previewRow.Format).toLowerCase() === "reel" ? (
+                /\.mp4(\?|$)/i.test(previewRow.Preview_Link.split(/\s+/)[0]) ? (
                   <video key={previewRow.Preview_Link} className="feed-preview-video" src={previewRow.Preview_Link.split(/\s+/)[0]} controls playsInline />
                 ) : (
                   <div className="feed-preview-images">
