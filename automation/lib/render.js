@@ -45,10 +45,16 @@ export function parseSlides(script = "") {
 }
 
 // Reel scripts: "HOOK (0-3s): …", "POINT 1 (3-18s): …", "CTA (48-60s): …".
-// Timings in brackets are optional and set how long each card is shown.
+// Timings in brackets are optional and set how long each card is shown when there is no voiceover.
+// A "VO: …" line after a card is what the voice says for it (default: the card's own text).
 export function parseReelScript(script = "") {
   const cards = [];
   for (const raw of String(script).split(/\r?\n/)) {
+    const vo = raw.trim().match(/^(?:vo|voice\s*-?over|narration)\s*[:\-–]\s*(.+)$/i);
+    if (vo && cards.length) {
+      cards[cards.length - 1].voice = vo[1].trim();
+      continue;
+    }
     const m = raw.trim().match(/^(hook|point|cta)\s*\d*\s*(?:\(([^)]*)\))?\s*[:\-–]\s*(.+)$/i);
     if (!m) continue;
     const kind = m[1].toLowerCase();
@@ -68,7 +74,7 @@ export function parseReelScript(script = "") {
 }
 
 let browserPromise = null;
-async function getBrowser() {
+export async function getBrowser() {
   if (!browserPromise) {
     const { chromium } = await import("playwright");
     browserPromise = chromium.launch();

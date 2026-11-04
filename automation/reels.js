@@ -1,25 +1,61 @@
-// Reel script (HOOK / POINT / CTA lines) → 1080x1920 MP4 (H.264, 30 fps, 30–45 s).
+// Reel script (HOOK / POINT / CTA lines) → cinematic 1080x1920 MP4 (H.264, 30 fps, AAC).
 //   node reels.js --sample          build the sample reel from fixtures/
 //   node reels.js --script file.txt build a reel from a script file
-// publish.js uses buildReel() for Content_Queue rows with Format=Reel.
+//   --category tech|govt|events|news|ai  render in that category's look
+// publish.js and preview.js use buildReel() for Content_Queue rows with Format=Reel.
+//
+// Each card is voiced (Edge neural TTS, lib/voice.js) and the edit follows the voice: scene
+// lengths come from the narration, words appear as they are spoken, and a synthesised score
+// (lib/score.js) hits on every cut and ducks under the voice. Frames come from
+// templates/reel.html, stepped frame by frame in Chromium and piped into ffmpeg.
+//
+// Looks: one per daily category (tech → browser, govt → notes, events → terminal, news → news,
+// ai → cinematic). A "THEME: notes" line in the script or REEL_THEME overrides it.
+// REEL_ALLOW_SILENT=true builds a music-only reel when TTS is unreachable instead of failing.
+// A track in automation/assets/ (mp3/m4a/aac/wav) replaces the synthesised score.
 
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { ROOT } from "./lib/config.js";
-import { parseReelScript, renderSlides, closeBrowser } from "./lib/render.js";
+import { parseReelScript, getBrowser, closeBrowser } from "./lib/render.js";
+import { narrate, evenTiming, speak } from "./lib/voice.js";
+import { writeScore } from "./lib/score.js";
 
-const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
-const FADE = 0.4;
+const FPS = 30;
+const MAX_SECONDS = 90;
+const TEMPLATE = path.join(ROOT, "templates", "reel.html");
+const brand = JSON.parse(fs.readFileSync(path.join(ROOT, "templates", "brand.json"), "utf8"));
+export const THEMES = ["cinematic", "terminal", "notes", "browser", "news"];
 
-// Timings from the script ("POINT 1 (3-18s)") win, each card 2–20 s, the reel at most 90 s.
+export const CATEGORY_THEME = { tech: "browser", govt: "notes", events: "terminal", news: "news", ai: "cinematic" };
+
+function pickTheme(script, category) {
+  const named = String(script).match(/^\s*theme\s*[:\-–]\s*(\w+)/im)?.[1] || process.env.REEL_THEME;
+  if (named && THEMES.includes(named.toLowerCase())) return named.toLowerCase();
+  if (CATEGORY_THEME[category]) return CATEGORY_THEME[category];
+  let h = 0;
+  for (const ch of String(script)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return THEMES[h % THEMES.length];
+}
+
+async function ffmpegPath() {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  try {
+    return (await import("ffmpeg-static")).default || "ffmpeg";
+  } catch {
+    return "ffmpeg";
+  }
+}
+
+// Silent fallback timings. Script timings ("POINT 1 (3-18s)") win, each card 2–20 s, the reel at most 90 s.
 // Otherwise: hook 4 s, CTA 5 s, points share the rest so the reel lands around 36 s (min 30, max 45).
 export function planDurations(cards) {
   if (cards.length && cards.every((c) => c.seconds > 0)) {
     let durations = cards.map((c) => Math.min(20, Math.max(2, c.seconds)));
     const total = durations.reduce((a, b) => a + b, 0);
-    if (total > 90) durations = durations.map((d) => d * (90 / total));
+    if (total > MAX_SECONDS) durations = durations.map((d) => d * (MAX_SECONDS / total));
     return durations.map((d) => +d.toFixed(2));
   }
   const points = cards.filter((c) => c.kind === "point").length;
@@ -39,57 +75,182 @@ function pickTrack() {
   return track ? path.join(dir, track) : null;
 }
 
-function run(cmd, args) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { stdio: ["ignore", "ignore", "pipe"] });
-    let err = "";
-    p.stderr.on("data", (d) => (err = (err + d).slice(-4000)));
+function run(cmd, args, { stdin = false } = {}) {
+  const p = spawn(cmd, args, { stdio: [stdin ? "pipe" : "ignore", "ignore", "pipe"] });
+  let err = "";
+  p.stderr.on("data", (d) => (err = (err + d).slice(-4000)));
+  const done = new Promise((resolve, reject) => {
     p.on("error", (e) =>
-      reject(e.code === "ENOENT" ? new Error("ffmpeg not found: install it or set FFMPEG_PATH") : e)
+      reject(e.code === "ENOENT" ? new Error("ffmpeg not found: npm install (ffmpeg-static) or set FFMPEG_PATH") : e)
     );
     p.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}\n${err}`))));
   });
+  return { proc: p, done };
 }
 
-export async function buildReel(script, outDir) {
-  const cards = parseReelScript(script);
-  if (cards.length < 2) throw new Error("Reel script needs at least a HOOK and a CTA line");
+// Lead-in before the voice starts and hold after it ends, per card kind
+const LEAD = 0.3;
+const TAIL = { hook: 0.45, point: 0.85, cta: 2.4 };
 
-  const images = await renderSlides(cards, outDir, { format: "reel", prefix: "card" });
-  const durations = planDurations(cards);
-  const total = +durations.reduce((a, b) => a + b, 0).toFixed(2);
+// Said before each point (not shown), so it sounds like a person walking through a list
+function connector(c, cards) {
+  if (c.kind !== "point" || c.voice) return "";
+  const points = cards.filter((x) => x.kind === "point");
+  if (points.length < 2) return "";
+  const i = points.indexOf(c);
+  return i === 0 ? "First up," : i === points.length - 1 ? "And finally," : i === 1 ? "Next," : "Also,";
+}
+
+async function voiceCards(cards, outDir, ffmpeg, rate) {
+  const voiced = [];
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i];
+    const file = path.join(outDir, "voice", `vo-${String(i + 1).padStart(2, "0")}.mp3`);
+    const vo = await speak(c.voice || c.text, file, { ffmpeg, rate, prefix: connector(c, cards) });
+    // A separate VO line can't be matched word for word, so spread the on-screen words over it
+    const tokens = c.voice ? evenTiming(narrate(c.text).tokens, vo.seconds * 0.9) : vo.tokens;
+    voiced.push({ ...c, tokens, voiceFile: vo.file, voiceDur: vo.seconds });
+  }
+  return voiced;
+}
+
+function timeline(cards, silent) {
+  const durations = silent ? planDurations(cards) : null;
+  const points = cards.filter((c) => c.kind === "point").length;
+  let start = 0;
+  let p = 0;
+  return cards.map((c, i) => {
+    const dur = silent ? durations[i] : Math.max(2.4, LEAD + c.voiceDur + TAIL[c.kind]);
+    const voiceDur = silent ? dur * 0.75 : c.voiceDur;
+    const tokens = silent ? evenTiming(narrate(c.text).tokens, voiceDur) : c.tokens;
+    if (c.kind === "point") p += 1;
+    const scene = {
+      kind: c.kind,
+      start: +start.toFixed(3),
+      dur: +dur.toFixed(3),
+      voiceAt: +(start + LEAD).toFixed(3),
+      voiceDur,
+      voiceFile: c.voiceFile,
+      tokens,
+      structured: c.text.includes("|"),
+      index: c.kind === "point" ? p : 0,
+      count: points,
+    };
+    start += dur;
+    return scene;
+  });
+}
+
+async function renderFrames(scenes, total, file, ffmpeg, { theme, category }) {
+  const browser = await getBrowser();
+  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
+  await page.goto(pathToFileURL(TEMPLATE).href, { waitUntil: "networkidle" }).catch(() => page.goto(pathToFileURL(TEMPLATE).href));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const data = {
+    brand,
+    total,
+    today: today.getTime(),
+    kicker: process.env.REEL_KICKER || "this week, for freshers",
+    theme,
+    category,
+    scenes: scenes.map(({ voiceFile, ...s }) => s),
+  };
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate((d) => window.setupReel(d), data);
+  await page.evaluate(() => document.fonts.ready);
+
+  const { proc, done } = run(ffmpeg, [
+    "-y", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "-",
+    // Light film grain, then H.264 capped well under Instagram's limits
+    "-vf", "noise=alls=7:allf=t,format=yuv420p",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-maxrate", "9M", "-bufsize", "18M", "-profile:v", "high",
+    "-r", String(FPS), file,
+  ], { stdin: true });
+  const frames = Math.ceil(total * FPS);
+  // Raw CDP capture is ~4x faster than page.screenshot() for a full 1080x1920 frame
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    for (let f = 0; f < frames; f++) {
+      await page.evaluate((t) => window.seek(t), f / FPS);
+      const { data: jpg } = await cdp.send("Page.captureScreenshot", { format: "jpeg", quality: 92, optimizeForSpeed: true });
+      if (!proc.stdin.write(Buffer.from(jpg, "base64"))) await new Promise((r) => proc.stdin.once("drain", r));
+    }
+  } finally {
+    await cdp.detach().catch(() => {});
+    proc.stdin.end();
+    await page.close();
+  }
+  await done;
+}
+
+async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme }) {
   const track = pickTrack();
-  const output = path.join(outDir, "reel.mp4");
+  const bed = track || writeScore(path.join(outDir, "score.wav"), { seconds: total, cuts: scenes.map((s) => s.start), mood: theme });
+  const voices = scenes.filter((s) => s.voiceFile);
 
-  const args = ["-y"];
-  images.forEach((img, i) => args.push("-loop", "1", "-framerate", "30", "-t", String(durations[i]), "-i", img));
-  if (track) args.push("-stream_loop", "-1", "-i", track);
-  else args.push("-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=44100:cl=stereo");
+  const args = ["-y", "-i", video];
+  if (track) args.push("-stream_loop", "-1");
+  args.push("-i", bed);
+  voices.forEach((s) => args.push("-i", s.voiceFile));
 
-  const n = images.length;
-  const video = images
-    .map(
-      (_, i) =>
-        `[${i}:v]scale=1188:2112,crop=1080:1920:` +
-        `x='(iw-1080)*${i % 2 ? "0.72" : "0.28"}':y='(ih-1920)*${i % 3 / 2}',` +
-        `setsar=1,format=yuv420p,zoompan=z='min(zoom+0.0007,1.06)':` +
-        `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,` +
-        `fade=t=in:st=0:d=${FADE},fade=t=out:st=${(durations[i] - FADE).toFixed(2)}:d=${FADE}[v${i}]`
-    )
-    .join(";");
-  const concat = `${images.map((_, i) => `[v${i}]`).join("")}concat=n=${n}:v=1:a=0[v]`;
-  const audio = `[${n}:a]atrim=0:${total},asetpts=N/SR/TB,volume=${track ? 0.6 : 1},afade=t=out:st=${Math.max(0, total - 1.5)}:d=1.5[a]`;
+  const fmt = "aformat=sample_rates=44100:channel_layouts=stereo";
+  let graph;
+  if (voices.length) {
+    const vo = voices
+      .map((s, i) =>
+        `[${i + 2}:a]${fmt},highpass=f=90,acompressor=threshold=0.125:ratio=3:attack=5:release=120:makeup=2,` +
+        `adelay=${Math.round(s.voiceAt * 1000)}:all=1,apad=whole_dur=${total}[v${i}]`
+      )
+      .join(";");
+    graph =
+      `${vo};${voices.map((_, i) => `[v${i}]`).join("")}amix=inputs=${voices.length}:normalize=0:duration=longest,asplit[vo][key];` +
+      `[1:a]${fmt},volume=${track ? 0.5 : 0.8},atrim=0:${total}[bed];` +
+      `[bed][key]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=350[duck];` +
+      `[duck][vo]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11,` +
+      `afade=t=out:st=${Math.max(0, total - 1.2)}:d=1.2[a]`;
+  } else {
+    graph = `[1:a]${fmt},atrim=0:${total},loudnorm=I=-15:TP=-1.5:LRA=11,afade=t=out:st=${Math.max(0, total - 1.5)}:d=1.5[a]`;
+  }
 
   args.push(
-    "-filter_complex", `${video};${concat};${audio}`,
-    "-map", "[v]", "-map", "[a]",
-    "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", "30",
-    "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+    "-filter_complex", graph,
+    "-map", "0:v", "-map", "[a]",
+    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "44100",
     "-movflags", "+faststart", "-t", String(total),
     output
   );
-  await run(FFMPEG, args);
-  return { file: output, seconds: total, cards: cards.length, track: track ? path.basename(track) : null };
+  await run(ffmpeg, args).done;
+  return track;
+}
+
+export async function buildReel(script, outDir, { category } = {}) {
+  const cards = parseReelScript(script);
+  if (cards.length < 2) throw new Error("Reel script needs at least a HOOK and a CTA line");
+  fs.mkdirSync(outDir, { recursive: true });
+  const ffmpeg = await ffmpegPath();
+
+  let voiced = null;
+  try {
+    voiced = await voiceCards(cards, outDir, ffmpeg);
+    // Too long for a reel: one faster take before giving up
+    if (timeline(voiced, false).reduce((t, s) => t + s.dur, 0) > MAX_SECONDS) voiced = await voiceCards(cards, outDir, ffmpeg, "+22%");
+  } catch (err) {
+    if (String(process.env.REEL_ALLOW_SILENT).toLowerCase() !== "true") throw err;
+    console.warn(`${err.message}; building the reel without a voiceover (REEL_ALLOW_SILENT=true)`);
+  }
+
+  const scenes = timeline(voiced || cards, !voiced);
+  const total = +scenes.reduce((t, s) => t + s.dur, 0).toFixed(2);
+  if (total > MAX_SECONDS) throw new Error(`Reel would run ${total}s; Instagram reels from the API max out at ${MAX_SECONDS}s`);
+
+  const theme = pickTheme(script, category);
+  const video = path.join(outDir, "video.mp4");
+  const output = path.join(outDir, "reel.mp4");
+  await renderFrames(scenes, total, video, ffmpeg, { theme, category: category || "tech" });
+  const track = await mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme });
+  fs.rmSync(video, { force: true });
+  return { file: output, seconds: total, cards: cards.length, track: track ? path.basename(track) : "score", voice: !!voiced, theme };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -103,8 +264,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         ).Slides_or_Script;
   const outDir = path.join(ROOT, "renders", scriptArg >= 0 ? path.basename(argv[scriptArg + 1], path.extname(argv[scriptArg + 1])) : "sample-reel");
   try {
-    const result = await buildReel(script, outDir);
-    console.log(`Reel ready: ${result.file} (${result.seconds}s, ${result.cards} cards, music: ${result.track || "none"})`);
+    const started = Date.now();
+    const category = argv.includes("--category") ? argv[argv.indexOf("--category") + 1] : undefined;
+    const result = await buildReel(script, outDir, { category });
+    console.log(
+      `Reel ready: ${result.file} (${result.seconds}s, ${result.cards} cards, theme: ${result.theme}, voice: ${result.voice ? "yes" : "no"}, ` +
+      `music: ${result.track}, built in ${Math.round((Date.now() - started) / 1000)}s)`
+    );
   } catch (err) {
     console.error(`reel failed: ${err.message}`);
     process.exitCode = 1;
