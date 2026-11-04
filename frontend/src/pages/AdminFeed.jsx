@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { HiExternalLink, HiRefresh } from "react-icons/hi";
@@ -46,7 +46,7 @@ const parseSlides = (script = "") =>
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, busy, posting }) {
+function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, onRegenerate, building, busy, posting }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -117,9 +117,18 @@ function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, busy, p
         <div className="feed-actions">
           {status === "Approved" ? (
             <>
-              <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
-                {row.Preview_Link ? "View preview" : "Generate preview"}
-              </button>
+              {building && !row.Preview_Link ? (
+                <button className="btn btn-secondary btn-sm" disabled>Building preview…</button>
+              ) : (
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
+                  {row.Preview_Link ? "View preview" : "Generate preview"}
+                </button>
+              )}
+              {row.Preview_Link && (
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onRegenerate(row)}>
+                  Regenerate preview
+                </button>
+              )}
               <button className="btn btn-primary btn-sm" disabled={busy || posting || !row.Preview_Link} onClick={() => onPostNow(row)}>
                 {posting ? "Posting…" : "Post to Instagram"}
               </button>
@@ -234,7 +243,7 @@ function AdminFeed() {
   const [postPage, setPostPage] = useState(1);
   const [previewRow, setPreviewRow] = useState(null);
   const [previewRun, setPreviewRun] = useState(null);
-  const building = useRef({}); // post ID → when its preview build was started
+  const [building, setBuilding] = useState({}); // post ID → when its preview build started
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -278,26 +287,75 @@ function AdminFeed() {
     }
   };
 
+  const markBuilding = (id) => setBuilding((b) => ({ ...b, [id]: Date.now() }));
+  const updateRowLocally = (row) => setData((d) => ({ ...d, rows: d.rows.map((r) => (r.ID === row.ID ? { ...r, ...row } : r)) }));
+
   // Starts a preview build, unless one for this post started in the last 15 minutes
   const startPreview = async (id) => {
-    if (Date.now() - (building.current[id] || 0) > 15 * 60_000) {
+    if (Date.now() - (building[id] || 0) > 15 * 60_000) {
       await axios.post("/api/admin-sheet", { action: "preview-now", id }, api);
-      building.current[id] = Date.now();
+      markBuilding(id);
     }
     setPreviewRun({ id, status: "waiting" });
   };
 
-  // Approving builds the preview straight away so it's ready to review
+  // Approving builds a fresh preview on the server (any earlier one is replaced)
   const onApprove = async (row) => {
-    await onSave(row.ID, { Status: "Approved" }, "Approved. Building the preview…");
-    if (!row.Preview_Link) {
-      try {
-        await startPreview(row.ID);
-      } catch (err) {
-        toast.error(err.response?.data?.message || "Couldn't start the preview.");
+    setBusy(true);
+    try {
+      const { data: res } = await axios.post("/api/admin-sheet", { tab, id: row.ID, patch: { Status: "Approved" } }, api);
+      updateRowLocally(res.row);
+      if (res.previewStarted === false) {
+        toast.error("Approved, but the preview didn't start. Use Generate preview.");
+      } else {
+        markBuilding(row.ID);
+        toast.success("Approved. Building the preview (about 5 minutes).");
       }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Couldn't approve. Try again.");
+    } finally {
+      setBusy(false);
     }
   };
+
+  // Replaces the current preview with a newly built one
+  const onRegenerate = async (row) => {
+    setBusy(true);
+    try {
+      const { data: res } = await axios.post("/api/admin-sheet", { action: "regenerate-preview", id: row.ID }, api);
+      updateRowLocally(res.row);
+      markBuilding(row.ID);
+      toast.success("Building a new preview (about 5 minutes).");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Couldn't start a new preview.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // While previews are building, check every 20 s and swap them in when ready
+  const buildingIds = Object.keys(building).join(",");
+  useEffect(() => {
+    if (!buildingIds || tab !== "Content_Queue") return;
+    const timer = setInterval(async () => {
+      try {
+        const { data: fresh } = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
+        setData(fresh);
+        const ready = fresh.rows.filter((r) => building[r.ID] && r.Preview_Link);
+        ready.forEach((r) => toast.success(`Preview ready: ${r.Title || r.ID}`));
+        setBuilding((b) => {
+          const next = { ...b };
+          for (const id of Object.keys(next)) {
+            if (ready.some((r) => r.ID === id) || Date.now() - next[id] > 20 * 60_000) delete next[id];
+          }
+          return next;
+        });
+      } catch {
+        /* keep waiting */
+      }
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [buildingIds, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Always shows the newest preview: re-reads the row first, and builds it now if it's missing
   const onPreview = async (row) => {
@@ -451,7 +509,7 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPostNow={onPostNow} onPreview={onPreview} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPostNow={onPostNow} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
             </div>
           )}
@@ -487,6 +545,11 @@ function AdminFeed() {
             </div>
             <footer className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setPreviewRow(null); setPreviewRun(null); }}>Close</button>
+              {previewRow.Status === "Approved" && previewRow.Preview_Link && (
+                <button className="btn btn-secondary" disabled={busy} onClick={() => { setPreviewRow(null); setPreviewRun(null); onRegenerate(previewRow); }}>
+                  Regenerate preview
+                </button>
+              )}
               {previewRow.Status === "Approved" && (
                 <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPostNow(previewRow); }}>
                   Post to Instagram
