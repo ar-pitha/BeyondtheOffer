@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "description": "Google Sheet → MongoDB sync and Instagram publisher for BeyondTheOffer",
   "type": "module",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "sync": "node sync.js",
     "sync:dry": "node sync.js --dry-run",
@@ -16,6 +18,8 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "ffmpeg-static": "^5.3.0",
+    "node-edge-tts": "^1.2.12",
     "playwright": "^1.48.0"
   }
 }
