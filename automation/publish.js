@@ -15,6 +15,7 @@ import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, nowInZone, logRun } from "./lib/sheets.js";
 import { parseSlides, renderSlides, closeBrowser } from "./lib/render.js";
 import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
+import { categoryForRow } from "./lib/category.js";
 
 const dryRun = isDryRun();
 const sample = hasFlag("sample");
@@ -40,15 +41,6 @@ const CATEGORY_HASHTAGS = {
   events: "#hackathon #quiz #codingchallenge #studentdevelopers #techstudents",
   ai: "#ainews #artificialintelligence #machinelearning #techupdates #futureofwork",
 };
-
-function categoryForRow(row) {
-  const text = `${row.Title || ""} ${row.Slides_or_Script || ""} ${row.Hashtags || ""}`.toLowerCase();
-  const ids = String(row.Item_IDs || "").toUpperCase();
-  if (ids.split(/[,\s]+/).some((id) => id.startsWith("GJ-")) || /\b(government|govt|ssc|upsc|banking)\b/.test(text)) return "govt";
-  if (ids.split(/[,\s]+/).some((id) => id.startsWith("HQ-")) || /\b(hackathon|quiz|ctf|contest)\b/.test(text)) return "events";
-  if (ids.split(/[,\s]+/).some((id) => id.startsWith("TN-"))) return /\b(ai|artificial intelligence|machine learning|llm|model)\b/.test(text) ? "ai" : "news";
-  return "tech";
-}
 
 function rotationForDate(date) {
   const day = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / 86400000;
@@ -98,8 +90,8 @@ function pickRow(rows, failures) {
   const approved = rows.filter(
     (r) =>
       r.Status === "Approved" &&
-      r.Publish_Confirmed === "Y" &&
-      r.Preview_Link &&
+      // Fixture rows have no admin preview step
+      (sample || (r.Publish_Confirmed === "Y" && r.Preview_Link)) &&
       FORMATS.includes((r.Format || "").toLowerCase()) &&
       r.Slides_or_Script
   );
@@ -139,7 +131,7 @@ async function renderRow(row, outDir) {
   const format = row.Format.toLowerCase();
   if (format === "reel") {
     const { buildReel } = await import("./reels.js");
-    const reel = await buildReel(row.Slides_or_Script, outDir);
+    const reel = await buildReel(row.Slides_or_Script, outDir, { category: categoryForRow(row) });
     return { images: [], video: reel.file, note: `${reel.seconds}s reel` };
   }
   const slides = parseSlides(row.Slides_or_Script);
@@ -226,10 +218,14 @@ async function main() {
   }
 
   const outDir = path.join(ROOT, "renders", row.ID);
+  // A reel posts the exact video approved in the admin preview
+  const approvedVideo = row.Format.toLowerCase() === "reel"
+    ? (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u))
+    : null;
   try {
-    const { images, video, note } = await renderRow(row, outDir);
+    const { images, video, note } = approvedVideo ? { images: [], video: null, note: "approved preview reel" } : await renderRow(row, outDir);
     await closeBrowser();
-    console.log(`Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
+    console.log(approvedVideo ? `Using the approved preview: ${approvedVideo}` : `Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
 
     let urls = [];
     if (images.length && hasCloudinary()) {
@@ -240,7 +236,7 @@ async function main() {
       console.log("Cloudinary not configured: skipped upload.");
     }
 
-    let videoUrl = null;
+    let videoUrl = approvedVideo || null;
     if (video && hasCloudinary()) {
       videoUrl = await uploadVideo(video, { folder: `beyondtheoffer/${row.ID}`, publicId: "reel" });
       console.log(`Uploaded reel to Cloudinary:\n  ${videoUrl}`);

@@ -3,6 +3,7 @@ import { ROOT } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns } from "./lib/sheets.js";
 import { renderSlides, closeBrowser, parseSlides } from "./lib/render.js";
 import { buildReel } from "./reels.js";
+import { categoryForRow } from "./lib/category.js";
 import { uploadSlides, uploadVideo, hasCloudinary } from "./lib/cloudinary.js";
 
 if (!hasCloudinary()) throw new Error("Cloudinary is required for admin previews");
@@ -31,7 +32,7 @@ for (const row of targets) {
   try {
     let previewLinks;
     if (String(row.Format).toLowerCase() === "reel") {
-      const result = await buildReel(row.Slides_or_Script, outDir);
+      const result = await buildReel(row.Slides_or_Script, outDir, { category: categoryForRow(row) });
       previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "reel" })];
     } else {
       const images = await renderSlides(parseSlides(row.Slides_or_Script), outDir);
