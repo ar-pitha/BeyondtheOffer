@@ -306,7 +306,7 @@ function AdminFeed() {
       const { data: res } = await axios.post("/api/admin-sheet", { tab, id: row.ID, patch: { Status: "Approved" } }, api);
       updateRowLocally(res.row);
       if (res.previewStarted === false) {
-        toast.error("Approved, but the preview didn't start. Use Generate preview.");
+        toast.error(`Approved, but the preview didn't start. ${res.previewError || "Use Generate preview."}`, { duration: 8000 });
       } else {
         markBuilding(row.ID);
         toast.success("Approved. Building the preview (about 5 minutes).");
