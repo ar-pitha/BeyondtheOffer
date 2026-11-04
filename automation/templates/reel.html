@@ -177,6 +177,20 @@
   .ig-grid i { aspect-ratio: 1; }
   .cta .pill { margin-top: -40px; align-self: center; position: relative; }
   .heart { position: absolute; left: 0; top: 0; font-size: 56px; opacity: 0; }
+
+  /* Carousel slides: 1080x1350 stills with a slide counter instead of story bars */
+  html.post, body.post { height: 1350px; }
+  .post #hud { padding-top: 70px; }
+  .post .box { top: 190px; height: 1060px; }
+  .post .bubble { top: 330px; }
+  .post .breaking { top: 180px; }
+  .post.t-news .bubble { top: 260px; }
+  .post .cta .box { top: 180px; }
+  .post .phone { zoom: .78; }
+  .post #ticker { top: 1262px; }
+  .still .segs { display: none; }
+  .brand .count { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .swipe { margin-top: 34px; display: inline-flex; padding: 16px 28px; border-radius: 999px; background: var(--accent2); color: #fff; font-size: 32px; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -277,11 +291,13 @@ while (!offer) { learn(); build(); apply(); }`;
   window.setupReel = (data) => {
     R = { ...data, els: [], cur: { x: 900, y: 1500 } };
     const theme = data.theme;
-    document.body.className = `t-${theme}`;
+    const post = data.format === "post";
+    document.body.className = `t-${theme}${post ? " post" : ""}${data.still ? " still" : ""}`;
+    document.documentElement.className = post ? "post" : "";
     $("#bg").innerHTML = BG[theme]();
     $("#barTop").style.height = $("#barBottom").style.height = "0px";
     if ($("#tickerText")) $("#tickerText").textContent = ` ${data.brand.handle.toUpperCase()} • FRESHER JOBS • GOVT NOTIFICATIONS • HACKATHONS • TECH NEWS • `.repeat(6);
-    $("#hud").innerHTML = `<div class="brand"><span class="dot"></span>${esc(data.brand.handle)}</div>
+    $("#hud").innerHTML = `<div class="brand"><span class="dot"></span>${esc(data.brand.handle)}<span class="count"></span></div>
       <div class="segs">${data.scenes.map(() => "<span><i></i></span>").join("")}</div>`;
     const stage = $("#stage");
     stage.innerHTML = "";
@@ -296,7 +312,8 @@ while (!offer) { learn(); build(); apply(); }`;
         html = `${theme === "news" ? `<div class="breaking">BREAKING</div>` : ""}
           <div class="bubble"><div class="kicker">${esc(data.kicker)}</div>
           <h1 class="kin">${words(byField(fields[0]))}</h1>
-          ${fields.slice(1).map((f) => `<div class="sub kin">${words(byField(f))}</div>`).join("")}</div>`;
+          ${fields.slice(1).map((f) => `<div class="sub kin">${words(byField(f))}</div>`).join("")}
+          ${data.still && data.format === "post" && data.scenes.length > 1 ? `<div class="swipe">Swipe for details →</div>` : ""}</div>`;
       } else if (sc.kind === "point") {
         const label = theme === "browser" || theme === "terminal" ? "" : `<div class="label">${sc.count > 1 ? `${sc.index} of ${sc.count}` : "Update"}</div>`;
         let inner;
@@ -308,8 +325,10 @@ while (!offer) { learn(); build(); apply(); }`;
           inner = `${label}<h1 class="kin">${words(byField(fields[0]))}</h1>
             <div class="chips">${chips.map((c) => `<span class="chip" data-f="${c.f}">${esc(showToken(c.text))}</span>`).join("")}</div>
             ${deadline ? `<div class="stub" data-f="${deadline.f}" data-days="${n ?? ""}">${
-              n !== null && n >= 0 && n <= 60
-                ? `<span class="n">0</span><span class="t">days left<br>to apply</span>`
+              n === 0
+                ? `<span class="t">Closes<br>today</span>`
+                : n !== null && n > 0 && n <= 60
+                ? `<span class="n">0</span><span class="t">${n === 1 ? "day" : "days"} left<br>to apply</span>`
                 : `<span class="t">${esc(showToken(deadline.text))}</span>`}</div>` : ""}`;
         } else {
           inner = `${label}<h1 class="kin say">${words(sc.tokens)}</h1><div class="bar"><i></i></div>`;
@@ -343,9 +362,10 @@ while (!offer) { learn(); build(); apply(); }`;
 
       const h1 = $("h1", el);
       el.style.opacity = 1;
-      if (sc.kind === "hook") fit(h1, 700, [112, 104, 96, 88, 80, 72, 64, 56]);
+      const room = data.format === "post" ? 0.72 : 1;
+      if (sc.kind === "hook") fit(h1, 700 * room, [112, 104, 96, 88, 80, 72, 64, 56]);
       else if (sc.kind === "cta") fit(h1, 150, [72, 64, 58, 52, 46]);
-      else fit(h1, sc.structured ? 460 : theme === "cinematic" || theme === "news" ? 760 : 660, [96, 88, 80, 72, 66, 60, 54, 48, 44]);
+      else fit(h1, (sc.structured ? 460 : theme === "cinematic" || theme === "news" ? 760 : 660) * room, [96, 88, 80, 72, 66, 60, 54, 48, 44]);
       el.style.opacity = 0;
       R.els.push({ el, ws: [...el.querySelectorAll("h1 .w")], extra: [...el.querySelectorAll(".sub .w")] });
     }
@@ -449,6 +469,10 @@ while (!offer) { learn(); build(); apply(); }`;
     if (theme === "cinematic") $("#barTop").style.height = $("#barBottom").style.height = `${110 * inOut(clamp(t / 1.2))}px`;
 
     let flash = 0, sweep = -1, shake = 0, cursorTarget = null, ctaCursor = false, clickNow = false;
+    if (R.still) {
+      const at = scenes.findIndex((sc) => t >= sc.start && t < sc.start + sc.dur);
+      $("#hud .count").textContent = `${at + 1}/${scenes.length}`;
+    }
     scenes.forEach((sc, i) => {
       const { el, ws, extra } = R.els[i];
       const lt = t - sc.start;
@@ -537,16 +561,16 @@ while (!offer) { learn(); build(); apply(); }`;
         phone.style.opacity = clamp(pe * 3);
         phone.style.transform = `translateY(${(1 - outBack(pe)) * 900 + Math.sin(t * 1.4) * 6}px) rotate(${(1 - outExpo(pe)) * 6}deg)`;
         const btn = $(".follow", el), tapAt = Math.max(sc.followAt, 0.75) + 0.35;
-        if (lt > 0.6 && vt < tapAt + 0.7) { cursorTarget = btn; R.lastTarget = btn; ctaCursor = true; }
-        if (!sc.tapped && vt >= tapAt) { sc.tapped = true; clickNow = true; }
-        const done = vt >= tapAt;
+        if (!R.still && lt > 0.6 && vt < tapAt + 0.7) { cursorTarget = btn; R.lastTarget = btn; ctaCursor = true; }
+        if (!R.still && !sc.tapped && vt >= tapAt) { sc.tapped = true; clickNow = true; }
+        const done = !R.still && vt >= tapAt; // a still slide asks you to follow
         btn.classList.toggle("done", done);
         btn.textContent = done ? "Following" : "Follow";
         btn.style.transform = done && vt < tapAt + 0.25 ? `scale(${1 + 0.12 * Math.sin(((vt - tapAt) / 0.25) * Math.PI)})` : "";
         const b = btn.getBoundingClientRect();
         el.querySelectorAll(".heart").forEach((h, k) => {
           const age = vt - tapAt - k * 0.04;
-          if (age < 0 || age > 1.1) { h.style.opacity = 0; return; }
+          if (R.still || age < 0 || age > 1.1) { h.style.opacity = 0; return; }
           const ang = -Math.PI / 2 + (k - 4) * 0.32, dist = 60 + 300 * outExpo(age / 1.1);
           h.style.opacity = 1 - age / 1.1;
           h.style.transform = `translate(${b.left + b.width / 2 - 28 + Math.cos(ang) * dist}px, ${b.top - 10 + Math.sin(ang) * dist}px) scale(${0.5 + 0.6 * outBack(clamp(age / 0.3))})`;
@@ -564,7 +588,7 @@ while (!offer) { learn(); build(); apply(); }`;
 
     // Cursor: in the browser look it follows what is being said and clicks through; in every
     // look it taps Follow on the profile at the end
-    if (theme === "browser" || ctaCursor) {
+    if (!R.still && (theme === "browser" || ctaCursor)) {
       const cur = $("#cursor"), rip = $("#ripple");
       if (cursorTarget && (theme === "browser" || ctaCursor)) {
         const r = cursorTarget.getBoundingClientRect();

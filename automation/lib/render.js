@@ -1,11 +1,5 @@
-// Content_Queue.Slides_or_Script → JPEG slides (Instagram accepts JPEG only).
-import fs from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { ROOT } from "./config.js";
-
-const TEMPLATE = path.join(ROOT, "templates", "carousel.html");
-const brand = JSON.parse(fs.readFileSync(path.join(ROOT, "templates", "brand.json"), "utf8"));
+// Content_Queue.Slides_or_Script parsing, plus the shared headless browser that
+// reels.js renders slides and reel frames with (templates/reel.html).
 
 // Things the Instagram API can't add (stickers) or that are notes for a designer
 const NOT_A_SLIDE = /\b(sticker|visuals?|music|audio|voiceover|b-roll)\b/i;
@@ -85,32 +79,4 @@ export async function getBrowser() {
 export async function closeBrowser() {
   if (browserPromise) await (await browserPromise).close();
   browserPromise = null;
-}
-
-// format: "post" (1080x1350) or "story"/"reel" (1080x1920)
-export async function renderSlides(slides, outDir, { format = "post", prefix = "slide" } = {}) {
-  fs.mkdirSync(outDir, { recursive: true });
-  const height = format === "post" ? 1350 : 1920;
-  const browser = await getBrowser();
-  const page = await browser.newPage({ viewport: { width: 1080, height }, deviceScaleFactor: 1 });
-  await page.goto(pathToFileURL(TEMPLATE).href, { waitUntil: "networkidle" }).catch(() =>
-    page.goto(pathToFileURL(TEMPLATE).href)
-  );
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const files = [];
-  for (let i = 0; i < slides.length; i++) {
-    await page.evaluate(
-      (data) => window.renderSlide(data),
-      { ...slides[i], index: i + 1, total: slides.length, brand, format, today: today.getTime() }
-    );
-    await page.evaluate(() => document.fonts.ready);
-    const file = path.join(outDir, `${prefix}-${String(i + 1).padStart(2, "0")}.jpg`);
-    await page.screenshot({ path: file, type: "jpeg", quality: 90, clip: { x: 0, y: 0, width: 1080, height } });
-    files.push(file);
-  }
-  await page.close();
-  return files;
 }

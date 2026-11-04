@@ -92,6 +92,61 @@ function run(cmd, args, { stdin = false } = {}) {
 const LEAD = 0.3;
 const TAIL = { hook: 0.45, point: 0.85, cta: 2.4 };
 
+// Comment keywords the auto-reply understands (frontend/api/_lib/replies.js)
+const KEYWORD = { tech: "JOB", govt: "JOB", events: "LINK", news: "AI", ai: "AI" };
+
+// Carousel/story slides (lib/render.js parseSlides) → reel cards. Stories get a hook and a CTA
+// when the draft has none, so the video opens and closes like a reel.
+export function slidesToCards(slides, { title = "", category = "tech", complete = false } = {}) {
+  const cards = slides.map((s) => ({
+    kind: s.variant === "cover" ? "hook" : s.variant === "cta" ? "cta" : "point",
+    text: s.fields.join(" | "),
+    seconds: null,
+  }));
+  if (complete && cards[0]?.kind !== "hook") cards.unshift({ kind: "hook", text: title || "Today's update", seconds: null });
+  if (complete && cards[cards.length - 1]?.kind !== "cta") {
+    cards.push({ kind: "cta", text: `Follow @beyond_the.offer for daily updates | Comment ${KEYWORD[category] || "LINK"} for the links`, seconds: null });
+  }
+  return cards;
+}
+
+// Carousel slides: each card as a finished still in the category's look (1080x1350 JPEG)
+export async function renderPostSlides(slides, outDir, { category, script = "" } = {}) {
+  fs.mkdirSync(outDir, { recursive: true });
+  const cards = slidesToCards(slides, { category });
+  const points = cards.filter((c) => c.kind === "point").length;
+  let p = 0;
+  const scenes = cards.map((c, i) => {
+    if (c.kind === "point") p += 1;
+    return {
+      kind: c.kind, start: i * 3, dur: 3, voiceAt: i * 3 + 0.3, voiceDur: 1,
+      tokens: evenTiming(narrate(c.text).tokens, 1), structured: c.text.includes("|"),
+      index: c.kind === "point" ? p : 0, count: points,
+    };
+  });
+  const browser = await getBrowser();
+  const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 1 });
+  await page.goto(pathToFileURL(TEMPLATE).href, { waitUntil: "networkidle" }).catch(() => page.goto(pathToFileURL(TEMPLATE).href));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate((d) => window.setupReel(d), {
+    brand, total: scenes.length * 3, today: today.getTime(), kicker: process.env.REEL_KICKER || "this week, for freshers",
+    theme: pickTheme(script, category), category: category || "tech", format: "post", still: true, scenes,
+  });
+  await page.evaluate(() => document.fonts.ready);
+  const files = [];
+  for (let i = 0; i < scenes.length; i++) {
+    // 2.5 s into a 3 s card: everything has animated in and nothing has started leaving
+    await page.evaluate((t) => window.seek(t), scenes[i].start + 2.5);
+    const file = path.join(outDir, `slide-${String(i + 1).padStart(2, "0")}.jpg`);
+    await page.screenshot({ path: file, type: "jpeg", quality: 92, clip: { x: 0, y: 0, width: 1080, height: 1350 } });
+    files.push(file);
+  }
+  await page.close();
+  return files;
+}
+
 // Said before each point (not shown), so it sounds like a person walking through a list
 function connector(c, cards) {
   if (c.kind !== "point" || c.voice) return "";
@@ -224,8 +279,8 @@ async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme })
   return track;
 }
 
-export async function buildReel(script, outDir, { category } = {}) {
-  const cards = parseReelScript(script);
+export async function buildReel(script, outDir, { category, cards: given } = {}) {
+  const cards = given || parseReelScript(script);
   if (cards.length < 2) throw new Error("Reel script needs at least a HOOK and a CTA line");
   fs.mkdirSync(outDir, { recursive: true });
   const ffmpeg = await ffmpegPath();

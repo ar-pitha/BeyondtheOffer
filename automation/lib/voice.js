@@ -24,7 +24,14 @@ function speakToken(token) {
 // Splits text into display tokens and a matching spoken line; tokens[i].at is the token's
 // character offset inside the spoken line so TTS word timings can be mapped back onto it.
 export function narrate(text) {
-  const clean = String(text).replace(/\s+\|\s+/g, " · ").replace(/\s+[-–—]\s+/g, ", ").replace(/\s+/g, " ").trim();
+  // Emoji are dropped (CI has no emoji font) and "->" becomes an arrow the voice skips
+  const clean = String(text)
+    .replace(/\p{Extended_Pictographic}️?/gu, "")
+    .replace(/\s*->\s*/g, " → ")
+    .replace(/\s+\|\s+/g, " · ")
+    .replace(/\s+[-–—]\s+/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
   const tokens = [];
   let spoken = "";
   let field = 0;
