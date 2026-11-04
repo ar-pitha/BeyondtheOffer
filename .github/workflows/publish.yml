@@ -63,12 +63,11 @@ jobs:
         working-directory: automation
         run: node publish.js --check $NOW_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
 
-      - name: Install Chromium and ffmpeg
+      # ffmpeg comes from the ffmpeg-static npm package
+      - name: Install Chromium
         if: steps.check.outputs.due == 'true'
         working-directory: automation
-        run: |
-          npx playwright install --with-deps chromium
-          command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+        run: npx playwright install --with-deps chromium
 
       - name: Publish
         if: steps.check.outputs.due == 'true'
