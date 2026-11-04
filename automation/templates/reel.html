@@ -381,12 +381,13 @@ while (!offer) { learn(); build(); apply(); }`;
   }
 
   // Each look has a signature cut plus a few more; cuts rotate through them so no two in a row match.
+  // data.variant shifts where the rotation starts, so a regenerated video cuts differently.
   const STYLES = {
-    cinematic: ["zoom", "circle", "spin"],
-    terminal: ["glitch", "slideUp", "punch"],
-    notes: ["swipe", "flip", "slideUp"],
-    browser: ["whip", "punch", "circle"],
-    news: ["wipe", "slideUp", "flip"],
+    cinematic: ["zoom", "circle", "spin", "whip"],
+    terminal: ["glitch", "slideUp", "punch", "wipe"],
+    notes: ["swipe", "flip", "slideUp", "circle"],
+    browser: ["whip", "punch", "circle", "zoom"],
+    news: ["wipe", "slideUp", "flip", "punch"],
   };
 
   // Scene entrance/exit. p: 0→1 entering, q: 0→1 leaving.
@@ -482,7 +483,7 @@ while (!offer) { learn(); build(); apply(); }`;
       const p = clamp(lt / 0.55);
       const q = i === scenes.length - 1 ? 0 : inOut(clamp((lt - (sc.dur - 0.32)) / 0.32));
       const drift = clamp(lt / sc.dur);
-      const style = STYLES[theme][i % STYLES[theme].length];
+      const style = STYLES[theme][(i + (R.variant | 0)) % STYLES[theme].length];
       transition(style, el, p, q, lt, drift);
       if (style === "zoom") flash = Math.max(flash, i > 0 ? Math.exp(-Math.abs(lt) * 9) : 0);
       if (lt >= 0) shake = Math.max(shake, Math.exp(-lt * 14) * (i === 0 ? 1.4 : 0.7)); // impact on every cut

@@ -36,7 +36,8 @@ for (const row of targets) {
     const category = categoryForRow(row);
     if (format === "reel" || format === "story") {
       const cards = format === "story" ? slidesToCards(parseSlides(row.Slides_or_Script), { title: row.Title, category, complete: true }) : undefined;
-      const result = await buildReel(row.Slides_or_Script, outDir, { category, cards });
+      // A new variant on every build, so Regenerate gives a differently cut video
+      const result = await buildReel(row.Slides_or_Script, outDir, { category, cards, variant: Math.floor(Date.now() / 1000) });
       previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "reel" })];
     } else {
       const images = await renderPostSlides(parseSlides(row.Slides_or_Script), outDir, { category, script: row.Slides_or_Script });

@@ -26,8 +26,13 @@ function rng(seed) {
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32) * 2 - 1;
 }
 
-export function writeScore(file, { seconds, cuts = [], mood = "cinematic" }) {
-  const { bpm, pulse, chords: CHORDS } = MOODS[mood] || MOODS.cinematic;
+// variant starts the progression on a different chord and nudges the tempo
+export function writeScore(file, { seconds, cuts = [], mood = "cinematic", variant = 0 }) {
+  const base = MOODS[mood] || MOODS.cinematic;
+  const shift = Math.abs(variant | 0) % base.chords.length;
+  const CHORDS = [...base.chords.slice(shift), ...base.chords.slice(0, shift)];
+  const bpm = base.bpm + ((Math.abs(variant | 0) % 3) - 1) * 4;
+  const { pulse } = base;
   const n = Math.ceil(seconds * SR);
   const L = new Float32Array(n);
   const R = new Float32Array(n);
