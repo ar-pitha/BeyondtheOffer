@@ -7,17 +7,34 @@ export * from "../../frontend/api/_lib/instagram.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export const createImageContainer = (imageUrl, { isCarouselItem = false, caption } = {}) =>
+// Collab posts appear on each collaborator's profile and in their followers' feeds.
+// The Graph API takes the usernames as a JSON array; each one has to accept the invite.
+const collabParam = (usernames = []) => (usernames.length ? JSON.stringify(usernames) : undefined);
+
+// Trial reels are shown to non-followers first. REEL_TRIAL=manual keeps them as trials;
+// REEL_TRIAL=auto lets Instagram share a reel with followers once it performs well.
+const TRIAL_STRATEGY = { manual: "MANUAL", auto: "SS_PERFORMANCE" };
+function trialParam(mode) {
+  const strategy = TRIAL_STRATEGY[String(mode || "").trim().toLowerCase()];
+  return strategy ? JSON.stringify({ graduation_strategy: strategy }) : undefined;
+}
+
+export const createImageContainer = (imageUrl, { isCarouselItem = false, caption, collaborators } = {}) =>
   igRequest(`${igUserId()}/media`, {
     method: "POST",
-    params: { image_url: imageUrl, is_carousel_item: isCarouselItem || undefined, caption: isCarouselItem ? undefined : caption },
+    params: {
+      image_url: imageUrl,
+      is_carousel_item: isCarouselItem || undefined,
+      caption: isCarouselItem ? undefined : caption,
+      collaborators: isCarouselItem ? undefined : collabParam(collaborators),
+    },
   }).then((d) => d.id);
 
-export function createCarouselContainer(childIds, caption) {
+export function createCarouselContainer(childIds, caption, { collaborators } = {}) {
   if (childIds.length < 2 || childIds.length > 20) throw new Error(`A carousel needs 2–20 items, got ${childIds.length}`);
   return igRequest(`${igUserId()}/media`, {
     method: "POST",
-    params: { media_type: "CAROUSEL", children: childIds.join(","), caption },
+    params: { media_type: "CAROUSEL", children: childIds.join(","), caption, collaborators: collabParam(collaborators) },
   }).then((d) => d.id);
 }
 
@@ -34,10 +51,17 @@ export const createStoryVideoContainer = (videoUrl) =>
 
 // Reels from a public MP4 URL (Cloudinary). This works with unified-login tokens,
 // where rupload.facebook.com rejects direct uploads.
-export const createReelContainerFromUrl = (videoUrl, caption) =>
+export const createReelContainerFromUrl = (videoUrl, caption, { collaborators, trial } = {}) =>
   igRequest(`${igUserId()}/media`, {
     method: "POST",
-    params: { media_type: "REELS", video_url: videoUrl, caption, share_to_feed: true },
+    params: {
+      media_type: "REELS",
+      video_url: videoUrl,
+      caption,
+      share_to_feed: true,
+      collaborators: collabParam(collaborators),
+      trial_params: trialParam(trial),
+    },
   }).then((d) => d.id);
 
 // Reels via resumable upload (Instagram-login tokens): no public video hosting needed.

@@ -34,12 +34,23 @@ const ROTATION = (process.env.CONTENT_ROTATION_IST || "tech,news,govt,events,ai"
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 
+// Instagram allows 5 hashtags per post (Dec 2025). They label the topic; reach comes from
+// the words in the caption, which Instagram search reads.
+const MAX_HASHTAGS = 5;
 const CATEGORY_HASHTAGS = {
-  tech: "#techjobs #softwarejobs #engineeringjobs #freshers #careers",
-  news: "#technews #technology #futureoftech #innovation #studentcommunity",
-  govt: "#governmentjobs #sarkarijob #ssc #bankjobs #freshers",
-  events: "#hackathon #quiz #codingchallenge #studentdevelopers #techstudents",
-  ai: "#ainews #artificialintelligence #machinelearning #techupdates #futureofwork",
+  tech: "#jobsforfreshers #offcampusdrive #freshersjobs #internship #placements",
+  news: "#technews #engineeringstudents #techupdates #developers #coding",
+  govt: "#governmentjobs #sarkarinaukri #govtjobs #sscexam #freshers",
+  events: "#hackathon #codingcontest #engineeringstudents #hackathonindia #students",
+  ai: "#ainews #artificialintelligence #engineeringstudents #techupdates #learnai",
+};
+// The phrases students type into Instagram search, added when the caption has none of them
+const CATEGORY_SEARCH = {
+  tech: ["jobs for freshers", "Jobs for freshers and off campus drives in India, with verified apply links."],
+  news: ["tech news", "Tech news for engineering students in India, in under a minute."],
+  govt: ["government jobs", "Government jobs for graduates in India, with verified notification links."],
+  events: ["hackathon", "Hackathons and coding contests for college students in India, with the registration deadlines."],
+  ai: ["ai news", "AI news for engineering students in India, in under a minute."],
 };
 
 function rotationForDate(date) {
@@ -47,11 +58,44 @@ function rotationForDate(date) {
   return ROTATION[Math.abs(Math.floor(day)) % ROTATION.length];
 }
 
+const tagsIn = (text) => String(text || "").match(/#[\p{L}\p{N}_]+/gu) || [];
+
+// The row's own (specific) tags first, then category defaults; the brand tag is dropped
+// because nobody searches for it.
 function withCategoryHashtags(row, category) {
-  const existing = String(row.Hashtags || "").match(/#[\p{L}\p{N}_]+/gu) || [];
-  const defaults = CATEGORY_HASHTAGS[category].match(/#[\p{L}\p{N}_]+/gu) || [];
-  return [...new Set([...existing, ...defaults])].slice(0, 20).join(" ");
+  const seen = new Set();
+  return [...tagsIn(row.Hashtags), ...tagsIn(CATEGORY_HASHTAGS[category])]
+    .filter((tag) => {
+      const key = tag.toLowerCase();
+      if (key === "#beyondtheoffer" || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, MAX_HASHTAGS)
+    .join(" ");
 }
+
+export function buildCaption(row, category) {
+  // Hashtags typed into the caption body would count towards the limit too ("#1" stays)
+  const body = String(row.Caption || "").replace(/(^|\s)#\p{L}[\p{L}\p{N}_]*/gu, "$1").replace(/[ \t]+$/gm, "").trim();
+  const paragraphs = body.split(/\n\s*\n/).filter(Boolean);
+  const [phrase, line] = CATEGORY_SEARCH[category] || CATEGORY_SEARCH.tech;
+  // The search line goes before the closing ask, so the caption still ends on it
+  if (!body.toLowerCase().includes(phrase)) paragraphs.splice(Math.max(1, paragraphs.length - 1), 0, line);
+  return [...paragraphs, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
+}
+
+// Reels reach non-followers first, which matters most while the account is small.
+// They need a feed post (share_to_feed) and stay off the grid until they graduate.
+const FORMAT_PRIORITY = { reel: 0, carousel: 1, story: 2 };
+
+// "@a, b" → ["a", "b"]; Instagram takes up to 3 collaborators on feed posts and reels
+const collaboratorsFor = (row) =>
+  String(row.Collaborators || "")
+    .split(/[,\s]+/)
+    .map((u) => u.replace(/^@/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
 
 const slotMinutes = (process.env.POST_SLOTS_IST || "09:00,13:00,19:00")
   .split(",")
@@ -107,10 +151,15 @@ function pickRow(rows, failures) {
     .sort((a, b) => a.key.localeCompare(b.key));
   if (scheduled.length) return { row: scheduled[0].r, reason: `scheduled for ${scheduled[0].key} IST` };
 
-  const unscheduled = usable.filter((r) => !r.Scheduled_Time_IST && categoryForRow(r) === rotation);
-  if (ignoreSlots) return { row: unscheduled[0], reason: "time slots ignored (--dry-run / --now)" };
+  // Today's rotation goes first, but a day without a matching row still posts something:
+  // a slot left empty costs more reach than an off-theme post.
+  const rank = (r) => (categoryForRow(r) === rotation ? 0 : 10) + (FORMAT_PRIORITY[r.Format.toLowerCase()] ?? 5);
+  const unscheduled = usable.filter((r) => !r.Scheduled_Time_IST).sort((a, b) => rank(a) - rank(b));
+  const pick = unscheduled[0];
+  const why = pick && categoryForRow(pick) !== rotation ? `no ${rotation} row approved, using ${categoryForRow(pick)}` : `${rotation} rotation`;
+  if (ignoreSlots) return { row: pick, reason: `time slots ignored (--dry-run / --now), ${why}` };
   if (!inSlot) return { row: null, reason: `outside posting slots (${process.env.POST_SLOTS_IST || "19:00"} IST ±${SLOT_WINDOW_MIN} min)` };
-  return { row: unscheduled[0], reason: `${rotation} rotation at posting slot` };
+  return { row: pick, reason: `${why} at posting slot` };
 }
 
 async function loadRows() {
@@ -152,7 +201,8 @@ async function publishToInstagram(row, imageUrls, video) {
   const linksLine = /\/links\//.test(row.Caption || "") ? "" : `🔗 All apply links: ${WEBSITE_URL.replace(/^https?:\/\//, "")}/links/${row.ID}`;
   const format = row.Format.toLowerCase();
   const category = categoryForRow(row);
-  const caption = [row.Caption, linksLine, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
+  const caption = buildCaption(row, category);
+  const collaborators = collaboratorsFor(row);
 
   const { used, total } = await ig.getPublishingLimit();
   const needed = format === "story" && !video ? imageUrls.length : 1;
@@ -179,13 +229,13 @@ async function publishToInstagram(row, imageUrls, video) {
 
   let creationId;
   if (format === "reel") {
-    creationId = await ig.createReelContainerFromUrl(video, caption);
+    creationId = await ig.createReelContainerFromUrl(video, caption, { collaborators, trial: process.env.REEL_TRIAL });
   } else if (imageUrls.length === 1) {
-    creationId = await ig.createImageContainer(imageUrls[0], { caption });
+    creationId = await ig.createImageContainer(imageUrls[0], { caption, collaborators });
   } else {
     const children = [];
     for (const url of imageUrls) children.push(await ig.createImageContainer(url, { isCarouselItem: true }));
-    creationId = await ig.createCarouselContainer(children, caption);
+    creationId = await ig.createCarouselContainer(children, caption, { collaborators });
   }
   // Video needs longer to process than images
   await ig.waitUntilFinished(creationId, format === "reel" ? { intervalMs: 20_000, maxMs: 10 * 60_000 } : {});
