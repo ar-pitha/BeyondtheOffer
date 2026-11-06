@@ -195,8 +195,49 @@ Don't rename tabs or reorder columns; the daily Claude task depends on them. Add
 
 - `Verified`: `Official`, `Multi-source` or `Single-source`
 - `Status`: `Active` or `Expired` on data tabs; `Draft` → `Approved` → `Published` (or `Rejected`) on Content_Queue
-- Unscheduled posts follow `CONTENT_ROTATION_IST`: one focused category per day (`tech`, `news`, `govt`, `events`, `ai`). Use `Format=Reel` with `HOOK:`, `POINT:` and `CTA:` lines for the daily professional Reel; do not combine unrelated categories.
-- Reels are voiced automatically: each `HOOK`/`POINT`/`CTA` line is read aloud (free Edge neural TTS; `REEL_VOICE`, default `en-US-AvaMultilingualNeural`, or `en-IN-NeerjaExpressiveNeural` for an Indian accent) and on-screen words light up as they are spoken. Each category has its own look, so the daily one-category reel changes every day: tech jobs → `browser` (the address is typed, the page loads, the cursor clicks "Apply on official site"), govt → `notes`, hackathons/events → `terminal`, tech news → `news`, AI → `cinematic`. Every look has its own background, music mood and 2–3 rotating transitions, and every reel ends on a phone showing the @beyond_the.offer profile where the cursor taps Follow as the voice says it. Add `THEME: notes` to the script or set `REEL_THEME` to override. Carousels use the same looks as still 1080x1350 slides (slide counter, swipe hint on the cover, profile slide at the end), and stories are posted as short voiced videos built from their frames, with a hook and a Follow/Comment ending added when the draft has none. Add a `VO: …` line under a card to make the voice say something different from the screen. Scene lengths follow the voice, so `(3-18s)` timings only apply when TTS is unreachable and `REEL_ALLOW_SILENT=true`; otherwise the render fails and the next run retries. A track in `automation/assets/` replaces the synthesised score.
+- Unscheduled posts prefer `CONTENT_ROTATION_IST` (one focused category per day: `tech`, `news`, `govt`, `events`, `ai`) and reels over carousels over stories; when no row for today's category is approved, the next approved row posts anyway so a slot is never left empty. `POST_SLOTS_IST` defaults to `13:00,19:00`. Use `Format=Reel` with `HOOK:`, `POINT:` and `CTA:` lines for the daily professional Reel; do not combine unrelated categories.
+- Captions: `publish.js` keeps at most 5 hashtags (Instagram's limit since Dec 2025; the row's own tags first, `#beyondtheoffer` dropped), strips hashtags from the caption body, adds one category search phrase ("jobs for freshers", "government jobs", …) before the closing ask when the caption has none, and no longer adds a links URL (captions aren't clickable; the comment keyword DMs `/links/<ID>`).
+- Optional `Collaborators` column on Content_Queue: up to 3 Instagram usernames (`@a, @b`) invited as collaborators on a reel or carousel. The post appears on their profile and in their followers' feeds once they accept.
+- `REEL_TRIAL=manual|auto` (repo variable) publishes reels as trial reels, shown to non-followers first. `auto` shares a trial with followers when it performs well; `manual` leaves that to you in the app. Trials stay off the grid until shared.
+- Insights (`insights.js`, daily at the 02:00 UTC sync) need the `instagram_business_manage_insights` permission (`instagram_manage_insights` on Facebook-login tokens). Without it every post logs `(#10) Application does not have permission` and the Insights tab only gets likes and comments.
+- Growth playbook and the brief for the daily drafting task: `docs/instagram-growth.md`.
+- Music-only reels: with `REEL_VOICE=off` (the default in the workflows) reels have no narration, just on-screen text over a track from `automation/assets/music/`. Tracks in `assets/music/<category>/` are used for that category first, a different track per reel (Regenerate changes it too), and `song@12.mp3` starts 12 s in. When there is no track, the reel falls back to the voiceover below, so a reel never goes out with only the synthesised bed.
+- Voiceover (when `REEL_VOICE` is a voice name, or no track exists): each `HOOK`/`POINT`/`CTA` line is read aloud (free Edge neural TTS; `REEL_VOICE`, default `en-US-AvaMultilingualNeural`, or `en-IN-NeerjaExpressiveNeural` for an Indian accent) and on-screen words light up as they are spoken. Each category has its own look, so the daily one-category reel changes every day: tech jobs → `browser` (the address is typed, the page loads, the cursor clicks "Apply on official site"), govt → `notes`, hackathons/events → `terminal`, tech news → `news`, AI → `cinematic`. Every look has its own background, music mood and 2–3 rotating transitions, and every reel ends on a phone showing the @beyond_the.offer profile where the cursor taps Follow as the voice says it. Add `THEME: notes` to the script or set `REEL_THEME` to override. Carousels use the same looks as still 1080x1350 slides (slide counter, swipe hint on the cover, profile slide at the end), and stories are posted as short voiced videos built from their frames, with a hook and a Follow/Comment ending added when the draft has none. Add a `VO: …` line under a card to make the voice say something different from the screen. Scene lengths follow the voice, so `(3-18s)` timings only apply when TTS is unreachable and `REEL_ALLOW_SILENT=true`; otherwise the render fails and the next run retries.
+
+### Your to-do list
+
+Already done: Instagram name and bio, YouTube channel (@sankalp-beyondtheoffer) connected, YouTube client and token in `automation/.env`.
+
+Once:
+1. Copy the YouTube keys to GitHub: `node automation/set-github-secrets.cjs YT_CLIENT_ID YT_CLIENT_SECRET YT_REFRESH_TOKEN`
+2. Give the Instagram token the insights permission (`instagram_business_manage_insights`, or `instagram_manage_insights` for Facebook-login tokens), then update `IG_ACCESS_TOKEN` in GitHub Secrets and Vercel. Without it the Insights tab has no reach or views.
+3. Add music: put royalty-free MP3s (YouTube Audio Library, Pixabay Music, Uppbeat) in `automation/assets/music/`, or in `music/tech`, `music/govt`, `music/events`, `music/news`, `music/ai`, then commit them. Don't use copyrighted hits: Instagram mutes them and YouTube claims them.
+4. In `/admin/feed`, click Regenerate on reels previewed before the YouTube change, so their Short is cut before the Instagram ending.
+5. Apply for the YouTube API audit; after approval set the repo variable `YT_PRIVACY=public`. Until then make Shorts public by hand in YouTube Studio.
+6. Optional: repo variable `REEL_TRIAL=auto` for trial reels to non-followers. Paste the brief in `docs/instagram-growth.md` into the daily drafting task.
+
+Every day:
+- Approve or reject everything in `/admin/feed` (reject drafts with past deadlines). Target: 1 reel and 1 carousel a day, posted at 13:00 and 19:00 IST.
+- Share new posts in WhatsApp/Telegram placement groups and spend 20 minutes commenting on bigger fresher pages.
+
+Every 7 days (while the Google app is in Testing):
+- `cd automation && node lib/youtube.js auth` (click the link, pick the channel), then step 1 again. A Run_Log line `youtube FAILED … invalid_grant` means it's due.
+
+### YouTube Shorts (channel: Sankalp)
+
+Every published reel is also uploaded as a YouTube Short (`automation/lib/youtube.js`) when `YT_CLIENT_ID`, `YT_CLIENT_SECRET` and `YT_REFRESH_TOKEN` are set. Carousels and stories are Instagram-only. The title is the row's `Title` (or an optional `YT_Title` column) plus `#Shorts`. The description is the Instagram caption without the "Comment JOB" ask, plus the clickable `/links/<ID>` URL. The Short's link is written to a `YT_Video_Link` column, which is created on first use. A YouTube failure is logged to Run_Log and never undoes the Instagram post. Dry runs print the YouTube metadata.
+
+The Short is the reel without its Instagram ending (the profile card, "Follow", "Comment JOB"). It stops on the last opening and loops back to the hook. `preview.js` records where that ending starts in a `Video_CTA_At` column, and `publish.js` cuts there before uploading. Rows previewed before this change have no `Video_CTA_At`; click Regenerate on them, or they go to YouTube uncut. The automation only posts the tech content (jobs, govt jobs, hackathons, tech news). Anything else on the channel is uploaded by hand and never touched.
+
+One-time setup:
+1. Create the channel in YouTube Studio with the Google account that will own it.
+2. Google Cloud console → new project → enable **YouTube Data API v3** → OAuth consent screen (External; under Audience → Test users add the channel's Gmail) → Credentials → OAuth client ID → **Desktop app**. Put the ID and secret in `automation/.env` as `YT_CLIENT_ID` / `YT_CLIENT_SECRET`.
+3. `cd automation && node lib/youtube.js auth`: open the link, pick the channel, the refresh token is saved to `.env` for you. Then run `node lib/youtube.js channel` to check it's the right channel.
+4. Optional: publish the consent screen ("In production") so the login stops expiring. If Google asks for branding verification (a `vercel.app` homepage can't be verified), remove the logo, links and authorized domains under Branding, then publish. While the app is in Testing the token expires every 7 days: run step 3 and step 5 again.
+5. From the repo root: `node automation/set-github-secrets.cjs YT_CLIENT_ID YT_CLIENT_SECRET YT_REFRESH_TOKEN` copies only those three to GitHub Secrets. Run with no names, it copies everything and resets `DRY_RUN` to `true`.
+6. Apply for the YouTube API audit (the "YouTube API Services – Audit and Quota Extension" form). Until it passes, API uploads are locked to **private**, so `YT_PRIVACY` defaults to `private`. After approval, set the repo variable `YT_PRIVACY=public`. In the meantime, private Shorts can be made public by hand in YouTube Studio.
+
+Each upload uses about 1,600 of the default 10,000 daily quota units (about 6 uploads a day).
 
 ### Build phases (prompts for your coding agent)
 
