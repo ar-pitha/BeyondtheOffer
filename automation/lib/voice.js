@@ -5,7 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { EdgeTTS } from "node-edge-tts";
 
-const VOICE = process.env.REEL_VOICE || "en-US-AvaMultilingualNeural";
+// REEL_VOICE=off means music-only (reels.js); the fallback voiceover then uses the default voice
+const VOICE = /^(off|none|false|0|)$/i.test(String(process.env.REEL_VOICE || "").trim()) ? "en-US-AvaMultilingualNeural" : process.env.REEL_VOICE;
 const RATE = process.env.REEL_VOICE_RATE || "+0%";
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 

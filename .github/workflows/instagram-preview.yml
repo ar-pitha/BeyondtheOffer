@@ -21,6 +21,8 @@ jobs:
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       TIMEZONE: Asia/Kolkata
+      # off = music-only reels (tracks from automation/assets/music/); set a voice name to narrate again
+      REEL_VOICE: ${{ vars.REEL_VOICE || 'off' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

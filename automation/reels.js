@@ -11,8 +11,9 @@
 //
 // Looks: one per daily category (tech → browser, govt → notes, events → terminal, news → news,
 // ai → cinematic). A "THEME: notes" line in the script or REEL_THEME overrides it.
-// REEL_ALLOW_SILENT=true builds a music-only reel when TTS is unreachable instead of failing.
-// A track in automation/assets/ (mp3/m4a/aac/wav) replaces the synthesised score.
+// REEL_VOICE=off always builds music-only reels; REEL_ALLOW_SILENT=true does so only when TTS
+// is unreachable instead of failing.
+// Tracks in automation/assets/music/ (mp3/m4a/aac/wav) replace the synthesised score; see pickTrack().
 
 import fs from "node:fs";
 import path from "node:path";
@@ -68,12 +69,26 @@ export function planDurations(cards) {
   return durations;
 }
 
-function pickTrack() {
-  const dir = path.join(ROOT, "assets");
-  if (!fs.existsSync(dir)) return null;
-  const track = fs.readdirSync(dir).find((f) => /\.(mp3|m4a|aac|wav)$/i.test(f));
-  return track ? path.join(dir, track) : null;
+// Music library: automation/assets/music/<category>/ first (tech, govt, events, news, ai), then
+// automation/assets/music/ and automation/assets/. A different track per reel (by script and
+// variant), so Regenerate also changes the song. "name@12.mp3" starts that track 12 s in,
+// past a slow intro.
+const AUDIO = /\.(mp3|m4a|aac|wav)$/i;
+function tracksIn(dir) {
+  return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => AUDIO.test(f)).sort().map((f) => path.join(dir, f)) : [];
 }
+function pickTrack({ category, seed = "" } = {}) {
+  const base = path.join(ROOT, "assets");
+  const pool = [path.join(base, "music", category || "_"), path.join(base, "music"), base].map(tracksIn).find((list) => list.length);
+  if (!pool) return null;
+  let h = 0;
+  for (const ch of String(seed)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  const file = pool[h % pool.length];
+  return { file, start: Number(path.basename(file).match(/@(\d+(?:\.\d+)?)\.\w+$/)?.[1] || 0) };
+}
+
+// REEL_VOICE=off builds music-only reels (text on screen, no narration) when a track exists
+const voiceOff = () => /^(off|none|false|0)$/i.test(String(process.env.REEL_VOICE || "").trim());
 
 function run(cmd, args, { stdin = false } = {}) {
   const p = spawn(cmd, args, { stdio: [stdin ? "pipe" : "ignore", "ignore", "pipe"] });
@@ -242,13 +257,14 @@ async function renderFrames(scenes, total, file, ffmpeg, { theme, category, vari
   await done;
 }
 
-async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant = 0 }) {
-  const track = pickTrack();
+async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant = 0, category, seed = "" }) {
+  const picked = pickTrack({ category, seed: `${seed}|${variant}` });
+  const track = picked?.file;
   const bed = track || writeScore(path.join(outDir, "score.wav"), { seconds: total, cuts: scenes.map((s) => s.start), mood: theme, variant });
   const voices = scenes.filter((s) => s.voiceFile);
 
   const args = ["-y", "-i", video];
-  if (track) args.push("-stream_loop", "-1");
+  if (track) args.push("-stream_loop", "-1", ...(picked.start ? ["-ss", String(picked.start)] : []));
   args.push("-i", bed);
   voices.forEach((s) => args.push("-i", s.voiceFile));
 
@@ -289,7 +305,11 @@ export async function buildReel(script, outDir, { category, cards: given, varian
   const ffmpeg = await ffmpegPath();
 
   let voiced = null;
-  try {
+  // Music-only needs a real track; without one the reel keeps its voiceover rather than
+  // going out with just the synthesised bed
+  const musicOnly = voiceOff() && Boolean(pickTrack({ category, seed: script }));
+  if (voiceOff() && !musicOnly) console.warn("REEL_VOICE=off but no track in automation/assets/music/; using the voiceover");
+  if (!musicOnly) try {
     voiced = await voiceCards(cards, outDir, ffmpeg, { category });
     // Too long for a reel: one faster take before giving up
     if (timeline(voiced, false).reduce((t, s) => t + s.dur, 0) > MAX_SECONDS) voiced = await voiceCards(cards, outDir, ffmpeg, { rate: "+22%", category });
@@ -306,7 +326,7 @@ export async function buildReel(script, outDir, { category, cards: given, varian
   const video = path.join(outDir, "video.mp4");
   const output = path.join(outDir, "reel.mp4");
   await renderFrames(scenes, total, video, ffmpeg, { theme, category: category || "tech", variant });
-  const track = await mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant });
+  const track = await mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant, category, seed: script });
   fs.rmSync(video, { force: true });
   return { file: output, seconds: total, cards: cards.length, track: track ? path.basename(track) : "score", voice: !!voiced, theme };
 }
