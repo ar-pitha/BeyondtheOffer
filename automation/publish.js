@@ -5,6 +5,7 @@
 //   node publish.js --now        ignore posting slots
 //   node publish.js --id CQ-12   pick a specific row
 //   node publish.js --check      only report whether anything is due (used by the workflow)
+//   node publish.js --youtube --id CQ-12   upload an already published reel to YouTube only
 //
 // One row per run. Failures keep Status=Approved and are written to Run_Log;
 // after 3 failed runs a row is skipped until someone fixes it.
@@ -272,7 +273,7 @@ async function crossPostToYouTube(row, video, { ctaAt, outDir }) {
       // Without the Instagram ending the Short finishes on the last opening and loops to the hook
       const { trimBeforeCta } = await import("./reels.js");
       fs.mkdirSync(outDir, { recursive: true });
-      const source = /^https:///i.test(video) ? path.join(outDir, "approved.mp4") : video;
+      const source = /^https:\/\//i.test(video) ? path.join(outDir, "approved.mp4") : video;
       if (source !== video) fs.writeFileSync(source, await yt.videoBytes(video));
       file = await trimBeforeCta(source, path.join(outDir, "short.mp4"), ctaAt);
     }
@@ -306,8 +307,23 @@ async function markItemsPosted(itemIds) {
   if (remaining.size) console.log(`Item IDs not found in any tab: ${[...remaining].join(", ")}`);
 }
 
+// Retry for a reel that reached Instagram but not YouTube: same approved video, same cut
+async function youtubeOnly(rows) {
+  const row = rows.find((r) => r.ID === forcedId);
+  if (!row) throw new Error(`No Content_Queue row ${forcedId}`);
+  if (row.Format.toLowerCase() !== "reel") throw new Error(`${row.ID} is a ${row.Format}; only reels go to YouTube`);
+  if (row.YT_Video_Link) return console.log(`${row.ID} is already on YouTube: ${row.YT_Video_Link}`);
+  const video = (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u));
+  if (!video) throw new Error(`${row.ID} has no approved preview video`);
+  await crossPostToYouTube(row, video, { ctaAt: Number(row.Video_CTA_At) || null, outDir: path.join(ROOT, "renders", row.ID) });
+}
+
 async function main() {
   const { rows, headers, failures } = await loadRows();
+  if (hasFlag("youtube")) {
+    if (!forcedId) throw new Error("--youtube needs --id <Content_Queue ID>");
+    return youtubeOnly(rows);
+  }
   const { row, reason } = pickRow(rows, failures);
 
   if (checkOnly) {
