@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
-import { readTab, updateRow, nowInZone, logRun } from "./lib/sheets.js";
+import { readTab, updateRow, ensureColumns, nowInZone, logRun } from "./lib/sheets.js";
 import { parseSlides, closeBrowser } from "./lib/render.js";
 import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
 import { categoryForRow } from "./lib/category.js";
@@ -182,7 +182,7 @@ async function renderRow(row, outDir) {
   const { buildReel, renderPostSlides, slidesToCards } = await import("./reels.js");
   if (format === "reel") {
     const reel = await buildReel(row.Slides_or_Script, outDir, { category });
-    return { images: [], video: reel.file, note: `${reel.seconds}s reel` };
+    return { images: [], video: reel.file, ctaAt: reel.ctaAt, note: `${reel.seconds}s reel` };
   }
   const slides = parseSlides(row.Slides_or_Script);
   if (format === "story") {
@@ -197,8 +197,8 @@ async function renderRow(row, outDir) {
 
 async function publishToInstagram(row, imageUrls, video) {
   const ig = await import("./lib/instagram.js");
-  // Every post gets its own links page, which comment-to-DM replies can point to
-  const linksLine = /\/links\//.test(row.Caption || "") ? "" : `🔗 All apply links: ${WEBSITE_URL.replace(/^https?:\/\//, "")}/links/${row.ID}`;
+  // No URL in the caption: it isn't clickable there. The comment keyword DMs the
+  // /links/<ID> page instead (frontend/api/_lib/replies.js).
   const format = row.Format.toLowerCase();
   const category = categoryForRow(row);
   const caption = buildCaption(row, category);
@@ -241,6 +241,52 @@ async function publishToInstagram(row, imageUrls, video) {
   await ig.waitUntilFinished(creationId, format === "reel" ? { intervalMs: 20_000, maxMs: 10 * 60_000 } : {});
   const mediaId = await ig.publish(creationId);
   return { mediaId, permalink: await ig.getPermalink(mediaId) };
+}
+
+// Reels also go to YouTube as Shorts. Unlike Instagram, description links are clickable there,
+// so the post's links page goes in as a full URL.
+export function youtubeFields(row) {
+  const category = categoryForRow(row);
+  const caption = buildCaption(row, category);
+  // "Comment JOB…" only works on Instagram (the webhook DMs the links); the link below replaces it
+  const body = caption
+    .replace(/\n\n[^\n]*$/, "")
+    .replace(/[^\n.!]*\bcomment\s+"?[A-Z]{2,}\b[^\n.!]*[.!]?/gi, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return {
+    title: row.YT_Title || row.Title,
+    description: [body, `Apply links: ${WEBSITE_URL}/links/${row.ID}`, tagsIn(caption).slice(0, 3).join(" ")].filter(Boolean).join("\n\n"),
+    tags: [...tagsIn(row.Hashtags), ...tagsIn(CATEGORY_HASHTAGS[category])],
+  };
+}
+
+// A YouTube failure never undoes the Instagram post; it is logged and the row stays Published.
+async function crossPostToYouTube(row, video, { ctaAt, outDir }) {
+  const yt = await import("./lib/youtube.js");
+  if (!yt.hasYouTube() || !video) return;
+  try {
+    let file = video;
+    if (ctaAt) {
+      // Without the Instagram ending the Short finishes on the last opening and loops to the hook
+      const { trimBeforeCta } = await import("./reels.js");
+      fs.mkdirSync(outDir, { recursive: true });
+      const source = /^https:///i.test(video) ? path.join(outDir, "approved.mp4") : video;
+      if (source !== video) fs.writeFileSync(source, await yt.videoBytes(video));
+      file = await trimBeforeCta(source, path.join(outDir, "short.mp4"), ctaAt);
+    }
+    const { url, privacy } = await yt.uploadShort(file, yt.shortsMetadata(youtubeFields(row)));
+    console.log(`YouTube Short uploaded (${privacy}): ${url}`);
+    if (!sample) {
+      const headers = await ensureColumns(TABS.queue, ["YT_Video_Link"]);
+      await updateRow(TABS.queue, headers, row._row, { YT_Video_Link: url });
+      await logRun(`youtube OK ${row.ID}: ${url} (${privacy})`);
+    }
+  } catch (err) {
+    console.error(`YouTube upload failed for ${row.ID}: ${err.message}`);
+    if (!sample) await logRun(`youtube FAILED ${row.ID}: ${err.message.slice(0, 300)}`).catch(() => {});
+  }
 }
 
 // Posted_On_IG=Y on every item in Item_IDs (Used_In_Post=Y for news).
@@ -286,7 +332,9 @@ async function main() {
     ? (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u))
     : null;
   try {
-    const { images, video, note } = approvedVideo ? { images: [], video: null, note: "approved preview reel" } : await renderRow(row, outDir);
+    const { images, video, note, ctaAt } = approvedVideo
+      ? { images: [], video: null, note: "approved preview reel", ctaAt: Number(row.Video_CTA_At) || null }
+      : await renderRow(row, outDir);
     await closeBrowser();
     console.log(approvedVideo ? `Using the approved preview: ${approvedVideo}` : `Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
 
@@ -308,6 +356,10 @@ async function main() {
     }
 
     if (dryRun) {
+      if (row.Format.toLowerCase() === "reel") {
+        const { shortsMetadata, hasYouTube } = await import("./lib/youtube.js");
+        console.log(`YouTube Short${hasYouTube() ? "" : " (YT_* not set, would be skipped)"}:`, JSON.stringify(shortsMetadata(youtubeFields(row)), null, 2));
+      }
       console.log("Dry run: nothing published. Set DRY_RUN=false to post.");
       return;
     }
@@ -324,6 +376,7 @@ async function main() {
       await markItemsPosted((row.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
       await logRun(`publish OK ${row.ID}: ${permalink}`);
     }
+    if (row.Format.toLowerCase() === "reel") await crossPostToYouTube(row, video || videoUrl, { ctaAt, outDir });
   } catch (err) {
     await closeBrowser();
     console.error(`publish failed for ${row.ID}: ${err.message}`);

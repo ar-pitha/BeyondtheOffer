@@ -35,6 +35,11 @@ jobs:
       CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      # Reels are cross-posted as YouTube Shorts when these are set (automation/lib/youtube.js)
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
       TIMEZONE: Asia/Kolkata
       # off = music-only reels (tracks from automation/assets/music/); set a voice name to narrate again
       REEL_VOICE: ${{ vars.REEL_VOICE || 'off' }}

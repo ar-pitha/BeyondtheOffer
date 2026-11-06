@@ -328,7 +328,24 @@ export async function buildReel(script, outDir, { category, cards: given, varian
   await renderFrames(scenes, total, video, ffmpeg, { theme, category: category || "tech", variant });
   const track = await mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, variant, category, seed: script });
   fs.rmSync(video, { force: true });
-  return { file: output, seconds: total, cards: cards.length, track: track ? path.basename(track) : "score", voice: !!voiced, theme };
+  // Where the closing card starts, so platforms without the Instagram ending can cut it off
+  const last = scenes[scenes.length - 1];
+  const ctaAt = last.kind === "cta" ? last.start : null;
+  return { file: output, seconds: total, cards: cards.length, track: track ? path.basename(track) : "score", voice: !!voiced, theme, ctaAt };
+}
+
+// The reel without its Instagram ending (profile card, "comment JOB"), for YouTube Shorts.
+// Cuts just before the last card starts to leave, with a short audio fade.
+export async function trimBeforeCta(input, output, ctaAt) {
+  const end = Math.max(3, ctaAt - 0.3);
+  const ffmpeg = await ffmpegPath();
+  await run(ffmpeg, [
+    "-y", "-i", input, "-t", end.toFixed(2),
+    "-af", `afade=t=out:st=${Math.max(0, end - 0.5).toFixed(2)}:d=0.5`,
+    "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-profile:v", "high", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output,
+  ]).done;
+  return output;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
