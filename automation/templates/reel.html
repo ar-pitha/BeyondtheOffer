@@ -480,19 +480,22 @@ while (!offer) { learn(); build(); apply(); }`;
       $(`#hud .segs span:nth-child(${i + 1}) i`).style.width = `${clamp(lt / sc.dur) * 100}%`;
       if (lt <= -0.05 || lt >= sc.dur + 0.02) { el.style.opacity = 0; return; }
 
-      const p = clamp(lt / 0.55);
+      // A video's opening hook is fully on screen at frame 0: it is the first impression,
+      // the default cover, and what muted viewers read before deciding to stay
+      const open = i === 0 && sc.kind === "hook" && !R.still;
+      const p = open ? 1 : clamp(lt / 0.55);
       const q = i === scenes.length - 1 ? 0 : inOut(clamp((lt - (sc.dur - 0.32)) / 0.32));
       const drift = clamp(lt / sc.dur);
       const style = STYLES[theme][(i + (R.variant | 0)) % STYLES[theme].length];
       transition(style, el, p, q, lt, drift);
       if (style === "zoom") flash = Math.max(flash, i > 0 ? Math.exp(-Math.abs(lt) * 9) : 0);
-      if (lt >= 0) shake = Math.max(shake, Math.exp(-lt * 14) * (i === 0 ? 1.4 : 0.7)); // impact on every cut
+      if (lt >= 0 && !open) shake = Math.max(shake, Math.exp(-lt * 14) * (i === 0 ? 1.4 : 0.7)); // impact on every cut
       if ((theme === "cinematic" || theme === "browser") && lt >= 0 && lt < 1.3) sweep = lt / 1.3;
 
       const ghost = $(".ghost", el);
       if (ghost) ghost.style.transform = `translateX(${(1 - outExpo(p)) * -120 + drift * 40}px) scale(${1 + drift * 0.06})`;
       const label = $(".label", el);
-      if (label) { label.style.transform = `scale(${outBack(clamp((lt - 0.1) / 0.45))})`; label.style.opacity = clamp((lt - 0.1) / 0.2); }
+      if (label) { label.style.transform = `scale(${open ? 1 : outBack(clamp((lt - 0.1) / 0.45))})`; label.style.opacity = open ? 1 : clamp((lt - 0.1) / 0.2); }
       const bubble = $(".bubble", el);
       if (bubble) bubble.style.transform = `scale(${0.7 + 0.3 * outBack(clamp((lt - 0.15) / 0.5))})`;
 
@@ -516,7 +519,7 @@ while (!offer) { learn(); build(); apply(); }`;
         if (bar) bar.style.width = `${clamp(vt / sc.voiceDur) * 100}%`;
       } else {
         // Headline words are the first field's tokens, in order; hook sub-lines are the rest
-        ws.forEach((w, k) => pop(w, vt - (sc.tokens[k]?.start ?? 0), sc.kind === "hook"));
+        ws.forEach((w, k) => pop(w, open ? 1 : vt - (sc.tokens[k]?.start ?? 0), sc.kind === "hook"));
         const later = sc.tokens.filter((tok) => tok.field !== sc.tokens[0].field);
         extra.forEach((w, k) => pop(w, vt - (later[k]?.start ?? 0), false));
         if (sc.kind === "point" && lt >= 0 && lt < sc.dur) {
