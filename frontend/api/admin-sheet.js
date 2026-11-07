@@ -5,9 +5,10 @@
 // Only signed-in admins: the bearer token is checked against the backend's /api/auth/me.
 // Env (frontend Vercel project): SHEET_ID, GOOGLE_SA_JSON_B64, and VITE_API_URL or ADMIN_API_URL.
 
-import { readTab, appendRow, updateRow, ensureTab, ensureColumns, nowInZone } from "./_lib/sheets.js";
+import { readTab, appendRow, updateRow, ensureColumns, nowInZone } from "./_lib/sheets.js";
 import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
-import { buildPublicLinksReply, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS } from "./_lib/replies.js";
+import { buildPublicLinksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
+import { startCommentDm, prepareCommentsLog } from "./_lib/followgate.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
@@ -112,7 +113,7 @@ async function latestPreviewRun() {
 }
 
 async function syncInstagramComments() {
-  await ensureTab(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS);
+  const logHeaders = await prepareCommentsLog();
   const [{ rows: queue }, { rows: existingRows }] = await Promise.all([
     readTab("Content_Queue"),
     readTab(COMMENTS_LOG_TAB).catch(() => ({ rows: [] })),
@@ -158,17 +159,20 @@ async function syncInstagramComments() {
         }
       }
 
+      // Same as the webhook: DM first (follow check, _lib/followgate.js), then a public reply
+      // that points to the DM, or carries the links page when the DM couldn't be sent
+      const dm = await startCommentDm({ commentId: comment.id, items, websiteUrl: WEBSITE_URL, postId: queueRow?.ID });
+      const publicReply = dm.ok ? PUBLIC_LINKS_REPLY : buildPublicLinksReply(items, WEBSITE_URL, queueRow?.ID);
       let replyText = "";
       let status = "received";
       try {
-        const publicReply = buildPublicLinksReply(items, WEBSITE_URL, queueRow?.ID);
         await replyToComment(comment.id, publicReply);
-        replyText = publicReply;
-        status = "sent";
+        replyText = dm.ok ? publicReply : `${publicReply} (DM failed: ${dm.error})`;
+        status = dm.ok ? dm.status : "partial";
         replied += 1;
       } catch (error) {
         replyText = `Public reply failed: ${error.message.slice(0, 300)}`;
-        status = "error";
+        status = dm.ok ? dm.status : "error";
       }
 
       const rowData = {
@@ -180,12 +184,14 @@ async function syncInstagramComments() {
         Action: "links",
         Reply_Text: replyText.slice(0, 500),
         Status: status,
+        IG_Scoped_ID: dm.recipientId,
+        Post_ID: queueRow?.ID || "",
       };
 
       if (existing?._row) {
-        await updateRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, existing._row, rowData, { raw: true });
+        await updateRow(COMMENTS_LOG_TAB, logHeaders, existing._row, rowData, { raw: true });
       } else {
-        await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, rowData);
+        await appendRow(COMMENTS_LOG_TAB, logHeaders, rowData);
       }
       known.add(comment.id);
       imported += 1;

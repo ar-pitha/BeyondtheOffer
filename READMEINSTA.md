@@ -214,7 +214,8 @@ Once:
 3. Add music: put royalty-free MP3s (YouTube Audio Library, Pixabay Music, Uppbeat) in `automation/assets/music/`, or in `music/tech`, `music/govt`, `music/events`, `music/news`, `music/ai`, then commit them. Don't use copyrighted hits: Instagram mutes them and YouTube claims them.
 4. In `/admin/feed`, click Regenerate on reels previewed before the YouTube change, so their Short is cut before the Instagram ending.
 5. Apply for the YouTube API audit; after approval set the repo variable `YT_PRIVACY=public`. Until then make Shorts public by hand in YouTube Studio.
-6. Optional: repo variable `REEL_TRIAL=auto` for trial reels to non-followers. Paste the brief in `docs/instagram-growth.md` into the daily drafting task.
+6. Comment → DM: turn on **Allow access to messages** in the Instagram app, and submit Meta App Review for Advanced Access (`docs/meta-app-review.md`). DMs reach the public only after approval; until then commenters get the public links reply. See "Comment → DM with a follow check".
+7. Optional: repo variable `REEL_TRIAL=auto` for trial reels to non-followers. Paste the brief in `docs/instagram-growth.md` into the daily drafting task.
 
 Every day:
 - Approve or reject everything in `/admin/feed` (reject drafts with past deadlines). Target: 1 reel and 1 carousel a day, posted at 13:00 and 19:00 IST.
@@ -401,7 +402,22 @@ Automatic comment synchronization runs every 10 minutes through
 `.github/workflows/instagram-replies.yml`. Add the same random value to the
 GitHub Actions secret `INSTAGRAM_SYNC_SECRET` and the Vercel environment variable
 `INSTAGRAM_SYNC_SECRET`. The workflow calls the existing admin-sheet endpoint and
-does not send Instagram DMs.
+retries for about a minute when Vercel or Google Sheets is briefly unavailable;
+sheet calls also retry 429/5xx errors themselves.
+
+### Comment → DM with a follow check (free, no ManyChat)
+
+`frontend/api/_lib/followgate.js`, used by the webhook and the 10-minute sync:
+1. A keyword comment (JOB, LINK, AI, …) gets one private DM: "Follow @beyond_the.offer, then reply DONE here". The public reply says "please check your DM".
+2. When they reply DONE (or yes/followed/link), `is_user_follow_business` is checked. Followers get every apply link of that post; others are asked to follow first. If the check itself fails, the links are sent anyway.
+3. If the DM can't be sent, the public reply carries the `/links/<ID>` page instead and the row is logged as `partial` with the reason.
+
+`DM_FOLLOW_GATE=off` (Vercel env) sends the links in the first DM, without the follow step. Comments_Log gets two columns, `IG_Scoped_ID` and `Post_ID`; rows waiting for the follow have status `dm: waiting for follow`.
+
+Instagram only delivers these DMs to the public when:
+- the Meta app has **Advanced Access** for `instagram_manage_messages` and `instagram_manage_comments` and is Live (see `docs/meta-app-review.md`; free, needs business verification). Until then only accounts with a role on the app (testers) get DMs, and everyone else gets the public links reply. This is the most likely cause of the earlier `(code 100, subcode 2534039)` errors in Comments_Log.
+- **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
+- The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message.
 
 ### Generated admin previews
 

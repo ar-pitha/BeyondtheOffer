@@ -22,6 +22,9 @@ export const COMMENTS_LOG_HEADERS = [
   "Action",
   "Reply_Text",
   "Status",
+  // Set when a comment starts the DM flow (_lib/followgate.js): who to DM and for which post
+  "IG_Scoped_ID",
+  "Post_ID",
 ];
 
 // Returns { action, reason }.

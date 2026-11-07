@@ -7,7 +7,7 @@
 // optional ANTHROPIC_API_KEY (AI answers to questions) and AI_REPLY_MODE=draft (log only).
 
 import crypto from "node:crypto";
-import { readTab, appendRow, ensureTab, updateRow, nowInZone } from "./_lib/sheets.js";
+import { readTab, appendRow, updateRow, nowInZone } from "./_lib/sheets.js";
 import {
   getMedia,
   replyToComment,
@@ -17,10 +17,11 @@ import {
 import {
   classifyComment,
   buildPublicLinksReply,
+  PUBLIC_LINKS_REPLY,
   draftAnswer,
   COMMENTS_LOG_TAB,
-  COMMENTS_LOG_HEADERS,
 } from "./_lib/replies.js";
+import { startCommentDm, handleFollowReply, prepareCommentsLog } from "./_lib/followgate.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 const TIME_BUDGET_MS = 8000;
@@ -43,16 +44,16 @@ function validSignature(raw, header) {
 }
 
 async function logComment(entry) {
-  await ensureTab(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS);
+  const headers = await prepareCommentsLog();
   const { date, time } = nowInZone();
-  const result = await appendRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, { Time_IST: `${date} ${time}`, ...entry });
+  const result = await appendRow(COMMENTS_LOG_TAB, headers, { Time_IST: `${date} ${time}`, ...entry });
   const match = result.updates?.updatedRange?.match(/![A-Z]+(\d+)(?::|$)/);
   return match ? Number(match[1]) : null;
 }
 
 async function updateComment(rowNumber, entry) {
   if (!rowNumber) return logComment(entry);
-  await updateRow(COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS, rowNumber, entry, { raw: true });
+  await updateRow(COMMENTS_LOG_TAB, await prepareCommentsLog(), rowNumber, entry, { raw: true });
 }
 
 async function alreadyHandled(commentId) {
@@ -60,21 +61,17 @@ async function alreadyHandled(commentId) {
     const { rows } = await readTab(COMMENTS_LOG_TAB);
     return rows.some((r) =>
       r.Comment_ID === commentId &&
-      ["sent", "draft", "skipped", "needs review"].includes(r.Status)
+      ["sent", "partial", "draft", "skipped", "needs review", "dm sent", "dm: waiting for follow"].includes(r.Status)
     );
   } catch {
     return false; // tab does not exist yet
   }
 }
 
-// Apply links for a post: permalink → Content_Queue row → Item_IDs → data tabs.
-async function linksForMedia(mediaId) {
-  const media = await getMedia(mediaId, "permalink,caption");
-  const key = permalinkKey(media.permalink);
-  const { rows: queue } = await readTab("Content_Queue");
-  const row = queue.find((r) => r.IG_Post_Link && permalinkKey(r.IG_Post_Link) === key);
+// Apply links for a Content_Queue row: Item_IDs → data tabs.
+async function itemsForRow(row) {
   const ids = new Set((row?.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
-  if (!ids.size) return { items: [], caption: media.caption, postId: row?.ID };
+  if (!ids.size) return [];
 
   const tabs = [
     ["Tech_Jobs", (r) => [`${r.Role}, ${r.Company}`, r.Apply_Link]],
@@ -92,7 +89,21 @@ async function linksForMedia(mediaId) {
       items.push({ label, link });
     }
   }
-  return { items, caption: media.caption, postId: row.ID };
+  return items;
+}
+
+async function itemsForPost(postId) {
+  const { rows: queue } = await readTab("Content_Queue");
+  return itemsForRow(queue.find((r) => r.ID === postId));
+}
+
+// Apply links for a post: permalink → Content_Queue row → items.
+async function linksForMedia(mediaId) {
+  const media = await getMedia(mediaId, "permalink,caption");
+  const key = permalinkKey(media.permalink);
+  const { rows: queue } = await readTab("Content_Queue");
+  const row = queue.find((r) => r.IG_Post_Link && permalinkKey(r.IG_Post_Link) === key);
+  return { items: await itemsForRow(row), caption: media.caption, postId: row?.ID };
 }
 
 async function handleComment(value) {
@@ -118,18 +129,22 @@ async function handleComment(value) {
   try {
     if (action === "links") {
       const { items, postId } = await linksForMedia(mediaId);
+      // DM first; the public reply points to it, or carries the links page when the DM failed
+      const dm = await startCommentDm({ commentId, items, websiteUrl: WEBSITE_URL, postId });
+      const publicReply = dm.ok ? PUBLIC_LINKS_REPLY : buildPublicLinksReply(items, WEBSITE_URL, postId);
       let publicError = "";
-      const publicReply = buildPublicLinksReply(items, WEBSITE_URL, postId);
       try {
         await replyToComment(commentId, publicReply);
       } catch (error) {
         publicError = error.message.slice(0, 300);
       }
-      if (publicError) throw new Error(`Public reply failed: ${publicError}`);
+      if (publicError && !dm.ok) throw new Error(`Public reply failed: ${publicError}; DM failed: ${dm.error}`);
       await finishLog({
         Action: "links",
-        Reply_Text: publicReply,
-        Status: "sent",
+        Reply_Text: dm.ok ? publicReply : `${publicReply} (DM failed: ${dm.error})`,
+        Status: dm.ok ? dm.status : "partial",
+        IG_Scoped_ID: dm.recipientId,
+        Post_ID: postId || "",
       });
     } else if (action === "thanks") {
       const { items, postId } = await linksForMedia(mediaId);
@@ -189,6 +204,10 @@ async function handleMessage(event) {
     });
     return;
   }
+
+  // "DONE" after a comment: check the follow and send that post's links
+  const followFlow = await handleFollowReply({ senderId: event.sender.id, text: msg.text, websiteUrl: WEBSITE_URL, itemsForPost });
+  if (followFlow) return;
 
   if (classifyComment(msg.text).action !== "links") return;
   await sendDirectMessage(
