@@ -20,7 +20,9 @@ jobs:
           INSTAGRAM_SYNC_SECRET: ${{ secrets.INSTAGRAM_SYNC_SECRET }}
         run: |
           test -n "$INSTAGRAM_SYNC_SECRET"
+          # Retries cover a cold Vercel function or a brief Google outage
           curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --retry-delay 20 --max-time 90 \
             --request POST "${WEBSITE_URL%/}/api/admin-sheet" \
             --header "Content-Type: application/json" \
             --header "x-instagram-sync-secret: $INSTAGRAM_SYNC_SECRET" \

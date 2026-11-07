@@ -48,18 +48,29 @@ async function getAccessToken() {
   return cachedToken.token;
 }
 
+// Google returns short-lived 429/5xx errors now and then; retry those with backoff.
+// Appends retry only on 429/503 (rejected before writing), so a retry can't duplicate a row.
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [1500, 4000, 9000];
+
 async function sheetsFetch(path, { method = "GET", body } = {}) {
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID is not set");
 
-  const res = await fetch(`${API}/${sheetId}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${await getAccessToken()}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const retryable = (status) => (path.includes(":append") ? status === 429 || status === 503 : RETRY_STATUS.has(status));
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(`${API}/${sheetId}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${await getAccessToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.ok || !retryable(res.status) || attempt >= RETRY_DELAYS_MS.length) break;
+    await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const hint = res.status === 403 ? " (share the sheet with the service account email as Editor)" : "";
