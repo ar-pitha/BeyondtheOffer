@@ -180,7 +180,7 @@ async function loadRows() {
 async function renderRow(row, outDir) {
   const format = row.Format.toLowerCase();
   const category = categoryForRow(row);
-  const { buildReel, renderPostSlides, slidesToCards } = await import("./reels.js");
+  const { buildReel, renderPostSlides, slidesToCards, STORY_MAX_SECONDS } = await import("./reels.js");
   if (format === "reel") {
     const reel = await buildReel(row.Slides_or_Script, outDir, { category });
     return { images: [], video: reel.file, note: `${reel.seconds}s reel` };
@@ -188,7 +188,7 @@ async function renderRow(row, outDir) {
   const slides = parseSlides(row.Slides_or_Script);
   if (format === "story") {
     const cards = slidesToCards(slides, { title: row.Title, category, complete: true });
-    const story = await buildReel(row.Slides_or_Script, outDir, { category, cards });
+    const story = await buildReel(row.Slides_or_Script, outDir, { category, cards, maxSeconds: STORY_MAX_SECONDS });
     return { images: [], video: story.file, note: `${story.seconds}s story video` };
   }
   if (slides.length > 20) throw new Error(`Carousel has ${slides.length} slides; Instagram allows 20`);

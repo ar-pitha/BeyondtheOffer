@@ -26,6 +26,8 @@ import { writeScore } from "./lib/score.js";
 
 const FPS = 30;
 const MAX_SECONDS = 90;
+// Instagram's API rejects stories over 60 s (error 2207082)
+export const STORY_MAX_SECONDS = 59;
 const TEMPLATE = path.join(ROOT, "templates", "reel.html");
 const brand = JSON.parse(fs.readFileSync(path.join(ROOT, "templates", "brand.json"), "utf8"));
 export const THEMES = ["cinematic", "terminal", "notes", "browser", "news"];
@@ -298,7 +300,7 @@ async function mixAudio({ scenes, total, video, output, outDir, ffmpeg, theme, v
   return track;
 }
 
-export async function buildReel(script, outDir, { category, cards: given, variant = 0 } = {}) {
+export async function buildReel(script, outDir, { category, cards: given, variant = 0, maxSeconds = MAX_SECONDS } = {}) {
   const cards = given || parseReelScript(script);
   if (cards.length < 2) throw new Error("Reel script needs at least a HOOK and a CTA line");
   fs.mkdirSync(outDir, { recursive: true });
@@ -311,8 +313,8 @@ export async function buildReel(script, outDir, { category, cards: given, varian
   if (voiceOff() && !musicOnly) console.warn("REEL_VOICE=off but no track in automation/assets/music/; using the voiceover");
   if (!musicOnly) try {
     voiced = await voiceCards(cards, outDir, ffmpeg, { category });
-    // Too long for a reel: one faster take before giving up
-    if (timeline(voiced, false).reduce((t, s) => t + s.dur, 0) > MAX_SECONDS) voiced = await voiceCards(cards, outDir, ffmpeg, { rate: "+22%", category });
+    // Too long for the format: one faster take before giving up
+    if (timeline(voiced, false).reduce((t, s) => t + s.dur, 0) > maxSeconds) voiced = await voiceCards(cards, outDir, ffmpeg, { rate: "+22%", category });
   } catch (err) {
     if (String(process.env.REEL_ALLOW_SILENT).toLowerCase() !== "true") throw err;
     console.warn(`${err.message}; building the reel without a voiceover (REEL_ALLOW_SILENT=true)`);
@@ -320,7 +322,7 @@ export async function buildReel(script, outDir, { category, cards: given, varian
 
   const scenes = timeline(voiced || cards, !voiced);
   const total = +scenes.reduce((t, s) => t + s.dur, 0).toFixed(2);
-  if (total > MAX_SECONDS) throw new Error(`Reel would run ${total}s; Instagram reels from the API max out at ${MAX_SECONDS}s`);
+  if (total > maxSeconds) throw new Error(`Video would run ${total}s; Instagram's API limit for this format is ${maxSeconds}s`);
 
   const theme = pickTheme(script, category);
   const video = path.join(outDir, "video.mp4");

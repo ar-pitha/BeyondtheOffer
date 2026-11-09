@@ -2,7 +2,7 @@ import path from "node:path";
 import { ROOT } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns } from "./lib/sheets.js";
 import { closeBrowser, parseSlides } from "./lib/render.js";
-import { buildReel, renderPostSlides, slidesToCards } from "./reels.js";
+import { buildReel, renderPostSlides, slidesToCards, STORY_MAX_SECONDS } from "./reels.js";
 import { categoryForRow } from "./lib/category.js";
 import { uploadSlides, uploadVideo, hasCloudinary } from "./lib/cloudinary.js";
 
@@ -37,7 +37,8 @@ for (const row of targets) {
     if (format === "reel" || format === "story") {
       const cards = format === "story" ? slidesToCards(parseSlides(row.Slides_or_Script), { title: row.Title, category, complete: true }) : undefined;
       // A new variant on every build, so Regenerate gives a differently cut video
-      const result = await buildReel(row.Slides_or_Script, outDir, { category, cards, variant: Math.floor(Date.now() / 1000) });
+      const limit = format === "story" ? { maxSeconds: STORY_MAX_SECONDS } : {};
+      const result = await buildReel(row.Slides_or_Script, outDir, { category, cards, variant: Math.floor(Date.now() / 1000), ...limit });
       previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "reel" })];
       // The YouTube copy is cut here (publish.js), since the ending is Instagram-specific
       if (format === "reel" && result.ctaAt) {
