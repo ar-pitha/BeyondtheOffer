@@ -70,10 +70,10 @@ async function github(path, init = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-const dispatchPublish = (id) =>
+const dispatchPublish = (id, platform = "instagram") =>
   github("/actions/workflows/publish.yml/dispatches", {
     method: "POST",
-    body: JSON.stringify({ ref: "main", inputs: { dry_run: "false", id } }),
+    body: JSON.stringify({ ref: "main", inputs: { dry_run: "false", id, platform } }),
   });
 
 const dispatchPreview = (id) =>
@@ -310,6 +310,19 @@ export default async function handler(req, res) {
 
         await dispatchPublish(row.ID);
         return send(res, 202, { message: "Posting started", runsUrl: `https://github.com/${repo()}/actions/workflows/publish.yml` });
+      }
+
+      // "Publish to YouTube": reels only, independent of the Instagram post
+      if (body.action === "publish-youtube") {
+        const { rows } = await readTab("Content_Queue");
+        const row = rows.find((r) => r.ID === body.id);
+        if (!row) return send(res, 404, { message: `No post with ID ${body.id}.` });
+        if (String(row.Format).toLowerCase() !== "reel") return send(res, 409, { message: "Only reels can go to YouTube." });
+        if (!["Approved", "Published"].includes(row.Status)) return send(res, 409, { message: "Approve this reel first." });
+        if (row.YT_Video_Link) return send(res, 409, { message: "This reel is already on YouTube." });
+        if (!/\.mp4(\?|\s|$)/i.test(row.Preview_Link || "")) return send(res, 409, { message: "Generate and review the preview before posting." });
+        await dispatchPublish(row.ID, "youtube");
+        return send(res, 202, { message: "YouTube upload started" });
       }
 
       // Latest publish run, so the page can show progress

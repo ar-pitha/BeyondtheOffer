@@ -5,7 +5,7 @@
 //   node publish.js --now        ignore posting slots
 //   node publish.js --id CQ-12   pick a specific row
 //   node publish.js --check      only report whether anything is due (used by the workflow)
-//   node publish.js --youtube --id CQ-12   upload an already published reel to YouTube only
+//   node publish.js --youtube --id CQ-12   upload a reel's approved video to YouTube; never touches Instagram
 //
 // One row per run. Failures keep Status=Approved and are written to Run_Log;
 // after 3 failed runs a row is skipped until someone fixes it.
@@ -183,7 +183,7 @@ async function renderRow(row, outDir) {
   const { buildReel, renderPostSlides, slidesToCards } = await import("./reels.js");
   if (format === "reel") {
     const reel = await buildReel(row.Slides_or_Script, outDir, { category });
-    return { images: [], video: reel.file, ctaAt: reel.ctaAt, note: `${reel.seconds}s reel` };
+    return { images: [], video: reel.file, note: `${reel.seconds}s reel` };
   }
   const slides = parseSlides(row.Slides_or_Script);
   if (format === "story") {
@@ -263,10 +263,10 @@ export function youtubeFields(row) {
   };
 }
 
-// A YouTube failure never undoes the Instagram post; it is logged and the row stays Published.
-async function crossPostToYouTube(row, video, { ctaAt, outDir }) {
+// Only runs from the admin panel's "Publish to YouTube" button; failures fail the run so the panel shows them.
+async function publishToYouTube(row, video, { ctaAt, outDir }) {
   const yt = await import("./lib/youtube.js");
-  if (!yt.hasYouTube() || !video) return;
+  if (!yt.hasYouTube()) throw new Error("YouTube isn't set up: YT_CLIENT_ID, YT_CLIENT_SECRET or YT_REFRESH_TOKEN is missing");
   try {
     let file = video;
     if (ctaAt) {
@@ -285,8 +285,8 @@ async function crossPostToYouTube(row, video, { ctaAt, outDir }) {
       await logRun(`youtube OK ${row.ID}: ${url} (${privacy})`);
     }
   } catch (err) {
-    console.error(`YouTube upload failed for ${row.ID}: ${err.message}`);
     if (!sample) await logRun(`youtube FAILED ${row.ID}: ${err.message.slice(0, 300)}`).catch(() => {});
+    throw err;
   }
 }
 
@@ -307,7 +307,7 @@ async function markItemsPosted(itemIds) {
   if (remaining.size) console.log(`Item IDs not found in any tab: ${[...remaining].join(", ")}`);
 }
 
-// Retry for a reel that reached Instagram but not YouTube: same approved video, same cut
+// Same approved video as Instagram, with the Instagram ending cut off
 async function youtubeOnly(rows) {
   const row = rows.find((r) => r.ID === forcedId);
   if (!row) throw new Error(`No Content_Queue row ${forcedId}`);
@@ -315,20 +315,29 @@ async function youtubeOnly(rows) {
   if (row.YT_Video_Link) return console.log(`${row.ID} is already on YouTube: ${row.YT_Video_Link}`);
   const video = (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u));
   if (!video) throw new Error(`${row.ID} has no approved preview video`);
-  await crossPostToYouTube(row, video, { ctaAt: Number(row.Video_CTA_At) || null, outDir: path.join(ROOT, "renders", row.ID) });
+  if (dryRun) {
+    const { shortsMetadata } = await import("./lib/youtube.js");
+    return console.log(`[dry run] ${row.ID} would upload to YouTube:`, JSON.stringify(shortsMetadata(youtubeFields(row)), null, 2));
+  }
+  await publishToYouTube(row, video, { ctaAt: Number(row.Video_CTA_At) || null, outDir: path.join(ROOT, "renders", row.ID) });
 }
+
+const reportDue = (due) => {
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `due=${due}\n`);
+};
 
 async function main() {
   const { rows, headers, failures } = await loadRows();
   if (hasFlag("youtube")) {
     if (!forcedId) throw new Error("--youtube needs --id <Content_Queue ID>");
+    if (checkOnly) return reportDue(true);
     return youtubeOnly(rows);
   }
   const { row, reason } = pickRow(rows, failures);
 
   if (checkOnly) {
     console.log(row ? `Due: ${row.ID} (${reason})` : `Nothing due: ${reason}`);
-    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `due=${row ? "true" : "false"}\n`);
+    reportDue(Boolean(row));
     return;
   }
   if (!row) {
@@ -348,8 +357,8 @@ async function main() {
     ? (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u))
     : null;
   try {
-    const { images, video, note, ctaAt } = approvedVideo
-      ? { images: [], video: null, note: "approved preview reel", ctaAt: Number(row.Video_CTA_At) || null }
+    const { images, video, note } = approvedVideo
+      ? { images: [], video: null, note: "approved preview reel" }
       : await renderRow(row, outDir);
     await closeBrowser();
     console.log(approvedVideo ? `Using the approved preview: ${approvedVideo}` : `Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
@@ -372,10 +381,6 @@ async function main() {
     }
 
     if (dryRun) {
-      if (row.Format.toLowerCase() === "reel") {
-        const { shortsMetadata, hasYouTube } = await import("./lib/youtube.js");
-        console.log(`YouTube Short${hasYouTube() ? "" : " (YT_* not set, would be skipped)"}:`, JSON.stringify(shortsMetadata(youtubeFields(row)), null, 2));
-      }
       console.log("Dry run: nothing published. Set DRY_RUN=false to post.");
       return;
     }
@@ -392,7 +397,6 @@ async function main() {
       await markItemsPosted((row.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
       await logRun(`publish OK ${row.ID}: ${permalink}`);
     }
-    if (row.Format.toLowerCase() === "reel") await crossPostToYouTube(row, video || videoUrl, { ctaAt, outDir });
   } catch (err) {
     await closeBrowser();
     console.error(`publish failed for ${row.ID}: ${err.message}`);

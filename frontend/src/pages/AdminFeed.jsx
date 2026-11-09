@@ -43,10 +43,19 @@ const parseSlides = (script = "") =>
       return (m ? m[1] : l).split("|").map((s) => s.trim()).filter(Boolean).join(" · ");
     });
 
+const PLATFORMS = {
+  instagram: { name: "Instagram", action: "publish-now" },
+  youtube: { name: "YouTube", action: "publish-youtube" },
+};
+
+// Reels are the only format that goes to YouTube, and it uploads the approved preview video
+const canPublishToYouTube = (row) =>
+  String(row.Format).toLowerCase() === "reel" && !row.YT_Video_Link && /\.mp4(\?|\s|$)/i.test(row.Preview_Link || "");
+
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, onRegenerate, building, busy, posting }) {
+function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegenerate, building, busy, postingTo }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -55,6 +64,16 @@ function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, onRegen
   const status = row.Status || "Draft";
 
   const save = (patch, done) => onSave(row.ID, patch, done);
+
+  const youTubeAction = row.YT_Video_Link ? (
+    <a className="btn btn-secondary btn-sm" href={row.YT_Video_Link} target="_blank" rel="noopener noreferrer">
+      View on YouTube <HiExternalLink aria-hidden />
+    </a>
+  ) : canPublishToYouTube(row) ? (
+    <button className="btn btn-primary btn-sm" disabled={busy || !!postingTo} onClick={() => onPublish(row, "youtube")}>
+      {postingTo === "youtube" ? "Uploading…" : "Publish to YouTube"}
+    </button>
+  ) : null;
 
   return (
     <article className={`feed-card status-${status.toLowerCase()}`}>
@@ -109,6 +128,7 @@ function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, onRegen
           ) : (
             <span className="stat-note">{row.IG_Post_Link || "Published"}</span>
           )}
+          {youTubeAction}
           {row.Design_Link && (
             <a className="link-button" href={row.Design_Link} target="_blank" rel="noopener noreferrer">First slide image</a>
           )}
@@ -129,9 +149,10 @@ function PostCard({ row, slots, onSave, onApprove, onPostNow, onPreview, onRegen
                   Regenerate preview
                 </button>
               )}
-              <button className="btn btn-primary btn-sm" disabled={busy || posting || !row.Preview_Link} onClick={() => onPostNow(row)}>
-                {posting ? "Posting…" : "Post to Instagram"}
+              <button className="btn btn-primary btn-sm" disabled={busy || !!postingTo || !row.Preview_Link} onClick={() => onPublish(row, "instagram")}>
+                {postingTo === "instagram" ? "Posting…" : "Publish to Instagram"}
               </button>
+              {youTubeAction}
             </>
           ) : (
             <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onApprove(row)}>
@@ -239,7 +260,7 @@ function AdminFeed() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("Draft");
-  const [run, setRun] = useState(null); // { id, status, conclusion, url }
+  const [run, setRun] = useState(null); // { id, platform, status, conclusion, url }
   const [postPage, setPostPage] = useState(1);
   const [previewRow, setPreviewRow] = useState(null);
   const [previewRun, setPreviewRun] = useState(null);
@@ -275,12 +296,12 @@ function AdminFeed() {
     }
   };
 
-  // Posts straight to Instagram (GitHub publish run) once the approved post has a preview
-  const onPostNow = async (row) => {
-    setRun({ id: row.ID, status: "starting" });
+  // Starts a GitHub publish run for one platform once the approved post has a preview
+  const onPublish = async (row, platform) => {
+    setRun({ id: row.ID, platform, status: "starting" });
     try {
-      await axios.post("/api/admin-sheet", { action: "publish-now", id: row.ID }, api);
-      toast.success("Posting started. This takes about 2 minutes.");
+      await axios.post("/api/admin-sheet", { action: PLATFORMS[platform].action, id: row.ID }, api);
+      toast.success(`Publishing to ${PLATFORMS[platform].name} started. This takes about 2 minutes.`);
     } catch (err) {
       setRun(null);
       toast.error(err.response?.data?.message || "Couldn't start posting.");
@@ -402,8 +423,8 @@ function AdminFeed() {
         setRun((r) => ({ ...r, ...s }));
         if (s.status === "completed") {
           clearInterval(timer);
-          if (s.conclusion === "success") toast.success("Posted to Instagram");
-          else toast.error("Posting failed. Open the run for details.");
+          if (s.conclusion === "success") toast.success(`Published to ${PLATFORMS[run.platform].name}`);
+          else toast.error(`Publishing to ${PLATFORMS[run.platform].name} failed. Open the run for details.`);
           load("Content_Queue");
         }
       } catch {
@@ -468,9 +489,9 @@ function AdminFeed() {
           <span>
             {run.status === "completed"
               ? run.conclusion === "success"
-                ? `${run.id} is live on Instagram.`
-                : `Posting ${run.id} failed.`
-              : `Posting ${run.id}… rendering slides and uploading (about 2 minutes).`}
+                ? `${run.id} is ${run.platform === "youtube" ? "uploaded to" : "live on"} ${PLATFORMS[run.platform].name}.`
+                : `Publishing ${run.id} to ${PLATFORMS[run.platform].name} failed.`
+              : `Publishing ${run.id} to ${PLATFORMS[run.platform].name}… (about 2 minutes).`}
           </span>
           {run.url && <a href={run.url} target="_blank" rel="noopener noreferrer" className="link-button">See the run</a>}
           {run.status === "completed" && <button className="link-button" onClick={() => setRun(null)}>Dismiss</button>}
@@ -509,7 +530,7 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPostNow={onPostNow} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} busy={busy} posting={run?.id === row.ID && run.status !== "completed"} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} busy={busy} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
               ))}
             </div>
           )}
@@ -551,8 +572,13 @@ function AdminFeed() {
                 </button>
               )}
               {previewRow.Status === "Approved" && (
-                <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPostNow(previewRow); }}>
-                  Post to Instagram
+                <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "instagram"); }}>
+                  Publish to Instagram
+                </button>
+              )}
+              {previewRow.Status === "Approved" && canPublishToYouTube(previewRow) && (
+                <button className="btn btn-primary" disabled={busy || !!run || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "youtube"); }}>
+                  Publish to YouTube
                 </button>
               )}
             </footer>

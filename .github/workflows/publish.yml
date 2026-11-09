@@ -13,6 +13,13 @@ on:
         description: "Content_Queue ID to publish (optional)"
         type: string
         default: ""
+      platform:
+        description: "Where to publish (youtube needs an id)"
+        type: choice
+        options:
+          - instagram
+          - youtube
+        default: instagram
 
 concurrency:
   group: publish
@@ -35,7 +42,7 @@ jobs:
       CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-      # Reels are cross-posted as YouTube Shorts when these are set (automation/lib/youtube.js)
+      # Used only by the platform=youtube runs from the admin panel (automation/lib/youtube.js)
       YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
       YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
       YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
@@ -54,6 +61,7 @@ jobs:
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || vars.DRY_RUN || 'true' }}
       # Manual runs ignore posting slots
       NOW_FLAG: ${{ github.event_name == 'workflow_dispatch' && '--now' || '' }}
+      PLATFORM_FLAG: ${{ inputs.platform == 'youtube' && '--youtube' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,7 +81,7 @@ jobs:
       - name: Anything due?
         id: check
         working-directory: automation
-        run: node publish.js --check $NOW_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
+        run: node publish.js --check $NOW_FLAG $PLATFORM_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
 
       - name: Install Chromium and ffmpeg
         if: steps.check.outputs.due == 'true'
@@ -85,7 +93,7 @@ jobs:
       - name: Publish
         if: steps.check.outputs.due == 'true'
         working-directory: automation
-        run: node publish.js $NOW_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
+        run: node publish.js $NOW_FLAG $PLATFORM_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
 
       - name: Keep renders
         if: steps.check.outputs.due == 'true' && always()
