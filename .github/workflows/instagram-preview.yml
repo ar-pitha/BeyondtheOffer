@@ -23,6 +23,7 @@ jobs:
       TIMEZONE: Asia/Kolkata
       # off = music-only reels (tracks from automation/assets/music/); set a voice name to narrate again
       REEL_VOICE: ${{ vars.REEL_VOICE || 'off' }}
+      FFMPEG_PATH: ffmpeg
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,11 +31,13 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: automation/package-lock.json
-      - run: npm ci
+      # --ignore-scripts skips ffmpeg-static's download from GitHub Releases, which fails with 504s
+      - run: npm ci --ignore-scripts
         working-directory: automation
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npx playwright install --with-deps chromium
         working-directory: automation
+      - run: sudo apt-get install -y -o Acquire::Retries=3 ffmpeg
       - run: node preview.js ${{ inputs.id && format('--id {0}', inputs.id) || '--all' }}
         working-directory: automation

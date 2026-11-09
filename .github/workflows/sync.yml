@@ -51,7 +51,7 @@ jobs:
       # sync.js reuses the backend's Mongoose models
       - run: npm ci --omit=dev
         working-directory: backend
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: automation
 
       - name: Sheet → MongoDB
