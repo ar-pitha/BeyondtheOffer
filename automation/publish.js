@@ -54,6 +54,8 @@ const CATEGORY_SEARCH = {
   ai: ["ai news", "AI news for engineering students in India, in under a minute."],
 };
 
+const GENERIC_OPENER = /^[^\n]*\b(in (60|sixty) seconds|in (a|one|1) minute|this week in)\b[^\n]*$/i;
+
 function rotationForDate(date) {
   const day = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / 86400000;
   return ROTATION[Math.abs(Math.floor(day)) % ROTATION.length];
@@ -80,6 +82,9 @@ export function buildCaption(row, category) {
   // Hashtags typed into the caption body would count towards the limit too ("#1" stays)
   const body = String(row.Caption || "").replace(/(^|\s)#\p{L}[\p{L}\p{N}_]*/gu, "$1").replace(/[ \t]+$/gm, "").trim();
   const paragraphs = body.split(/\n\s*\n/).filter(Boolean);
+  // The first line is all that shows under a reel. A series title ("Tech in 60 seconds") says
+  // nothing there, so the caption opens on the first real item instead.
+  if (paragraphs.length > 1 && GENERIC_OPENER.test(paragraphs[0])) paragraphs.shift();
   const [phrase, line] = CATEGORY_SEARCH[category] || CATEGORY_SEARCH.tech;
   // The search line goes before the closing ask, so the caption still ends on it
   if (!body.toLowerCase().includes(phrase)) paragraphs.splice(Math.max(1, paragraphs.length - 1), 0, line);

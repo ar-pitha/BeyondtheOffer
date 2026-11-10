@@ -27,6 +27,17 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 - `REEL_TRIAL=manual|auto` repo variable: reels go out as trial reels to non-followers first.
 - Reel hook is fully on screen from frame 0.
 
+## Follow-up, 2026-11-10
+
+30 followers, 8 posts in 10 days, 2 to 8 likes each. Cadence is better; the content mix is the problem now.
+
+- Every reel published so far is "Tech in 60 seconds" AI news (5 of 5). No job reel has gone out, and 11 job/internship drafts are still `Draft`. The brief below was never pasted into the daily task.
+- News reels run 60 s with 15 s paragraphs per point. Watch time is the first ranking signal, so keep reels at 20 to 30 s with one line per point.
+- Fixed: a news reel that mentioned "hackathon" was filed under events, so it got the hackathon caption line and look. Rows made only of `TN-` items are now always news/ai (`lib/category.js`).
+- Fixed: captions no longer open on the series title ("Tech in 60 seconds ⚡"); they open on the first real item (`publish.js`).
+- Added two job reels as `Draft`: `CQ-20261110-04` (internships) and `CQ-20261110-05` (govt deadlines). Use them as the pattern.
+- Leave `REEL_TRIAL` empty for now: trial reels are reported to need about 1,000 followers, and a rejected publish counts as a failed run.
+
 ## What only you can do (in order of impact)
 
 1. **Approve every day.** Open `/admin/feed` once a morning and approve or reject everything. Reject stale drafts whose deadlines have passed. Target: 1 reel + 1 carousel a day, every day, for 30 days. Nothing else on this list matters if posting stays at 3 a month.
@@ -40,7 +51,7 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
      ```
    - Pin your 3 best posts. Add highlights: Jobs, Govt Jobs, Hackathons.
 3. **Give the token the insights permission.** Regenerate the Instagram token with `instagram_business_manage_insights` (Instagram login) or `instagram_manage_insights` (Facebook login). Update `IG_ACCESS_TOKEN` in GitHub secrets and Vercel. After that the Insights tab fills daily, and you can see which posts actually reached people.
-4. **Turn on trial reels.** In GitHub, go to Settings → Variables and set `REEL_TRIAL=auto`. Trial reels are shown only to non-followers, which is exactly the audience a 30-follower account needs. Try it for 2 weeks and compare views in Insights. Turn it off if the API rejects it for your account (the publish run will fail with a clear error in Run_Log).
+4. **Trial reels, later.** Once the account passes about 1,000 followers, set the repo variable `REEL_TRIAL=auto` (GitHub → Settings → Variables). Before that the API is likely to reject it, and the publish run fails with the error in Run_Log.
 5. **Collab posts with student pages.** DM college placement cells, coding clubs, GDSC/MLSA chapters and campus ambassador pages. Offer a weekly "openings for your batch" post as a collab. Put their username in the `Collaborators` column. One accepted collab with a 5k-follower page reaches more students than a month of solo posts.
 6. **Share every post where students already are.** Post to WhatsApp/Telegram placement groups and LinkedIn. Shares and saves are the strongest signals for reach to non-followers.
 7. **20 minutes a day of real comments** on bigger fresher/placement pages (useful replies, not "nice post"). That's how a new account gets profile visits.
@@ -53,13 +64,16 @@ Paste this into the Claude scheduled task that writes Content_Queue rows:
 ```
 Instagram drafts (Content_Queue) – rules for reach:
 - Every day draft at least 1 Reel and 1 Carousel. The reel matters most.
+- The daily reel is about jobs, internships, govt deadlines or hackathons. At most one
+  news/AI reel a week.
 - Niche: openings and deadlines for Indian freshers (2025–2027 batches). Prefer jobs,
   internships, govt jobs and hackathons over general tech/AI news.
 - Reel HOOK: one concrete claim with a number, a company or a deadline, under 10 words
   on screen. E.g. "Infosys is hiring 2025 grads at ₹21 LPA" or "3 drives close this
   Friday". No "Tech in 60 seconds", no greetings, no "this week in".
-- 3 to 4 POINT lines, one opening each: company, role, batch, deadline.
-- One idea per reel. 20–40 seconds total.
+- 3 to 4 POINT lines, one opening each, written as short fields, not sentences:
+  "POINT: Stripe | Software Engineer Intern | CS and maths students | Bengaluru".
+- One idea per reel. 20–30 seconds total. No "(0-3s)" timings, no VISUALS line.
 - CTA: exactly one ask: "Comment JOB for the apply links".
 - Caption line 1 (first 125 characters) states the ask or the number plainly.
   Put the phrase students search ("jobs for freshers", "off campus drive 2026",
