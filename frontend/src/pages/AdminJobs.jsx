@@ -5,6 +5,7 @@ import { HiPlus, HiPencil, HiTrash, HiX, HiCheck } from "react-icons/hi";
 import Modal from "../components/Modal";
 import Loader from "../components/Loader";
 import Pagination from "../components/Pagination";
+import { SORTS, sortItems } from "../utils/sort";
 
 const emptyForm = {
   title: "",
@@ -28,6 +29,7 @@ function AdminJobs() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [originFilter, setOriginFilter] = useState("all");
+  const [sort, setSort] = useState("newest");
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -51,7 +53,7 @@ function AdminJobs() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, originFilter]);
+  }, [search, originFilter, sort]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -121,10 +123,13 @@ function AdminJobs() {
   if (loading) return <Loader />;
 
   const autoCount = jobs.filter((j) => j.origin === "auto").length;
-  const filteredJobs = jobs.filter(
-    (j) =>
-      (originFilter === "all" || (originFilter === "auto" ? j.origin === "auto" : j.origin !== "auto")) &&
-      (j.title.toLowerCase().includes(search.toLowerCase()) || j.company.toLowerCase().includes(search.toLowerCase()))
+  const filteredJobs = sortItems(
+    jobs.filter(
+      (j) =>
+        (originFilter === "all" || (originFilter === "auto" ? j.origin === "auto" : j.origin !== "auto")) &&
+        (j.title.toLowerCase().includes(search.toLowerCase()) || j.company.toLowerCase().includes(search.toLowerCase()))
+    ),
+    sort
   );
   const visibleJobs = filteredJobs.slice((page - 1) * 10, page * 10);
 
@@ -157,6 +162,9 @@ function AdminJobs() {
               <option value="all">All sources ({jobs.length})</option>
               <option value="admin">Added by admins ({jobs.length - autoCount})</option>
               <option value="auto">From the sheet ({autoCount})</option>
+            </select>
+            <select className="form-control" style={{ maxWidth: 200 }} value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
           <table className="admin-table">

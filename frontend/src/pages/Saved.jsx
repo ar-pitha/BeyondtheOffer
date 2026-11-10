@@ -1,20 +1,18 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import OppRow from "../components/OppRow";
 import useOpps from "../hooks/useOpps";
 import useSaved from "../hooks/useSaved";
 import usePageMeta from "../hooks/usePageMeta";
-import { daysUntil } from "../utils/deadline";
+import { SORTS, sortItems } from "../utils/sort";
 
 function Saved() {
-  usePageMeta("Saved", "Openings you bookmarked, closest deadline first.");
+  usePageMeta("Saved", "Openings you bookmarked, newest first.");
   const { items, loading } = useOpps();
   const { saved } = useSaved();
+  const [sort, setSort] = useState("newest");
 
-  const rank = (o) => {
-    const n = daysUntil(o.deadline);
-    return n === null ? 10_000 : n < 0 ? 20_000 : n;
-  };
-  const list = items.filter((o) => saved.includes(o.id)).sort((a, b) => rank(a) - rank(b));
+  const list = sortItems(items.filter((o) => saved.includes(o.id)), sort);
 
   return (
     <>
@@ -22,6 +20,15 @@ function Saved() {
         <h1>Saved</h1>
         {!loading && list.length > 0 && <span className="count">{list.length}</span>}
       </header>
+
+      {list.length > 1 && (
+        <label className="sort">
+          <span>Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
+      )}
 
       {loading ? (
         <p className="note">Loading…</p>

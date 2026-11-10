@@ -5,6 +5,7 @@ import { HiPlus, HiPencil, HiTrash, HiX, HiCheck } from "react-icons/hi";
 import Modal from "../components/Modal";
 import Loader from "../components/Loader";
 import Pagination from "../components/Pagination";
+import { SORTS, sortItems } from "../utils/sort";
 
 const emptyForm = {
   title: "",
@@ -22,6 +23,7 @@ function AdminQuizzes() {
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("newest");
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -45,7 +47,7 @@ function AdminQuizzes() {
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, sort]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -114,10 +116,13 @@ function AdminQuizzes() {
 
   if (loading) return <Loader />;
 
-  const filteredQuizzes = quizzes.filter(q =>
-    q.title.toLowerCase().includes(search.toLowerCase()) ||
-    (q.platform && q.platform.toLowerCase().includes(search.toLowerCase())) ||
-    (q.description && q.description.toLowerCase().includes(search.toLowerCase()))
+  const filteredQuizzes = sortItems(
+    quizzes.filter(q =>
+      q.title.toLowerCase().includes(search.toLowerCase()) ||
+      (q.platform && q.platform.toLowerCase().includes(search.toLowerCase())) ||
+      (q.description && q.description.toLowerCase().includes(search.toLowerCase()))
+    ),
+    sort
   );
   const visibleQuizzes = filteredQuizzes.slice((page - 1) * 10, page * 10);
 
@@ -138,7 +143,7 @@ function AdminQuizzes() {
         </div>
       ) : (
         <div className="admin-table-wrapper">
-          <div style={{ marginBottom: "1rem" }}>
+          <div className="admin-toolbar">
             <input
               type="text"
               className="form-control"
@@ -146,6 +151,9 @@ function AdminQuizzes() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            <select className="form-control" style={{ maxWidth: 200 }} value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
           </div>
           <table className="admin-table">
             <thead>

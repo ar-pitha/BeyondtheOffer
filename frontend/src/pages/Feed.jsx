@@ -5,6 +5,7 @@ import OppRow from "../components/OppRow";
 import useOpps from "../hooks/useOpps";
 import usePageMeta from "../hooks/usePageMeta";
 import { daysUntil } from "../utils/deadline";
+import { SORTS, isSort, sortItems } from "../utils/sort";
 
 const FILTERS = [
   { value: "all", label: "All" },
@@ -14,33 +15,34 @@ const FILTERS = [
 ];
 const PAGE = 25;
 
-// Soonest deadline first, then open-ended listings; closed ones are hidden.
-const rank = (o) => {
-  const n = daysUntil(o.deadline);
-  return n === null ? 10_000 : n;
-};
-
 function Feed() {
-  usePageMeta("Feed", "Jobs, government exams and hackathons for freshers, sorted by deadline.");
+  usePageMeta("Feed", "Jobs, government exams and hackathons for freshers, newest first.");
   const { items, loading, error } = useOpps();
   const [params, setParams] = useSearchParams();
   const filter = FILTERS.some((f) => f.value === params.get("kind")) ? params.get("kind") : "all";
+  const sort = isSort(params.get("sort")) ? params.get("sort") : "newest";
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(PAGE);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items
+    // Closed ones are hidden
+    const open = items
       .filter((o) => (daysUntil(o.deadline) ?? 0) >= 0)
       .filter((o) => filter === "all" || (filter === "events" ? o.kind === "event" : o.kind === filter))
-      .filter((o) => !q || [o.title, o.org, o.meta].some((f) => f?.toLowerCase().includes(q)))
-      .sort((a, b) => rank(a) - rank(b));
-  }, [items, filter, query]);
+      .filter((o) => !q || [o.title, o.org, o.meta].some((f) => f?.toLowerCase().includes(q)));
+    return sortItems(open, sort);
+  }, [items, filter, sort, query]);
 
-  const setFilter = (value) => {
+  // Both live in the URL so a shared link opens the same view
+  const setView = (kind, order) => {
     setShown(PAGE);
-    setParams(value === "all" ? {} : { kind: value }, { replace: true });
+    const next = {};
+    if (kind !== "all") next.kind = kind;
+    if (order !== "newest") next.sort = order;
+    setParams(next, { replace: true });
   };
+  const setFilter = (value) => setView(value, sort);
 
   return (
     <div className="feed-layout">
@@ -64,6 +66,13 @@ function Feed() {
           </button>
         ))}
       </div>
+
+      <label className="sort">
+        <span>Sort</span>
+        <select value={sort} onChange={(e) => setView(filter, e.target.value)}>
+          {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+      </label>
       </aside>
 
       <section className="feed-list">

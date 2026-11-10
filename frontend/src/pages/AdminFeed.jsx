@@ -191,8 +191,9 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
   );
 }
 
-function SheetTable({ data, onSave, busy }) {
-  const { headers, rows, editable } = data;
+function SheetTable({ data, onSave, busy, order }) {
+  const { headers, editable } = data;
+  const rows = order === "oldest" ? [...data.rows].reverse() : data.rows;
   const [page, setPage] = useState(1);
   const visibleRows = rows.slice((page - 1) * 10, page * 10);
   const cleanCommentReply = (value) => {
@@ -202,7 +203,7 @@ function SheetTable({ data, onSave, busy }) {
 
   useEffect(() => {
     setPage(1);
-  }, [data.tab]);
+  }, [data.tab, order]);
 
   if (!rows.length) {
     return (
@@ -260,6 +261,7 @@ function AdminFeed() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("Draft");
+  const [order, setOrder] = useState("newest"); // the API sends rows newest first
   const [run, setRun] = useState(null); // { id, platform, status, conclusion, url }
   const [postPage, setPostPage] = useState(1);
   const [previewRow, setPreviewRow] = useState(null);
@@ -454,14 +456,15 @@ function AdminFeed() {
     return () => clearInterval(timer);
   }, [previewRun?.status, previewRow?.ID]);
 
-  const posts = data?.tab === "Content_Queue" ? data.rows : [];
+  const queue = data?.tab === "Content_Queue" ? data.rows : [];
+  const posts = order === "oldest" ? [...queue].reverse() : queue;
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
   const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
 
   useEffect(() => {
     setPostPage(1);
-  }, [tab, filter]);
+  }, [tab, filter, order]);
 
   return (
     <div className="page container">
@@ -506,6 +509,14 @@ function AdminFeed() {
         ))}
       </div>
 
+      <label className="sort">
+        <span>Sort</span>
+        <select value={order} onChange={(e) => setOrder(e.target.value)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+        </select>
+      </label>
+
       {loading ? (
         <Loader />
       ) : error ? (
@@ -537,7 +548,7 @@ function AdminFeed() {
           <Pagination page={postPage} total={visiblePosts.length} onChange={setPostPage} />
         </>
       ) : (
-        <SheetTable data={data} onSave={onSave} busy={busy} />
+        <SheetTable data={data} onSave={onSave} busy={busy} order={order} />
       )}
 
       {previewRow && (

@@ -109,7 +109,7 @@ const googleAuth = async (req, res) => {
 // @route   GET /api/auth/users
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find({}).select("-password");
+    const users = await User.find({}).select("-password").sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });

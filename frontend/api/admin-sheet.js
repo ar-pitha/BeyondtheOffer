@@ -29,8 +29,8 @@ const TABS = {
   Govt_Jobs: { editable: { Status: (v) => STATUS_DATA.includes(v), Verified: (v) => VERIFIED.includes(v) } },
   Hackathons_Quizzes: { editable: { Status: (v) => STATUS_DATA.includes(v), Verified: (v) => VERIFIED.includes(v) } },
   Tech_News: { editable: {} },
-  Run_Log: { editable: {}, newestFirst: true },
-  Comments_Log: { editable: {}, newestFirst: true },
+  Run_Log: { editable: {} },
+  Comments_Log: { editable: {} },
 };
 
 // GitHub Actions (publish.yml) is where posts are rendered and published.
@@ -255,7 +255,8 @@ export default async function handler(req, res) {
         if (/Unable to parse range|400/.test(err.message)) return { headers: [], rows: [] };
         throw err;
       });
-      let list = cfg.newestFirst ? [...rows].reverse() : rows;
+      // Rows are appended at the bottom of every tab, so newest first is the reverse
+      let list = [...rows].reverse();
       if (cfg.limit) list = list.slice(0, cfg.limit);
       return send(res, 200, {
         tab,

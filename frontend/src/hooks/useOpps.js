@@ -16,6 +16,7 @@ export const fromJob = (j) => ({
   link: j.link,
   verified: j.verified === "Official" || j.verified === "Multi-source",
   createdAt: j.createdAt,
+  updatedAt: j.updatedAt,
   raw: j,
 });
 
@@ -29,6 +30,7 @@ export const fromEvent = (q) => ({
   link: q.link,
   verified: q.verified === "Official" || q.verified === "Multi-source",
   createdAt: q.createdAt,
+  updatedAt: q.updatedAt,
   raw: q,
 });
 
