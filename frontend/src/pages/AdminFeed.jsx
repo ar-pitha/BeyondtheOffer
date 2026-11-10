@@ -55,7 +55,7 @@ const canPublishToYouTube = (row) =>
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
-function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegenerate, building, busy, postingTo }) {
+function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegenerate, building, working, postingTo }) {
   const [time, setTime] = useState(toInputTime(row.Scheduled_Time_IST));
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
@@ -63,14 +63,14 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
   const published = row.Status === "Published";
   const status = row.Status || "Draft";
 
-  const save = (patch, done) => onSave(row.ID, patch, done);
+  const save = (patch, done, action) => onSave(row.ID, patch, done, action);
 
   const youTubeAction = row.YT_Video_Link ? (
     <a className="btn btn-secondary btn-sm" href={row.YT_Video_Link} target="_blank" rel="noopener noreferrer">
       View on YouTube <HiExternalLink aria-hidden />
     </a>
   ) : canPublishToYouTube(row) ? (
-    <button className="btn btn-primary btn-sm" disabled={busy || !!postingTo} onClick={() => onPublish(row, "youtube")}>
+    <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo} onClick={() => onPublish(row, "youtube")}>
       {postingTo === "youtube" ? "Uploading…" : "Publish to YouTube"}
     </button>
   ) : null;
@@ -100,8 +100,8 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
           <>
             <textarea className="form-control" rows={8} value={caption} onChange={(e) => setCaption(e.target.value)} />
             <div className="feed-row">
-              <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => save({ Caption: caption }, "Caption saved").then(() => setEditing(false))}>
-                Save caption
+              <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => save({ Caption: caption }, "Caption saved", "caption").then(() => setEditing(false))}>
+                {working === "caption" ? "Saving…" : "Save caption"}
               </button>
               <button className="btn btn-secondary btn-sm" onClick={() => { setCaption(row.Caption || ""); setEditing(false); }}>
                 Cancel
@@ -140,33 +140,33 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
               {building && !row.Preview_Link ? (
                 <button className="btn btn-secondary btn-sm" disabled>Building preview…</button>
               ) : (
-                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onPreview(row)}>
+                <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onPreview(row)}>
                   {row.Preview_Link ? "View preview" : "Generate preview"}
                 </button>
               )}
               {row.Preview_Link && (
-                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onRegenerate(row)}>
-                  Regenerate preview
+                <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onRegenerate(row)}>
+                  {working === "regenerate" ? "Starting…" : "Regenerate preview"}
                 </button>
               )}
-              <button className="btn btn-primary btn-sm" disabled={busy || !!postingTo || !row.Preview_Link} onClick={() => onPublish(row, "instagram")}>
+              <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo || !row.Preview_Link} onClick={() => onPublish(row, "instagram")}>
                 {postingTo === "instagram" ? "Posting…" : "Publish to Instagram"}
               </button>
               {youTubeAction}
             </>
           ) : (
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onApprove(row)}>
-              Approve
+            <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => onApprove(row)}>
+              {working === "approve" ? "Approving…" : "Approve"}
             </button>
           )}
           {status !== "Rejected" && (
-            <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.")}>
-              Reject
+            <button className="btn btn-danger btn-sm" disabled={!!working} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.", "reject")}>
+              {working === "reject" ? "Rejecting…" : "Reject"}
             </button>
           )}
           {status !== "Draft" && (
-            <button className="link-button" disabled={busy} onClick={() => save({ Status: "Draft", Scheduled_Time_IST: "" }, "Moved back to drafts")}>
-              Back to draft
+            <button className="link-button" disabled={!!working} onClick={() => save({ Status: "Draft", Scheduled_Time_IST: "" }, "Moved back to drafts", "draft")}>
+              {working === "draft" ? "Moving…" : "Back to draft"}
             </button>
           )}
           <label className="feed-time">
@@ -174,15 +174,16 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
             <input type="datetime-local" className="form-control" value={time} onChange={(e) => setTime(e.target.value)} />
             <button
               className="btn btn-secondary btn-sm"
-              disabled={busy || fromInputTime(time) === (row.Scheduled_Time_IST || "")}
+              disabled={!!working || fromInputTime(time) === (row.Scheduled_Time_IST || "")}
               onClick={() =>
                 save(
                   { Scheduled_Time_IST: fromInputTime(time), ...(time && status !== "Approved" ? { Status: "Approved" } : {}) },
-                  time ? `Scheduled for ${fromInputTime(time)} IST` : "Schedule cleared; it will use the next slot"
+                  time ? `Scheduled for ${fromInputTime(time)} IST` : "Schedule cleared; it will use the next slot",
+                  "schedule"
                 )
               }
             >
-              {time ? "Schedule" : "Clear time"}
+              {working === "schedule" ? "Saving…" : time ? "Schedule" : "Clear time"}
             </button>
           </label>
         </div>
@@ -191,7 +192,7 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
   );
 }
 
-function SheetTable({ data, onSave, busy, order }) {
+function SheetTable({ data, onSave, pending, order }) {
   const { headers, editable } = data;
   const rows = order === "oldest" ? [...data.rows].reverse() : data.rows;
   const [page, setPage] = useState(1);
@@ -228,7 +229,7 @@ function SheetTable({ data, onSave, busy, order }) {
                     <select
                       className="form-control feed-cell-select"
                       value={r[h]}
-                      disabled={busy}
+                      disabled={!!pending[r.ID]}
                       onChange={(e) => onSave(r.ID, { [h]: e.target.value }, `${r.ID}: ${h} set to ${e.target.value}`)}
                       aria-label={`${h} for ${r.ID}`}
                     >
@@ -259,7 +260,7 @@ function AdminFeed() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState({}); // row ID (or "sync-comments") → the action running on it
   const [filter, setFilter] = useState("Draft");
   const [order, setOrder] = useState("newest"); // the API sends rows newest first
   const [run, setRun] = useState(null); // { id, platform, status, conclusion, url }
@@ -285,18 +286,25 @@ function AdminFeed() {
     load(tab);
   }, [tab, load]);
 
-  const onSave = async (id, patch, doneMessage) => {
-    setBusy(true);
+  // Locks only the row the action belongs to, so other posts stay usable
+  const track = async (key, action, fn) => {
+    setPending((p) => ({ ...p, [key]: action }));
+    try {
+      return await fn();
+    } finally {
+      setPending(({ [key]: _done, ...rest }) => rest);
+    }
+  };
+
+  const onSave = (id, patch, doneMessage, action = "save") => track(id, action, async () => {
     try {
       const { data: res } = await axios.post("/api/admin-sheet", { tab, id, patch }, api);
       setData((d) => ({ ...d, rows: d.rows.map((r) => (r.ID === id ? { ...r, ...res.row } : r)) }));
       toast.success(doneMessage || "Saved");
     } catch (err) {
       toast.error(err.response?.data?.message || "Couldn't save. Try again.");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   // Starts a GitHub publish run for one platform once the approved post has a preview
   const onPublish = async (row, platform) => {
@@ -323,8 +331,7 @@ function AdminFeed() {
   };
 
   // Approving builds a fresh preview on the server (any earlier one is replaced)
-  const onApprove = async (row) => {
-    setBusy(true);
+  const onApprove = (row) => track(row.ID, "approve", async () => {
     try {
       const { data: res } = await axios.post("/api/admin-sheet", { tab, id: row.ID, patch: { Status: "Approved" } }, api);
       updateRowLocally(res.row);
@@ -336,14 +343,11 @@ function AdminFeed() {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Couldn't approve. Try again.");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   // Replaces the current preview with a newly built one
-  const onRegenerate = async (row) => {
-    setBusy(true);
+  const onRegenerate = (row) => track(row.ID, "regenerate", async () => {
     try {
       const { data: res } = await axios.post("/api/admin-sheet", { action: "regenerate-preview", id: row.ID }, api);
       updateRowLocally(res.row);
@@ -351,10 +355,8 @@ function AdminFeed() {
       toast.success("Building a new preview (about 5 minutes).");
     } catch (err) {
       toast.error(err.response?.data?.message || "Couldn't start a new preview.");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   // While previews are building, check every 20 s and swap them in when ready
   const buildingIds = Object.keys(building).join(",");
@@ -401,18 +403,15 @@ function AdminFeed() {
     }
   };
 
-  const onSyncComments = async () => {
-    setBusy(true);
+  const onSyncComments = () => track("sync-comments", "sync", async () => {
     try {
       const { data: result } = await axios.post("/api/admin-sheet", { action: "sync-comments" }, api);
       toast.success(`Imported ${result.imported} existing comment${result.imported === 1 ? "" : "s"}.`);
       await load("Comments_Log");
     } catch (err) {
       toast.error(err.response?.data?.message || "Couldn't sync Instagram comments.");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   useEffect(() => {
     if (!run || run.status === "completed") return;
@@ -457,6 +456,8 @@ function AdminFeed() {
   }, [previewRun?.status, previewRow?.ID]);
 
   const queue = data?.tab === "Content_Queue" ? data.rows : [];
+  // Like the cards, only a publish of this same post blocks the preview's buttons
+  const previewPosting = !!previewRow && run?.id === previewRow.ID && run.status !== "completed";
   const posts = order === "oldest" ? [...queue].reverse() : queue;
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
@@ -477,8 +478,8 @@ function AdminFeed() {
         </div>
         <div className="feed-row">
           {tab === "Comments_Log" && (
-            <button className="btn btn-secondary" onClick={onSyncComments} disabled={loading || busy}>
-              Sync Instagram replies
+            <button className="btn btn-secondary" onClick={onSyncComments} disabled={loading || !!pending["sync-comments"]}>
+              {pending["sync-comments"] ? "Syncing…" : "Sync Instagram replies"}
             </button>
           )}
           <button className="btn btn-secondary" onClick={() => load(tab)} disabled={loading}>
@@ -541,14 +542,14 @@ function AdminFeed() {
           ) : (
             <div className="feed-grid">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} busy={busy} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
               ))}
             </div>
           )}
           <Pagination page={postPage} total={visiblePosts.length} onChange={setPostPage} />
         </>
       ) : (
-        <SheetTable data={data} onSave={onSave} busy={busy} order={order} />
+        <SheetTable data={data} onSave={onSave} pending={pending} order={order} />
       )}
 
       {previewRow && (
@@ -578,17 +579,17 @@ function AdminFeed() {
             <footer className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setPreviewRow(null); setPreviewRun(null); }}>Close</button>
               {previewRow.Status === "Approved" && previewRow.Preview_Link && (
-                <button className="btn btn-secondary" disabled={busy} onClick={() => { setPreviewRow(null); setPreviewRun(null); onRegenerate(previewRow); }}>
+                <button className="btn btn-secondary" disabled={!!pending[previewRow.ID]} onClick={() => { setPreviewRow(null); setPreviewRun(null); onRegenerate(previewRow); }}>
                   Regenerate preview
                 </button>
               )}
               {previewRow.Status === "Approved" && (
-                <button className="btn btn-primary" disabled={busy || !!run || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "instagram"); }}>
+                <button className="btn btn-primary" disabled={!!pending[previewRow.ID] || previewPosting || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "instagram"); }}>
                   Publish to Instagram
                 </button>
               )}
               {previewRow.Status === "Approved" && canPublishToYouTube(previewRow) && (
-                <button className="btn btn-primary" disabled={busy || !!run || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "youtube"); }}>
+                <button className="btn btn-primary" disabled={!!pending[previewRow.ID] || previewPosting || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "youtube"); }}>
                   Publish to YouTube
                 </button>
               )}
