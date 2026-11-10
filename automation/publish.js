@@ -91,9 +91,8 @@ export function buildCaption(row, category) {
   return [...paragraphs, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
 }
 
-// Reels reach non-followers first, which matters most while the account is small.
-// They need a feed post (share_to_feed) and stay off the grid until they graduate.
-const FORMAT_PRIORITY = { reel: 0, carousel: 1, story: 2 };
+// Carousels are the feed format; reels are kept for stories and YouTube Shorts.
+const FORMAT_PRIORITY = { carousel: 0, reel: 1, story: 2 };
 
 // "@a, b" → ["a", "b"]; Instagram takes up to 3 collaborators on feed posts and reels
 const collaboratorsFor = (row) =>

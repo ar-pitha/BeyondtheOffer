@@ -11,7 +11,7 @@
 //
 // Looks: one per daily category (tech → browser, govt → notes, events → terminal, news → news,
 // ai → cinematic). A "THEME: notes" line in the script or REEL_THEME overrides it.
-// REEL_VOICE=off always builds music-only reels; REEL_ALLOW_SILENT=true does so only when TTS
+// REEL_VOICE=off always builds music-only reels (no narration); REEL_ALLOW_SILENT=true does so only when TTS
 // is unreachable instead of failing.
 // Tracks in automation/assets/music/ (mp3/m4a/aac/wav) replace the synthesised score; see pickTrack().
 
@@ -89,7 +89,7 @@ function pickTrack({ category, seed = "" } = {}) {
   return { file, start: Number(path.basename(file).match(/@(\d+(?:\.\d+)?)\.\w+$/)?.[1] || 0) };
 }
 
-// REEL_VOICE=off builds music-only reels (text on screen, no narration) when a track exists
+// REEL_VOICE=off builds music-only reels (text on screen, no narration)
 const voiceOff = () => /^(off|none|false|0)$/i.test(String(process.env.REEL_VOICE || "").trim());
 
 function run(cmd, args, { stdin = false } = {}) {
@@ -307,10 +307,8 @@ export async function buildReel(script, outDir, { category, cards: given, varian
   const ffmpeg = await ffmpegPath();
 
   let voiced = null;
-  // Music-only needs a real track; without one the reel keeps its voiceover rather than
-  // going out with just the synthesised bed
-  const musicOnly = voiceOff() && Boolean(pickTrack({ category, seed: script }));
-  if (voiceOff() && !musicOnly) console.warn("REEL_VOICE=off but no track in automation/assets/music/; using the voiceover");
+  // REEL_VOICE=off: no narration. Without a track in assets/music/ the synthesised score plays alone.
+  const musicOnly = voiceOff();
   if (!musicOnly) try {
     voiced = await voiceCards(cards, outDir, ffmpeg, { category });
     // Too long for the format: one faster take before giving up

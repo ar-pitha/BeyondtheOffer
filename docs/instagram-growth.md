@@ -38,6 +38,26 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 - Added two job reels as `Draft`: `CQ-20261110-04` (internships) and `CQ-20261110-05` (govt deadlines). Use them as the pattern.
 - Leave `REEL_TRIAL` empty for now: trial reels are reported to need about 1,000 followers, and a rejected publish counts as a failed run.
 
+### Direction change, same day
+
+Owner's call: grow solo (no collabs, no group sharing), no AI voice, carousels as the feed format, reels only as stories and YouTube Shorts.
+
+- `REEL_VOICE=off` (the CI default) now always builds videos without narration. With no track in `automation/assets/music/` the synthesised score plays alone; drop licensed mp3s there for real music.
+- Carousels are picked before reels at a posting slot.
+- Trending songs can't be attached through the API, and a commercial song mixed into the file gets muted or claimed. To use one, post the carousel from the phone app (slides and caption from the admin preview) and pick the audio there. A carousel with music is also shown in the Reels tab.
+- 7 of 11 carousel covers read "Openings closing soon". Every cover needs its own title, or the grid is a wall of the same tile.
+
+Carousel rules for the daily task (add to the brief below):
+
+```
+- Draft 1 Carousel a day; it is the main post. Reels are optional (stories and YouTube only).
+- Slide 1 (cover) title is unique to the post and names a number, a company or exam, and a
+  date: "5 internships open now: Google, Stripe, PayPal", "RRB Station Master: 1,265 posts,
+  25 Nov". Never "Openings closing soon" or any title used in the last 30 days.
+- One theme per carousel: only internships, or only govt deadlines, or only one company.
+- 5 to 7 slides. Last slide: "Save this" + one comment keyword.
+```
+
 ## What only you can do (in order of impact)
 
 1. **Approve every day.** Open `/admin/feed` once a morning and approve or reject everything. Reject stale drafts whose deadlines have passed. Target: 1 reel + 1 carousel a day, every day, for 30 days. Nothing else on this list matters if posting stays at 3 a month.
