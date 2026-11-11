@@ -1,10 +1,10 @@
 import path from "node:path";
 import { ROOT } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns } from "./lib/sheets.js";
-import { closeBrowser, parseSlides } from "./lib/render.js";
-import { buildReel, renderPostSlides, slidesToCards, STORY_MAX_SECONDS } from "./reels.js";
+import { closeBrowser } from "./lib/render.js";
+import { renderPost } from "./lib/post.js";
 import { categoryForRow } from "./lib/category.js";
-import { uploadSlides, uploadVideo, hasCloudinary } from "./lib/cloudinary.js";
+import { uploadSlides, hasCloudinary } from "./lib/cloudinary.js";
 
 if (!hasCloudinary()) throw new Error("Cloudinary is required for admin previews");
 
@@ -30,25 +30,9 @@ if (requestedId && !targets.length) {
 for (const row of targets) {
   const outDir = path.join(ROOT, "renders", "preview", row.ID);
   try {
-    // Same renderers as publishing: reels and stories are voiced videos, carousels themed slides
-    let previewLinks;
-    const format = String(row.Format).toLowerCase();
-    const category = categoryForRow(row);
-    if (format === "reel" || format === "story") {
-      const cards = format === "story" ? slidesToCards(parseSlides(row.Slides_or_Script), { title: row.Title, category, complete: true }) : undefined;
-      // A new variant on every build, so Regenerate gives a differently cut video
-      const limit = format === "story" ? { maxSeconds: STORY_MAX_SECONDS } : {};
-      const result = await buildReel(row.Slides_or_Script, outDir, { category, cards, variant: Math.floor(Date.now() / 1000), ...limit });
-      previewLinks = [await uploadVideo(result.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "reel" })];
-      // The YouTube copy is cut here (publish.js), since the ending is Instagram-specific
-      if (format === "reel" && result.ctaAt) {
-        const cols = await ensureColumns("Content_Queue", ["Preview_Link", "Video_CTA_At"]);
-        await updateRow("Content_Queue", cols, row._row, { Video_CTA_At: String(result.ctaAt) }, { raw: true });
-      }
-    } else {
-      const images = await renderPostSlides(parseSlides(row.Slides_or_Script), outDir, { category, script: row.Slides_or_Script });
-      previewLinks = await uploadSlides(images, `${row.ID}/preview`);
-    }
+    // Same renderer as publishing: every format becomes white carousel slides
+    const images = await renderPost(row, outDir, { category: categoryForRow(row) });
+    const previewLinks = await uploadSlides(images, `${row.ID}/preview`);
     const nextHeaders = headers.includes("Preview_Link") ? headers : await ensureColumns("Content_Queue", ["Preview_Link"]);
     await updateRow("Content_Queue", nextHeaders, row._row, { Preview_Link: previewLinks.join("\n") }, { raw: true });
     console.log(`Preview ready for ${row.ID}`);

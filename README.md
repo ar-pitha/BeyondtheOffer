@@ -180,7 +180,7 @@ npm run reel:sample                  # needs ffmpeg on PATH (or set FFMPEG_PATH)
 
 - `sync.js --dry-run --include-single --verbose`
 - `publish.js --dry-run` (render + upload, ignores time slots), `--now` (ignore slots), `--id CQ-12`, `--sample [--format carousel|story|reel]`, `--check`
-- `Format` in Content_Queue can be `Carousel`, `Story` or `Reel`. Reel scripts use `HOOK:`, `POINT:`, `CTA:` lines. Slides can force a layout with `Slide 3 (cta): ...`.
+- `Format` in Content_Queue is `Carousel` (older `Story` and `Reel` rows are posted as carousels too). Slides are `Slide N: field | field` lines; the recap and "Comment JOB" slides are added automatically, and company logos come from `automation/lib/logos.js`. See docs/instagram-growth.md for the drafting brief.
 - Item slides turn a field starting with `Apply by`, `Last date` or `Register by` into the deadline stub, and one starting with `Verified` into the green tag.
 
 ### How the site treats synced items

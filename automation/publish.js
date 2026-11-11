@@ -1,11 +1,12 @@
-// Approved Content_Queue rows → Instagram.
+// Approved Content_Queue rows → Instagram, always as a white carousel with company logos
+// (lib/post.js). Reel and Story drafts are posted as carousels too; nothing is voiced.
 //   node publish.js              publish one due row (only inside POST_SLOTS_IST unless scheduled)
 //   node publish.js --dry-run    render + upload, no publish; ignores time slots
 //   node publish.js --sample     use fixtures/content-queue.sample.json instead of the sheet
 //   node publish.js --now        ignore posting slots
 //   node publish.js --id CQ-12   pick a specific row
 //   node publish.js --check      only report whether anything is due (used by the workflow)
-//   node publish.js --youtube --id CQ-12   upload a reel's approved video to YouTube; never touches Instagram
+//   node publish.js --youtube --id CQ-12   upload an older reel's approved video to YouTube; never touches Instagram
 //
 // One row per run. Failures keep Status=Approved and are written to Run_Log;
 // after 3 failed runs a row is skipped until someone fixes it.
@@ -14,8 +15,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns, nowInZone, logRun } from "./lib/sheets.js";
-import { parseSlides, closeBrowser } from "./lib/render.js";
-import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
+import { closeBrowser } from "./lib/render.js";
+import { hasCloudinary, uploadSlides } from "./lib/cloudinary.js";
+import { renderPost } from "./lib/post.js";
 import { categoryForRow } from "./lib/category.js";
 
 const dryRun = isDryRun();
@@ -82,7 +84,7 @@ export function buildCaption(row, category) {
   // Hashtags typed into the caption body would count towards the limit too ("#1" stays)
   const body = String(row.Caption || "").replace(/(^|\s)#\p{L}[\p{L}\p{N}_]*/gu, "$1").replace(/[ \t]+$/gm, "").trim();
   const paragraphs = body.split(/\n\s*\n/).filter(Boolean);
-  // The first line is all that shows under a reel. A series title ("Tech in 60 seconds") says
+  // The first line is all that shows under a post. A series title ("Tech in 60 seconds") says
   // nothing there, so the caption opens on the first real item instead.
   if (paragraphs.length > 1 && GENERIC_OPENER.test(paragraphs[0])) paragraphs.shift();
   const [phrase, line] = CATEGORY_SEARCH[category] || CATEGORY_SEARCH.tech;
@@ -90,10 +92,6 @@ export function buildCaption(row, category) {
   if (!body.toLowerCase().includes(phrase)) paragraphs.splice(Math.max(1, paragraphs.length - 1), 0, line);
   return [...paragraphs, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
 }
-
-// Reels reach non-followers first, which matters most while the account is small.
-// They need a feed post (share_to_feed) and stay off the grid until they graduate.
-const FORMAT_PRIORITY = { reel: 0, carousel: 1, story: 2 };
 
 // "@a, b" → ["a", "b"]; Instagram takes up to 3 collaborators on feed posts and reels
 const collaboratorsFor = (row) =>
@@ -122,6 +120,8 @@ function scheduleKey(value, today) {
   return null;
 }
 
+const isVideoPreview = (r) => /\.mp4(\?|\s|$)/i.test(r.Preview_Link || "");
+
 function failureCounts(runLogRows) {
   const counts = {};
   for (const r of runLogRows) {
@@ -142,6 +142,8 @@ function pickRow(rows, failures) {
       r.Status === "Approved" &&
       // Fixture rows have no admin preview step
       (sample || (r.Publish_Confirmed === "Y" && r.Preview_Link)) &&
+      // A video preview was approved for the old reel renderer; Regenerate gives it carousel slides
+      !isVideoPreview(r) &&
       FORMATS.includes((r.Format || "").toLowerCase()) &&
       r.Slides_or_Script
   );
@@ -159,7 +161,7 @@ function pickRow(rows, failures) {
 
   // Today's rotation goes first, but a day without a matching row still posts something:
   // a slot left empty costs more reach than an off-theme post.
-  const rank = (r) => (categoryForRow(r) === rotation ? 0 : 10) + (FORMAT_PRIORITY[r.Format.toLowerCase()] ?? 5);
+  const rank = (r) => (categoryForRow(r) === rotation ? 0 : 1);
   const unscheduled = usable.filter((r) => !r.Scheduled_Time_IST).sort((a, b) => rank(a) - rank(b));
   const pick = unscheduled[0];
   const why = pick && categoryForRow(pick) !== rotation ? `no ${rotation} row approved, using ${categoryForRow(pick)}` : `${rotation} rotation`;
@@ -181,70 +183,30 @@ async function loadRows() {
   return { rows, headers, failures: failureCounts(runLog.rows) };
 }
 
-// Renders the row: reels and stories become voiced videos, carousels themed slides.
 async function renderRow(row, outDir) {
-  const format = row.Format.toLowerCase();
-  const category = categoryForRow(row);
-  const { buildReel, renderPostSlides, slidesToCards, STORY_MAX_SECONDS } = await import("./reels.js");
-  if (format === "reel") {
-    const reel = await buildReel(row.Slides_or_Script, outDir, { category });
-    return { images: [], video: reel.file, note: `${reel.seconds}s reel` };
-  }
-  const slides = parseSlides(row.Slides_or_Script);
-  if (format === "story") {
-    const cards = slidesToCards(slides, { title: row.Title, category, complete: true });
-    const story = await buildReel(row.Slides_or_Script, outDir, { category, cards, maxSeconds: STORY_MAX_SECONDS });
-    return { images: [], video: story.file, note: `${story.seconds}s story video` };
-  }
-  if (slides.length > 20) throw new Error(`Carousel has ${slides.length} slides; Instagram allows 20`);
-  const images = await renderPostSlides(slides, outDir, { category, script: row.Slides_or_Script });
-  return { images, video: null, note: `${images.length} slide(s)` };
+  const images = await renderPost(row, outDir, { category: categoryForRow(row) });
+  return { images, note: `${images.length} slide(s)` };
 }
 
-async function publishToInstagram(row, imageUrls, video) {
+async function publishToInstagram(row, imageUrls) {
   const ig = await import("./lib/instagram.js");
   // No URL in the caption: it isn't clickable there. The comment keyword DMs the
   // /links/<ID> page instead (frontend/api/_lib/replies.js).
-  const format = row.Format.toLowerCase();
-  const category = categoryForRow(row);
-  const caption = buildCaption(row, category);
+  const caption = buildCaption(row, categoryForRow(row));
   const collaborators = collaboratorsFor(row);
 
   const { used, total } = await ig.getPublishingLimit();
-  const needed = format === "story" && !video ? imageUrls.length : 1;
-  if (used + needed > total) throw new Error(`Publishing limit reached (${used}/${total} in 24 h)`);
-
-  if (format === "story" && video) {
-    const id = await ig.createStoryVideoContainer(video);
-    await ig.waitUntilFinished(id, { intervalMs: 20_000, maxMs: 10 * 60_000 });
-    const mediaId = await ig.publish(id);
-    return { mediaId, permalink: `story:${mediaId}` };
-  }
-
-  if (format === "story") {
-    let firstId = null;
-    for (const url of imageUrls) {
-      const id = await ig.createStoryContainer(url);
-      await ig.waitUntilFinished(id);
-      const mediaId = await ig.publish(id);
-      firstId ??= mediaId;
-    }
-    // Stories have no lasting permalink; store the media id instead.
-    return { mediaId: firstId, permalink: `story:${firstId}` };
-  }
+  if (used + 1 > total) throw new Error(`Publishing limit reached (${used}/${total} in 24 h)`);
 
   let creationId;
-  if (format === "reel") {
-    creationId = await ig.createReelContainerFromUrl(video, caption, { collaborators, trial: process.env.REEL_TRIAL });
-  } else if (imageUrls.length === 1) {
+  if (imageUrls.length === 1) {
     creationId = await ig.createImageContainer(imageUrls[0], { caption, collaborators });
   } else {
     const children = [];
     for (const url of imageUrls) children.push(await ig.createImageContainer(url, { isCarouselItem: true }));
     creationId = await ig.createCarouselContainer(children, caption, { collaborators });
   }
-  // Video needs longer to process than images
-  await ig.waitUntilFinished(creationId, format === "reel" ? { intervalMs: 20_000, maxMs: 10 * 60_000 } : {});
+  await ig.waitUntilFinished(creationId);
   const mediaId = await ig.publish(creationId);
   return { mediaId, permalink: await ig.getPermalink(mediaId) };
 }
@@ -357,16 +319,10 @@ async function main() {
   }
 
   const outDir = path.join(ROOT, "renders", row.ID);
-  // Reels and stories post the exact video approved in the admin preview
-  const approvedVideo = ["reel", "story"].includes(row.Format.toLowerCase())
-    ? (row.Preview_Link || "").split(/\s+/).find((u) => /^https:\/\/\S+\.mp4(\?|$)/i.test(u))
-    : null;
   try {
-    const { images, video, note } = approvedVideo
-      ? { images: [], video: null, note: "approved preview reel" }
-      : await renderRow(row, outDir);
+    const { images, note } = await renderRow(row, outDir);
     await closeBrowser();
-    console.log(approvedVideo ? `Using the approved preview: ${approvedVideo}` : `Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
+    console.log(`Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
 
     let urls = [];
     if (images.length && hasCloudinary()) {
@@ -377,20 +333,12 @@ async function main() {
       console.log("Cloudinary not configured: skipped upload.");
     }
 
-    let videoUrl = approvedVideo || null;
-    if (video && hasCloudinary()) {
-      videoUrl = await uploadVideo(video, { folder: `beyondtheoffer/${row.ID}`, publicId: "reel" });
-      console.log(`Uploaded reel to Cloudinary:\n  ${videoUrl}`);
-    } else if (video && !dryRun) {
-      throw new Error("Cloudinary credentials missing; Instagram needs a public video URL for reels");
-    }
-
     if (dryRun) {
       console.log("Dry run: nothing published. Set DRY_RUN=false to post.");
       return;
     }
 
-    const { permalink } = await publishToInstagram(row, urls, videoUrl);
+    const { permalink } = await publishToInstagram(row, urls);
     console.log(`Published: ${permalink}`);
 
     if (!sample) {

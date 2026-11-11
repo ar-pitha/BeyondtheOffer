@@ -38,6 +38,25 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 - Added two job reels as `Draft`: `CQ-20261110-04` (internships) and `CQ-20261110-05` (govt deadlines). Use them as the pattern.
 - Leave `REEL_TRIAL` empty for now: trial reels are reported to need about 1,000 followers, and a rejected publish counts as a failed run.
 
+## Change, 2026-11-11: carousels only
+
+No more AI-voice reels. Every Instagram post is now a white carousel with the real company logos
+(`automation/lib/post.js`, `templates/post.html`):
+
+1. **Cover**: the hook (6 to 10 words, a number or a company name in it), one line under it,
+   and the logos of every company in the post.
+2. **One slide per opening**: logo, company, role, 2 to 3 facts, "Apply by …" bar, "Comment JOB".
+3. **Recap**: every opening and its date on one card. This is the slide people screenshot and send.
+4. **CTA**: "Comment JOB", save, send to your batch group, follow.
+
+- Old `Reel` and `Story` drafts are posted as carousels too. A row whose approved preview is a video
+  is skipped until you press **Regenerate** in `/admin/feed` and approve the new slides.
+- Logos: Wikidata/Wikimedia wordmarks, then the company site. Set the optional `LOGO_DEV_TOKEN`
+  secret (free at logo.dev) for sharper logos of small startups. If a logo is wrong, drop a PNG or
+  SVG into `automation/assets/logos/<company-slug>.png` (e.g. `j-and-k-bank.png`) and it wins.
+- Preview locally: `cd automation; node publish.js --dry-run --sample --id CQ-SAMPLE-1`, slides land
+  in `automation/renders/CQ-SAMPLE-1/`.
+
 ## What only you can do (in order of impact)
 
 1. **Approve every day.** Open `/admin/feed` once a morning and approve or reject everything. Reject stale drafts whose deadlines have passed. Target: 1 reel + 1 carousel a day, every day, for 30 days. Nothing else on this list matters if posting stays at 3 a month.
@@ -59,34 +78,45 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 
 ## Brief for the daily drafting task
 
-Paste this into the Claude scheduled task that writes Content_Queue rows:
+Paste this into the Claude scheduled task that writes Content_Queue rows (it replaces the old reel brief):
 
 ```
-Instagram drafts (Content_Queue) – rules for reach:
-- Every day draft at least 1 Reel and 1 Carousel. The reel matters most.
-- The daily reel is about jobs, internships, govt deadlines or hackathons. At most one
-  news/AI reel a week.
-- Niche: openings and deadlines for Indian freshers (2025–2027 batches). Prefer jobs,
-  internships, govt jobs and hackathons over general tech/AI news.
-- Reel HOOK: one concrete claim with a number, a company or a deadline, under 10 words
-  on screen. E.g. "Infosys is hiring 2025 grads at ₹21 LPA" or "3 drives close this
-  Friday". No "Tech in 60 seconds", no greetings, no "this week in".
-- 3 to 4 POINT lines, one opening each, written as short fields, not sentences:
-  "POINT: Stripe | Software Engineer Intern | CS and maths students | Bengaluru".
-- One idea per reel. 20–30 seconds total. No "(0-3s)" timings, no VISUALS line.
-- CTA: exactly one ask: "Comment JOB for the apply links".
-- Caption line 1 (first 125 characters) states the ask or the number plainly.
-  Put the phrase students search ("jobs for freshers", "off campus drive 2026",
-  "internship for 2027 batch", "government jobs") in a normal sentence in the body.
-- No URLs in the caption. No hashtags in the caption text.
-- Hashtags column: at most 5, specific to the post (company or exam names first,
-  e.g. #infosys #rrbntpc), never #viral #fyp #explore #beyondtheoffer.
-- Don't draft posts whose deadline is under 2 days away.
-- Never invent salaries, dates, vacancies or eligibility.
+Instagram drafts (Content_Queue) – carousels only, no reels, no voiceover:
+- Every day draft 2 rows with Format=Carousel: one jobs/internships post, and one govt-jobs or
+  hackathons post. At most one news/AI carousel a week.
+- Niche: openings and deadlines for Indian freshers (2025–2027 batches).
+- 3 to 6 openings per carousel. Put every item's ID in Item_IDs so the slide gets the company's
+  real logo and the DM gets the right apply link.
+- Slides_or_Script, one line per slide, fields split with "|":
+    Slide 1: <hook> | <one-line promise>
+    Slide 2: <Company> | <Role> | <Batch/eligibility> | <Location · Salary> | Verified: Official | Apply by YYYY-MM-DD
+    ... one slide per opening, same shape (govt: <Organisation> | <Post/Exam> | <Vacancies> | <Qualification> | Verified: Official | Last date YYYY-MM-DD)
+    Last slide (cta): Save this before the deadlines
+  The recap and "Comment JOB" slides are added automatically.
+- HOOK (slide 1), 6 to 10 words, always concrete. Use one of these:
+    number + deadline:  "5 off campus drives closing this week"
+    big names:          "Google, Stripe and Qualcomm are hiring interns"
+    batch call-out:     "2026 batch: 4 companies hiring right now"
+    money:              "Internships paying ₹50,000 a month, apply by Friday"
+    govt numbers:       "6,000+ govt posts close by 26 November"
+    loss:               "Don't miss these 3 drives closing in 48 hours"
+  Wrap the one word to colour in *stars*: "*5* drives closing this week". Never "Tech in 60 seconds",
+  never a greeting, never "this week in".
+- Caption:
+    line 1 (shows before "... more"): the hook again in different words, with the number.
+    body: one short line per opening ("Razorpay · SDE Intern · apply by 12 Nov").
+    keywords in normal sentences: "off campus drive 2026", "jobs for freshers", "internship for
+    2027 batch", "government jobs 2026", "<company> hiring freshers".
+    last line, the only ask: "Comment JOB and we'll DM you every apply link."
+    No URLs, no hashtags in the caption text.
+- Hashtags column: at most 5, specific first (#razorpay #offcampusdrive #jobsforfreshers
+  #2026batch #internship). Never #viral #fyp #explore #beyondtheoffer.
+- Don't draft openings whose deadline is under 2 days away. Never invent salaries, dates,
+  vacancies or eligibility.
 ```
 
 ## Expectations
 
-1 million views and 100 followers from 30 followers isn't something any setting guarantees. The usual path for a niche page posting daily for 30 days is a few reels at 1k–10k views, then occasionally one breaks out. Follows come when a profile visitor sees a full, useful grid. Do not buy followers, likes or views, and don't use follow/unfollow bots. Instagram detects them and suppresses the account's reach, which is the opposite of the goal.
+Millions of views and followers isn't something any template or setting guarantees. The usual path for a niche page posting daily for 30 days is a few reels at 1k–10k views, then occasionally one breaks out. Follows come when a profile visitor sees a full, useful grid. Do not buy followers, likes or views, and don't use follow/unfollow bots. Instagram detects them and suppresses the account's reach, which is the opposite of the goal.
 
 Judge it after 30 days of daily posting with insights on. Look at reach to non-followers, shares and saves per post, then make more of what worked (`/ig-audit` can read the Insights tab).

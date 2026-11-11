@@ -48,13 +48,12 @@ jobs:
       YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
       YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
       TIMEZONE: Asia/Kolkata
-      # off = music-only reels (tracks from automation/assets/music/); set a voice name to narrate again
-      REEL_VOICE: ${{ vars.REEL_VOICE || 'off' }}
+      # ffmpeg only trims older reels for the YouTube button; Instagram posts are carousels
       FFMPEG_PATH: ffmpeg
+      # Optional: sharper logos for small companies (automation/lib/logos.js)
+      LOGO_DEV_TOKEN: ${{ secrets.LOGO_DEV_TOKEN }}
       # Two daily slots: lunch break and evening, when students are on their phones
       POST_SLOTS_IST: ${{ vars.POST_SLOTS_IST || '13:00,19:00' }}
-      # manual | auto: reels go to non-followers first as trial reels (see READMEINSTA.md)
-      REEL_TRIAL: ${{ vars.REEL_TRIAL || '' }}
       CONTENT_ROTATION_IST: ${{ vars.CONTENT_ROTATION_IST || 'tech,news,govt,events,ai' }}
       WEBSITE_URL: ${{ vars.WEBSITE_URL || 'https://beyondtheoffer.vercel.app' }}
       # Scheduled runs read the repository variable DRY_RUN (Settings → Variables). Set it to "false" to go live.

@@ -21,9 +21,8 @@ jobs:
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       TIMEZONE: Asia/Kolkata
-      # off = music-only reels (tracks from automation/assets/music/); set a voice name to narrate again
-      REEL_VOICE: ${{ vars.REEL_VOICE || 'off' }}
-      FFMPEG_PATH: ffmpeg
+      # Optional: sharper logos for small companies (automation/lib/logos.js)
+      LOGO_DEV_TOKEN: ${{ secrets.LOGO_DEV_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,6 +37,5 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npx playwright install --with-deps chromium
         working-directory: automation
-      - run: sudo apt-get install -y -o Acquire::Retries=3 ffmpeg
       - run: node preview.js ${{ inputs.id && format('--id {0}', inputs.id) || '--all' }}
         working-directory: automation
