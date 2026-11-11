@@ -98,7 +98,8 @@ async function handleComment(value) {
   const finishLog = (entry) => updateComment(logRow, { ...base, ...entry });
 
   try {
-    if (action === "links") {
+    // A thank-you or an emoji gets the same DM as a keyword; links never go in the public reply
+    if (action === "links" || action === "thanks") {
       const { items, postId } = await linksForMedia(mediaId);
       // DM first; the public reply points to it, or carries the links page when the DM failed
       const dm = await startCommentDm({ commentId, items, websiteUrl: WEBSITE_URL, postId });
@@ -116,21 +117,6 @@ async function handleComment(value) {
         Status: dm.ok ? dm.status : "partial",
         IG_Scoped_ID: dm.recipientId,
         Post_ID: postId || "",
-      });
-    } else if (action === "thanks") {
-      const { items, postId } = await linksForMedia(mediaId);
-      let publicError = "";
-      const publicReply = buildPublicLinksReply(items, WEBSITE_URL, postId);
-      try {
-        await replyToComment(commentId, publicReply);
-      } catch (error) {
-        publicError = error.message.slice(0, 300);
-      }
-      if (publicError) throw new Error(`Public reply failed: ${publicError}`);
-      await finishLog({
-        Action: "links",
-        Reply_Text: publicReply,
-        Status: "sent",
       });
     } else if (action === "question" && process.env.ANTHROPIC_API_KEY) {
       const { caption } = await getMedia(mediaId, "caption");

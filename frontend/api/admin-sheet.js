@@ -134,7 +134,11 @@ async function syncInstagramComments() {
       const replies = comment.replies?.data || [];
       const existing = existingRows.find((row) => row.Comment_ID === comment.id);
       const alreadyReplied = replies.some((reply) => reply.from?.id === process.env.IG_USER_ID);
-      if (existing?.Reply_Text || alreadyReplied) {
+      // The webhook logs "processing" before it replies; leave the comment to it for two minutes
+      // so the two never answer the same comment (a second DM fails and the links go public)
+      const loggedAt = Date.parse(`${String(existing?.Time_IST || "").replace(" ", "T").replace(/T(\d):/, "T0$1:")}:00+05:30`);
+      const webhookBusy = existing?.Status === "processing" && Date.now() - loggedAt < 120000;
+      if (existing?.Reply_Text || alreadyReplied || webhookBusy) {
         known.add(comment.id);
         continue;
       }
