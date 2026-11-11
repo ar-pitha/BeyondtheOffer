@@ -296,5 +296,7 @@ export async function renderPost(row, outDir, { category = "tech", items } = {})
     files.push(file);
   }
   await page.close();
+  // The caller trims the caption to match (publish.js)
+  files.left = found.filter((i) => !keep.includes(i));
   return files;
 }

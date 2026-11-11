@@ -191,7 +191,19 @@ async function loadRows() {
 
 async function renderRow(row, outDir) {
   const images = await renderPost(row, outDir, { category: categoryForRow(row) });
-  return { images, note: `${images.length} slide(s)` };
+  // Openings already posted elsewhere (or closed) were left off the slides; their caption lines go too
+  const names = (images.left || [])
+    .flatMap((i) => [String(i.Company || i.Organisation || i.Name || i.Headline || "").replace(/\s*\([^)]*\)/g, ""), (String(i.Organisation || "").match(/\(([^)]+)\)/) || [])[1]])
+    .filter((n) => n && n.length > 2)
+    .map((n) => n.toLowerCase());
+  if (names.length) {
+    row.Caption = String(row.Caption || "")
+      .split("\n")
+      .filter((line, k) => k === 0 || !names.some((n) => line.toLowerCase().includes(n)))
+      .join("\n");
+  }
+  const note = images.left?.length ? `, left out ${images.left.map((i) => i.ID).join(", ")}` : "";
+  return { images, note: `${images.length} slide(s)${note}` };
 }
 
 async function publishToInstagram(row, imageUrls) {

@@ -96,8 +96,8 @@ Instagram drafts (Content_Queue) – carousels only, no reels, no voiceover:
 - No emojis anywhere: not in the hook, the slides, the caption or the title.
 - Never repeat an opening: skip any item with Posted_On_IG=Y (Used_In_Post=Y for news), and any
   item already listed in another Content_Queue row that isn't Rejected. One company role, one post.
-  The publish run drops repeats and closed openings from the slides anyway, and refuses a post
-  with nothing new left.
+  If a repeat slips through, only that opening is dropped: the publish run leaves it off the slides
+  and out of the caption and posts the rest (a post with nothing new left isn't posted).
 - News posts use the "Did you know?" design automatically: pick 3 stories with a surprising number
   or first, and fill Why_It_Matters_For_Students in Tech_News for each (it's shown on the slide).
 - Niche: openings and deadlines for Indian freshers (2025–2027 batches).

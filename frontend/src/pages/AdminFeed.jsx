@@ -103,7 +103,7 @@ function PostCard({ row, repeatsIn = [], onSave, onPublish, onPreview, onRegener
         </p>
         {note && <p className="row-meta">{note}</p>}
         {!published && repeatsIn.length > 0 && (
-          <p className="row-meta feed-repeat">Repeats openings from {repeatsIn.join(", ")}. Reject one of them.</p>
+          <p className="row-meta feed-repeat">Shares openings with {repeatsIn.join(", ")}. Whichever is published first keeps them; the other leaves them out.</p>
         )}
 
         <ol className="feed-slides">
