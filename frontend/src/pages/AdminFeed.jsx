@@ -40,7 +40,7 @@ const parseSlides = (script = "") =>
     .filter(Boolean)
     .map((l) => {
       const m = l.match(/^(?:slide\s*\d+|hook|point|cta)\s*(?:\([^)]*\))?\s*[:.\-–]\s*(.*)$/i);
-      return (m ? m[1] : l).split("|").map((s) => s.trim()).filter(Boolean).join(" · ");
+      return (m ? m[1] : l).replace(/\*([^*]+)\*/g, "$1").split("|").map((s) => s.trim()).filter(Boolean).join(" · ");
     });
 
 const PLATFORMS = {
@@ -52,44 +52,16 @@ const PLATFORMS = {
 const canPublishToYouTube = (row) =>
   String(row.Format).toLowerCase() === "reel" && !row.YT_Video_Link && /\.mp4(\?|\s|$)/i.test(row.Preview_Link || "");
 
-// Days since the draft was written, for the stub on the right of each row
+// Days since the draft was written, shown at the top of the action column
 function Age({ date }) {
   const t = Date.parse(date);
   const n = Number.isNaN(t) ? null : Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  if (n === null) return null;
   return (
-    <span className="stub stub-later" aria-label={n === null ? "No date" : `${n} days ago`}>
-      <b>{n === null ? "–" : n}</b>
-      <small>{n === null ? "" : n === 0 ? "today" : n === 1 ? "day ago" : "days ago"}</small>
-    </span>
-  );
-}
-
-// One post as a flat row, like the job list: what it is on the left, how old it is on the right.
-// Everything else (slides, caption, preview, approve/publish) opens in a panel.
-function PostRow({ row, onOpen, building, posting }) {
-  const status = row.Status || "Draft";
-  const slides = parseSlides(row.Slides_or_Script).length;
-  const note = posting
-    ? "Publishing…"
-    : building && !row.Preview_Link
-      ? "Building preview…"
-      : row.Scheduled_Time_IST && status !== "Published"
-        ? `Posts at ${row.Scheduled_Time_IST} IST`
-        : status === "Approved"
-          ? row.Preview_Link ? "Preview ready" : "No preview yet"
-          : "";
-  return (
-    <li className={`row feed-post feed-post-${status.toLowerCase()}`}>
-      <button className="row-body feed-post-open" onClick={() => onOpen(row.ID)}>
-        <span className="row-title">{row.Title || "Untitled post"}</span>
-        <span className="row-org">
-          <span className={`kind feed-status-${status.toLowerCase()}`}>{status === "Draft" ? "To review" : status}</span>
-          {row.Format || "Post"}{slides ? ` · ${slides} slides` : ""}
-        </span>
-        {note && <span className="row-meta">{note}</span>}
-      </button>
-      <Age date={row.Date} />
-    </li>
+    <p className="feed-age">
+      <b>{n === 0 ? "Today" : n}</b>
+      {n > 0 && <small>{n === 1 ? "day ago" : "days ago"}</small>}
+    </p>
   );
 }
 
@@ -116,101 +88,110 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
     </button>
   ) : null;
 
-  return (
-    <article className="feed-panel">
-      {row.Preview_Link && !/\.mp4(\?|\s|$)/i.test(row.Preview_Link) && (
-        <div className="feed-thumbs" onClick={() => onPreview(row)} role="button" tabIndex={0} aria-label="Open the preview">
-          {row.Preview_Link.split(/\s+/).filter(Boolean).map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
-        </div>
-      )}
+  const note = postingTo
+    ? `Publishing to ${PLATFORMS[postingTo].name}…`
+    : building && !row.Preview_Link
+      ? "Building preview…"
+      : row.Scheduled_Time_IST && !published
+        ? `Posts at ${row.Scheduled_Time_IST} IST`
+        : "";
 
-      <details className="feed-caption">
-        <summary>Draft text ({slides.length} slides)</summary>
+  // All the text on the left; the age and every button in a column on the right
+  return (
+    <li className={`feed-item feed-post-${status.toLowerCase()}`}>
+      <div className="feed-main">
+        <h3 className="feed-title">{row.Title || "Untitled post"}</h3>
+        <p className="row-org">
+          <span className={`kind feed-status-${status.toLowerCase()}`}>{status === "Draft" ? "To review" : status}</span>
+          {row.Format || "Post"} · {slides.length} slides · {row.ID}
+        </p>
+        {note && <p className="row-meta">{note}</p>}
+
         <ol className="feed-slides">
           {slides.map((s, i) => (
             <li key={i}>{s}</li>
           ))}
         </ol>
-      </details>
 
-      <details className="feed-caption" open={editing}>
-        <summary>Caption and hashtags</summary>
-        {editing ? (
+        <div className="feed-caption">
+          {editing ? (
+            <>
+              <textarea className="form-control" rows={8} value={caption} onChange={(e) => setCaption(e.target.value)} />
+              <div className="feed-row">
+                <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => save({ Caption: caption }, "Caption saved", "caption").then(() => setEditing(false))}>
+                  {working === "caption" ? "Saving…" : "Save caption"}
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setCaption(row.Caption || ""); setEditing(false); }}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {row.Caption && <p className="feed-caption-text">{row.Caption}</p>}
+              {row.Hashtags && <p className="feed-hashtags">{row.Hashtags}</p>}
+              {!published && (
+                <button className="link-button" onClick={() => setEditing(true)}>Edit caption</button>
+              )}
+            </>
+          )}
+        </div>
+
+        {row.Preview_Link && !/\.mp4(\?|\s|$)/i.test(row.Preview_Link) && (
+          <div className="feed-thumbs" onClick={() => onPreview(row)} role="button" tabIndex={0} aria-label="Open the preview">
+            {row.Preview_Link.split(/\s+/).filter(Boolean).map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
+          </div>
+        )}
+      </div>
+
+      <div className="feed-side">
+        <Age date={row.Date} />
+        {published ? (
           <>
-            <textarea className="form-control" rows={8} value={caption} onChange={(e) => setCaption(e.target.value)} />
-            <div className="feed-row">
-              <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => save({ Caption: caption }, "Caption saved", "caption").then(() => setEditing(false))}>
-                {working === "caption" ? "Saving…" : "Save caption"}
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => { setCaption(row.Caption || ""); setEditing(false); }}>
-                Cancel
-              </button>
-            </div>
+            {row.IG_Post_Link?.startsWith("http") ? (
+              <a className="btn btn-secondary btn-sm" href={row.IG_Post_Link} target="_blank" rel="noopener noreferrer">
+                View on Instagram <HiExternalLink aria-hidden />
+              </a>
+            ) : (
+              <span className="stat-note">{row.IG_Post_Link || "Published"}</span>
+            )}
+            {youTubeAction}
           </>
         ) : (
           <>
-            <p className="feed-caption-text">{row.Caption}</p>
-            <p className="feed-hashtags">{row.Hashtags}</p>
-            {!published && (
-              <button className="link-button" onClick={() => setEditing(true)}>Edit caption</button>
-            )}
-          </>
-        )}
-      </details>
-
-      {published ? (
-        <div className="feed-actions">
-          {row.IG_Post_Link?.startsWith("http") ? (
-            <a className="btn btn-secondary btn-sm" href={row.IG_Post_Link} target="_blank" rel="noopener noreferrer">
-              View on Instagram <HiExternalLink aria-hidden />
-            </a>
-          ) : (
-            <span className="stat-note">{row.IG_Post_Link || "Published"}</span>
-          )}
-          {youTubeAction}
-          {row.Design_Link && (
-            <a className="link-button" href={row.Design_Link} target="_blank" rel="noopener noreferrer">First slide image</a>
-          )}
-        </div>
-      ) : (
-        <div className="feed-actions">
-          {status === "Approved" ? (
-            <>
-              {building && !row.Preview_Link ? (
-                <button className="btn btn-secondary btn-sm" disabled>Building preview…</button>
-              ) : (
-                <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onPreview(row)}>
-                  {row.Preview_Link ? "View preview" : "Generate preview"}
+            {status === "Approved" ? (
+              <>
+                <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo || !row.Preview_Link} onClick={() => onPublish(row, "instagram")}>
+                  {postingTo === "instagram" ? "Posting…" : "Publish to Instagram"}
                 </button>
-              )}
-              {row.Preview_Link && (
-                <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onRegenerate(row)}>
-                  {working === "regenerate" ? "Starting…" : "Regenerate preview"}
-                </button>
-              )}
-              <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo || !row.Preview_Link} onClick={() => onPublish(row, "instagram")}>
-                {postingTo === "instagram" ? "Posting…" : "Publish to Instagram"}
+                {building && !row.Preview_Link ? (
+                  <button className="btn btn-secondary btn-sm" disabled>Building preview…</button>
+                ) : (
+                  <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onPreview(row)}>
+                    {row.Preview_Link ? "View preview" : "Generate preview"}
+                  </button>
+                )}
+                {row.Preview_Link && (
+                  <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onRegenerate(row)}>
+                    {working === "regenerate" ? "Starting…" : "Regenerate preview"}
+                  </button>
+                )}
+                {youTubeAction}
+              </>
+            ) : (
+              <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => onApprove(row)}>
+                {working === "approve" ? "Approving…" : "Approve"}
               </button>
-              {youTubeAction}
-            </>
-          ) : (
-            <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => onApprove(row)}>
-              {working === "approve" ? "Approving…" : "Approve"}
-            </button>
-          )}
-          {status !== "Rejected" && (
-            <button className="btn btn-danger btn-sm" disabled={!!working} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.", "reject")}>
-              {working === "reject" ? "Rejecting…" : "Reject"}
-            </button>
-          )}
-          {status !== "Draft" && (
-            <button className="link-button" disabled={!!working} onClick={() => save({ Status: "Draft", Scheduled_Time_IST: "" }, "Moved back to drafts", "draft")}>
-              {working === "draft" ? "Moving…" : "Back to draft"}
-            </button>
-          )}
-          <label className="feed-time">
-            <span>Post at</span>
-            <input type="datetime-local" className="form-control" value={time} onChange={(e) => setTime(e.target.value)} />
+            )}
+            {status !== "Rejected" && (
+              <button className="btn btn-danger btn-sm" disabled={!!working} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.", "reject")}>
+                {working === "reject" ? "Rejecting…" : "Reject"}
+              </button>
+            )}
+            <label className="feed-time">
+              <span>Post at</span>
+              <input type="datetime-local" className="form-control" value={time} onChange={(e) => setTime(e.target.value)} />
+            </label>
             <button
               className="btn btn-secondary btn-sm"
               disabled={!!working || fromInputTime(time) === (row.Scheduled_Time_IST || "")}
@@ -224,10 +205,15 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
             >
               {working === "schedule" ? "Saving…" : time ? "Schedule" : "Clear time"}
             </button>
-          </label>
-        </div>
-      )}
-    </article>
+            {status !== "Draft" && (
+              <button className="link-button" disabled={!!working} onClick={() => save({ Status: "Draft", Scheduled_Time_IST: "" }, "Moved back to drafts", "draft")}>
+                {working === "draft" ? "Moving…" : "Back to draft"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -307,7 +293,6 @@ function AdminFeed() {
   const [previewRow, setPreviewRow] = useState(null);
   const [previewRun, setPreviewRun] = useState(null);
   const [building, setBuilding] = useState({}); // post ID → when its preview build started
-  const [openId, setOpenId] = useState(null); // post shown in the side panel
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -502,7 +487,6 @@ function AdminFeed() {
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
   const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
-  const openRow = openId ? queue.find((r) => r.ID === openId) : null;
 
   useEffect(() => {
     setPostPage(1);
@@ -581,9 +565,9 @@ function AdminFeed() {
               <p>New drafts arrive every morning around 6:30 AM.</p>
             </div>
           ) : (
-            <ul className="rows feed-posts">
+            <ul className="feed-list">
               {pagedPosts.map((row) => (
-                <PostRow key={row.ID} row={row} onOpen={setOpenId} building={!!building[row.ID]} posting={run?.id === row.ID && run.status !== "completed"} />
+                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
               ))}
             </ul>
           )}
@@ -591,40 +575,6 @@ function AdminFeed() {
         </>
       ) : (
         <SheetTable data={data} onSave={onSave} pending={pending} order={order} />
-      )}
-
-      {openRow && (
-        <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setOpenId(null);
-        }}>
-          <section className="modal feed-post-modal" role="dialog" aria-modal="true" aria-labelledby="post-panel-title">
-            <header className="modal-header feed-post-head">
-              <div>
-                <h3 id="post-panel-title">{openRow.Title || "Untitled post"}</h3>
-                <p className="stat-note">
-                  <span className={`feed-status-${(openRow.Status || "Draft").toLowerCase()}`}>{openRow.Status || "Draft"}</span>
-                  {" · "}{openRow.Format || "Post"} · {openRow.ID}
-                </p>
-              </div>
-              <button className="link-button" onClick={() => setOpenId(null)}>Close</button>
-            </header>
-            <div className="modal-body">
-              <PostCard
-                key={`${openRow.ID}-${openRow.Status}-${openRow.Scheduled_Time_IST}`}
-                row={openRow}
-                slots={data.slots}
-                onSave={onSave}
-                onApprove={onApprove}
-                onPublish={onPublish}
-                onPreview={(r) => { setOpenId(null); onPreview(r); }}
-                onRegenerate={onRegenerate}
-                building={!!building[openRow.ID]}
-                working={pending[openRow.ID]}
-                postingTo={run?.id === openRow.ID && run.status !== "completed" ? run.platform : null}
-              />
-            </div>
-          </section>
-        </div>
       )}
 
       {previewRow && (

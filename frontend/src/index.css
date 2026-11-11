@@ -1280,52 +1280,99 @@ select.form-control {
   opacity: 0.7;
 }
 
-/* Post list: job-style rows; the rest opens in a panel */
-.feed-post-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
+/* Post list: every word of the post on the left, its age and buttons in a column on the right */
+.feed-list {
+  border-top: 1px solid var(--line);
 }
 
-.feed-post-open .row-title,
-.feed-post-open .row-meta {
-  display: block;
+.feed-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 28px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
 }
 
-.feed-post-open:hover .row-title {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.feed-post .stub {
-  flex-basis: 68px;
+@media (max-width: 720px) {
+  .feed-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
 }
 
 .feed-post-rejected {
   opacity: 0.55;
 }
 
-.feed-post-modal { max-width: 640px; }
-
-.feed-post-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.feed-post-head .stat-note {
-  margin-top: 4px;
-  font-size: 13px;
-}
-
-.feed-panel {
+.feed-main {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+}
+
+.feed-title {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.feed-main .row-org,
+.feed-main .row-meta {
+  margin-top: -6px;
+}
+
+.feed-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding-left: 20px;
+  border-left: 1px dashed var(--line);
+}
+
+@media (max-width: 720px) {
+  .feed-side {
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px dashed var(--line);
+  }
+}
+
+@media (min-width: 721px) {
+  .feed-side {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+  }
+}
+
+.feed-side .btn {
+  width: 100%;
+}
+
+.feed-side .link-button {
+  align-self: center;
+}
+
+.feed-age {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.feed-age b {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-age small {
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
 .feed-thumbs {
@@ -1338,16 +1385,11 @@ select.form-control {
 
 .feed-thumbs img {
   flex: none;
-  height: 160px;
+  height: 140px;
   aspect-ratio: 4 / 5;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--line);
-}
-
-.feed-panel .feed-actions {
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
 }
 
 .feed-status-approved { color: var(--ink); }
@@ -1356,7 +1398,6 @@ select.form-control {
 .feed-status-draft { color: var(--soon); }
 
 .feed-slides {
-  margin-top: 8px;
   list-style: decimal;
   padding-left: 18px;
   display: grid;
@@ -1394,15 +1435,15 @@ select.form-control {
 
 .feed-time {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
   font-size: 12px;
   color: var(--ink-3);
 }
 
 .feed-time .form-control {
-  width: auto;
+  width: 100%;
   height: 34px;
   font-size: 13px;
 }
