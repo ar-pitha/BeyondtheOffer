@@ -144,7 +144,6 @@ function AdminJobs() {
 
       {jobs.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📭</div>
           <h3>No jobs yet</h3>
           <p>Create your first job posting</p>
         </div>

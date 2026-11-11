@@ -32,6 +32,8 @@ const KEYWORD = { tech: "JOB", govt: "JOB", events: "LINK", news: "LINK", ai: "L
 // Placeholders the research task writes when a fact is missing; a card leaves those rows out
 const EMPTY = /^(-|n\/?a|na|tbd|tba|nil|none|various|varies|multiple)$|not (stated|posted|disclosed|mentioned|specified|available|declared|given|known)|see (the )?(official )?notification|no deadline|^post[- ]?wise|^as per\b|^varies\b|^depends\b/i;
 const URL = /https?:\/\/|www\./i;
+// No emojis anywhere on the cards or in captions
+export const EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}\u{20E3}]/gu;
 
 // Job/requisition numbers, advert codes and source notes mean nothing to a student
 const tidy = (value) =>
@@ -40,6 +42,7 @@ const tidy = (value) =>
     .replace(/,?\s*\b(?:advt\.?|advertisement|post code|notification|job id|req(?:uisition)?)\s*(?:no\.?)?\s*[\w./-]*\d[\w./-]*/gi, "")
     .replace(/[;,]?\s*see (the )?(official )?notification\.?/gi, "")
     .replace(/[;,]?\s*(?:aggregators?|some sites?|unofficial sources?)\s+(?:lists?|says?|mentions?)[^;]*/gi, "")
+    .replace(EMOJI, "")
     .replace(/\bRs\.?\s*/g, "₹")
     .replace(/^(\d{4,})$/, (n) => Number(n).toLocaleString("en-IN"))
     .replace(/\s+/g, " ")
@@ -218,7 +221,7 @@ export function planDeck(row, category, items = []) {
   const deck = [
     {
       type: "cover",
-      hook: hook || row.Title || "Openings this week",
+      hook: String(hook || row.Title || "Openings this week").replace(EMOJI, "").replace(/\s{2,}/g, " ").trim(),
       sub: clean(String(sub || "").replace(/,?\s*no (closing date|deadline)[^,]*/i, ""), 110),
       kicker: look.kicker,
       logos: cards.filter((c) => c.lookup).slice(0, 6).map((c) => c.lookup),

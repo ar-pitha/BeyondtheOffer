@@ -19,7 +19,7 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 ## Fixed in code (this change)
 
 - `publish.js` posts the next approved row when today's category has nothing approved. It prefers reels, then carousels, then stories, because stories don't reach non-followers.
-- Two posting slots by default: `13:00,19:00` IST. (Since 11 Nov 2026: one post at `19:00`, plus its cover as a story.)
+- Two posting slots by default: `13:00,19:00` IST. (Since 11 Nov 2026: no timer at all; each post goes out when it's published from the admin.)
 - At most 5 hashtags: the row's own specific tags first, then category defaults. Brand tag dropped.
 - One search phrase per category ("jobs for freshers", "government jobs", "hackathon") is added to captions that lack it. It goes before the closing ask. Instagram search reads caption words.
 - No URL line in captions. The comment keyword DMs the `/links/<ID>` page.
@@ -63,15 +63,15 @@ one card per line.
 
 ## What only you can do (in order of impact)
 
-1. **Approve every day.** Open `/admin/feed` once a morning and approve or reject everything. Reject stale drafts whose deadlines have passed. Target: 1 carousel + 1 story a day, every day, for 30 days (the publish run posts at 19:00 IST and shares the cover to the story). Nothing else on this list matters if posting stays at 3 a month.
+1. **Publish every day.** Open `/admin/feed`, check the two new drafts and press Publish to Instagram on each (it posts straight away; there is no timer). Reject anything stale. Then share each post to your story from the Instagram app. Target: 2 posts a day (one jobs, one hackathons/news), every day, for 30 days. Nothing else on this list matters if posting stays at 3 a month.
 2. **Change the profile** (Edit profile in the app):
    - Name: `Jobs for Freshers & Govt Jobs` (this is what search matches; the API can't change it)
    - Bio (fresh start on 11 Nov 2026):
      ```
      Fresh start · 11.11.2026
      Off campus drives, internships & govt jobs
-     1 verified post daily, 7 PM IST
-     Comment JOB for apply links 👇
+     Verified jobs, hackathons & tech news daily
+     Comment JOB for apply links
      ```
    - Pin your 3 best posts. Add highlights: Jobs, Govt Jobs, Hackathons.
 3. **Give the token the insights permission.** Regenerate the Instagram token with `instagram_business_manage_insights` (Instagram login) or `instagram_manage_insights` (Facebook login). Update `IG_ACCESS_TOKEN` in GitHub secrets and Vercel. After that the Insights tab fills daily, and you can see which posts actually reached people.
@@ -83,12 +83,17 @@ one card per line.
 
 ## Brief for the daily drafting task
 
-Paste this into the Claude scheduled task that writes Content_Queue rows (it replaces the old reel brief):
+Paste this into the Claude scheduled task that writes Content_Queue rows (updated 11 Nov 2026: two posts a day in two lanes, no emojis, no timer):
 
 ```
 Instagram drafts (Content_Queue) – carousels only, no reels, no voiceover:
-- Every day draft 2 rows with Format=Carousel: one jobs/internships post, and one govt-jobs or
-  hackathons post. At most one news/AI carousel a week.
+- Every day draft exactly 2 rows with Format=Carousel, and keep the two lanes apart:
+    Post 1, JOBS: tech jobs/internships (TJ-) and/or govt jobs (GJ-) only.
+    Post 2, EVENTS & NEWS: hackathons/contests (HQ-) or tech/AI news (TN-) only.
+  Never put a job and a hackathon or news story in the same post. On a day with no fresh
+  hackathon, Post 2 is the news post (3 stories from the last 2 days), and the other way round.
+- Leave Scheduled_Time_IST empty: nothing posts on a timer; the admin publishes by hand.
+- No emojis anywhere: not in the hook, the slides, the caption or the title.
 - Niche: openings and deadlines for Indian freshers (2025–2027 batches).
 - 3 to 6 openings per carousel. Put every item's ID in Item_IDs so the slide gets the company's
   real logo and the DM gets the right apply link.
@@ -107,6 +112,8 @@ Instagram drafts (Content_Queue) – carousels only, no reels, no voiceover:
     loss:               "Don't miss these 3 drives closing in 48 hours"
   Wrap the one word to colour in *stars*: "*5* drives closing this week". Never "Tech in 60 seconds",
   never a greeting, never "this week in".
+- News posts (Post 2 on news days): hook names the biggest story ("Siri AI is open to every
+  developer now"), 3 stories, last line "Comment LINK for the sources."
 - Caption:
     line 1 (shows before "... more"): the hook again in different words, with the number.
     body: one short line per opening ("Razorpay · SDE Intern · apply by 12 Nov").

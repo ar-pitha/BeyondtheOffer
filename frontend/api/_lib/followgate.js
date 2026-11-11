@@ -13,9 +13,9 @@ import { buildLinksMessage, COMMENTS_LOG_TAB, COMMENTS_LOG_HEADERS } from "./rep
 
 const HANDLE = "@beyond_the.offer";
 export const FOLLOW_PROMPT =
-  `Hey! 👋 The apply links for this post are ready.\n\nFollow ${HANDLE}, then reply DONE here and I'll send them right away.`;
+  `Hey! The apply links for this post are ready.\n\nFollow ${HANDLE}, then reply DONE here and I'll send them right away.`;
 const NOT_FOLLOWING =
-  `I can't see your follow yet 🙂 Follow ${HANDLE}, then reply DONE again and the links are yours.`;
+  `I can't see your follow yet. Follow ${HANDLE}, then reply DONE again and the links are yours.`;
 // Replies that mean "send them now"
 const DONE = /^\s*(done|yes|yep|ok(ay)?|followed|following|send|sent|link|links|job|jobs)\b/i;
 const WAITING = "dm: waiting for follow";

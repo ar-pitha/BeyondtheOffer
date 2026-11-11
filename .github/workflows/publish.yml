@@ -1,8 +1,8 @@
 name: publish
 
+# Only runs when "Publish to Instagram" is pressed in /admin/feed (or by hand here):
+# nothing is posted on a timer.
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -52,7 +52,7 @@ jobs:
       FFMPEG_PATH: ffmpeg
       # Optional: sharper logos for small companies (automation/lib/logos.js)
       LOGO_DEV_TOKEN: ${{ secrets.LOGO_DEV_TOKEN }}
-      # One post a day, in the evening when students are on their phones; its cover also goes to the story
+      # Only used by a manual run without an id; the admin button always posts at once
       POST_SLOTS_IST: ${{ vars.POST_SLOTS_IST || '19:00' }}
       CONTENT_ROTATION_IST: ${{ vars.CONTENT_ROTATION_IST || 'tech,news,govt,events,ai' }}
       WEBSITE_URL: ${{ vars.WEBSITE_URL || 'https://beyondtheoffer.vercel.app' }}

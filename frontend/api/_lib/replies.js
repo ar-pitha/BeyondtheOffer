@@ -43,10 +43,10 @@ export function classifyComment(text = "") {
 }
 
 const THANK_REPLIES = [
-  "Glad it helps! New openings drop every day 🙌",
-  "Thank you! Share it with a friend who's applying 💛",
-  "Happy to help! Follow for daily jobs and hackathons 🚀",
-  "Thanks! All the links are on our website too, link in bio ✨",
+  "Glad it helps! New openings drop every day.",
+  "Thank you! Share it with a friend who's applying.",
+  "Happy to help! Follow for daily jobs and hackathons.",
+  "Thanks! All the links are on our website too, link in bio.",
 ];
 
 export function thanksReply(seed = "") {
@@ -70,7 +70,7 @@ function fitUtf8(text, maxBytes) {
 // DM text with apply links. Instagram caps message text at 1000 UTF-8 bytes.
 export function buildLinksMessage(items, websiteUrl, postId) {
   const site = websiteUrl || "https://beyondtheoffer.vercel.app";
-  const lines = ["Here are the links from our post 👇", ""];
+  const lines = ["Here are the links from our post:", ""];
   if (postId) lines.push(`All in one page: ${site}/links/${postId}`, "");
   for (const item of items) {
     if (!item.link) continue;

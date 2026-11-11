@@ -137,7 +137,6 @@ function AdminQuizzes() {
 
       {quizzes.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🧩</div>
           <h3>No quizzes yet</h3>
           <p>Create your first quiz posting</p>
         </div>

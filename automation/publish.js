@@ -1,5 +1,6 @@
 // Approved Content_Queue rows → Instagram, always as a white carousel with company logos
 // (lib/post.js). Reel and Story drafts are posted as carousels too; nothing is voiced.
+//   Runs only when "Publish to Instagram" is pressed in the admin (publish.yml has no timer).
 //   node publish.js              publish one due row (only inside POST_SLOTS_IST unless scheduled)
 //   node publish.js --dry-run    render + upload, no publish; ignores time slots
 //   node publish.js --sample     use fixtures/content-queue.sample.json instead of the sheet
@@ -17,7 +18,7 @@ import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns, nowInZone, logRun } from "./lib/sheets.js";
 import { closeBrowser } from "./lib/render.js";
 import { hasCloudinary, uploadSlides } from "./lib/cloudinary.js";
-import { renderPost } from "./lib/post.js";
+import { renderPost, EMOJI } from "./lib/post.js";
 import { categoryForRow } from "./lib/category.js";
 
 const dryRun = isDryRun();
@@ -82,7 +83,12 @@ function withCategoryHashtags(row, category) {
 
 export function buildCaption(row, category) {
   // Hashtags typed into the caption body would count towards the limit too ("#1" stays)
-  const body = String(row.Caption || "").replace(/(^|\s)#\p{L}[\p{L}\p{N}_]*/gu, "$1").replace(/[ \t]+$/gm, "").trim();
+  const body = String(row.Caption || "")
+    .replace(EMOJI, "")
+    .replace(/(^|\s)#\p{L}[\p{L}\p{N}_]*/gu, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^[ \t]+|[ \t]+$/gm, "")
+    .trim();
   const paragraphs = body.split(/\n\s*\n/).filter(Boolean);
   // The first line is all that shows under a post. A series title ("Tech in 60 seconds") says
   // nothing there, so the caption opens on the first real item instead.
@@ -209,21 +215,6 @@ async function publishToInstagram(row, imageUrls) {
   await ig.waitUntilFinished(creationId);
   const mediaId = await ig.publish(creationId);
   return { mediaId, permalink: await ig.getPermalink(mediaId) };
-}
-
-// The day's story: the post's cover, so followers who skip the feed still see it.
-// A failed story never fails the post.
-async function shareCoverToStory(coverUrl) {
-  if (!coverUrl) return;
-  try {
-    const ig = await import("./lib/instagram.js");
-    const id = await ig.createStoryContainer(coverUrl);
-    await ig.waitUntilFinished(id);
-    await ig.publish(id);
-    console.log("Shared the cover to the story.");
-  } catch (err) {
-    console.error(`story failed (post is fine): ${err.message}`);
-  }
 }
 
 // Reels also go to YouTube as Shorts. Unlike Instagram, description links are clickable there,
@@ -355,7 +346,6 @@ async function main() {
 
     const { permalink } = await publishToInstagram(row, urls);
     console.log(`Published: ${permalink}`);
-    await shareCoverToStory(urls[0]);
 
     if (!sample) {
       await updateRow(TABS.queue, headers, row._row, {
