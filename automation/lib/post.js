@@ -180,6 +180,13 @@ function cardFromFields(fields) {
 
 // ---- deck ----
 
+// Still open: not marked expired, and its last date (if any) hasn't passed
+function isOpen(item) {
+  if (/expired|closed/i.test(item.Status || "")) return false;
+  const date = parseSheetDate(item.Last_Date || item.Apply_By || item.Register_By || "");
+  return !date || Number.isNaN(date.getTime()) || date.getTime() > Date.now();
+}
+
 export async function loadItems(itemIds) {
   const ids = String(itemIds || "").split(/[,\s]+/).filter(Boolean);
   if (!ids.length) return [];
@@ -260,7 +267,12 @@ async function attachImages(deck) {
 // Renders every slide to a 1440x1800 JPEG in outDir and returns the file paths
 export async function renderPost(row, outDir, { category = "tech", items } = {}) {
   fs.mkdirSync(outDir, { recursive: true });
-  const deck = planDeck(row, category, items ?? (await loadItems(row.Item_IDs).catch(() => [])));
+  // Openings that closed since the draft was written are left out, unless every one has
+  const found = items ?? (await loadItems(row.Item_IDs).catch(() => []));
+  const open = found.filter(isOpen);
+  const keep = open.length ? open : found;
+  if (keep.length < found.length) row = { ...row, Item_IDs: keep.map((i) => i.ID).join(", ") };
+  const deck = planDeck(row, category, keep);
   await attachImages(deck);
   const browser = await getBrowser();
   const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: SCALE });
