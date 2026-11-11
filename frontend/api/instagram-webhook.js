@@ -21,7 +21,7 @@ import {
   draftAnswer,
   COMMENTS_LOG_TAB,
 } from "./_lib/replies.js";
-import { startCommentDm, handleFollowReply, prepareCommentsLog } from "./_lib/followgate.js";
+import { startCommentDm, handleFollowReply, prepareCommentsLog, itemsForRow } from "./_lib/followgate.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 const TIME_BUDGET_MS = 8000;
@@ -66,35 +66,6 @@ async function alreadyHandled(commentId) {
   } catch {
     return false; // tab does not exist yet
   }
-}
-
-// Apply links for a Content_Queue row: Item_IDs → data tabs.
-async function itemsForRow(row) {
-  const ids = new Set((row?.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
-  if (!ids.size) return [];
-
-  const tabs = [
-    ["Tech_Jobs", (r) => [`${r.Role}, ${r.Company}`, r.Apply_Link]],
-    ["Govt_Jobs", (r) => [`${r.Post_Exam}, ${r.Organisation}`, r.Official_Link || r.Notification_Link]],
-    ["Hackathons_Quizzes", (r) => [r.Name, r.Link]],
-    ["Tech_News", (r) => [r.Headline, r.Link]],
-  ];
-  const items = [];
-  for (const [tab, pick] of tabs) {
-    if (items.length === ids.size) break;
-    const { rows } = await readTab(tab).catch(() => ({ rows: [] }));
-    for (const r of rows) {
-      if (!ids.has(r.ID)) continue;
-      const [label, link] = pick(r);
-      items.push({ label, link });
-    }
-  }
-  return items;
-}
-
-async function itemsForPost(postId) {
-  const { rows: queue } = await readTab("Content_Queue");
-  return itemsForRow(queue.find((r) => r.ID === postId));
 }
 
 // Apply links for a post: permalink → Content_Queue row → items.
@@ -206,7 +177,7 @@ async function handleMessage(event) {
   }
 
   // "DONE" after a comment: check the follow and send that post's links
-  const followFlow = await handleFollowReply({ senderId: event.sender.id, text: msg.text, websiteUrl: WEBSITE_URL, itemsForPost });
+  const followFlow = await handleFollowReply({ senderId: event.sender.id, text: msg.text, websiteUrl: WEBSITE_URL });
   if (followFlow) return;
 
   if (classifyComment(msg.text).action !== "links") return;

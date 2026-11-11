@@ -408,8 +408,8 @@ sheet calls also retry 429/5xx errors themselves.
 ### Comment → DM with a follow check (free, no ManyChat)
 
 `frontend/api/_lib/followgate.js`, used by the webhook and the 10-minute sync:
-1. A keyword comment (JOB, LINK, AI, …) gets one private DM: "Follow @beyond_the.offer, then reply DONE here". The public reply says "please check your DM".
-2. When they reply DONE (or yes/followed/link), `is_user_follow_business` is checked. Followers get every apply link of that post; others are asked to follow first. If the check itself fails, the links are sent anyway.
+1. A keyword comment (JOB, LINK, AI, …) gets one private DM: "Follow @beyond_the.offer, then tap DONE (or reply DONE) here", with a DONE button under it. The public reply says "please check your DM".
+2. When they tap or reply DONE (or yes/followed/link), `is_user_follow_business` is checked. Followers get every apply link of that post; others are asked to follow first. If the check itself fails, the links are sent anyway. The webhook answers at once; if it never got the message, the 10-minute sync reads the DM thread and answers instead.
 3. If the DM can't be sent, the public reply carries the `/links/<ID>` page instead and the row is logged as `partial` with the reason.
 
 `DM_FOLLOW_GATE=off` (Vercel env) sends the links in the first DM, without the follow step. Comments_Log gets two columns, `IG_Scoped_ID` and `Post_ID`; rows waiting for the follow have status `dm: waiting for follow`.
@@ -417,7 +417,7 @@ sheet calls also retry 429/5xx errors themselves.
 Instagram only delivers these DMs to the public when:
 - the Meta app has **Advanced Access** for `instagram_manage_messages` and `instagram_manage_comments` and is Live (see `docs/meta-app-review.md`; free, needs business verification). Until then only accounts with a role on the app (testers) get DMs, and everyone else gets the public links reply. This is the most likely cause of the earlier `(code 100, subcode 2534039)` errors in Comments_Log.
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
-- The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message.
+- The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe with `POST /<IG_USER_ID>/subscribed_apps?subscribed_fields=comments,messages`.
 
 ### Generated admin previews
 

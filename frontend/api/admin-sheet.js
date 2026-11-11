@@ -8,7 +8,7 @@
 import { readTab, appendRow, updateRow, ensureColumns, nowInZone } from "./_lib/sheets.js";
 import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
 import { buildPublicLinksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
-import { startCommentDm, prepareCommentsLog } from "./_lib/followgate.js";
+import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
@@ -198,7 +198,9 @@ async function syncInstagramComments() {
     }
   }
 
-  return { imported, replied, posts: published.length };
+  // DONE replies the webhook never received
+  const follow = await sweepFollowReplies({ websiteUrl: WEBSITE_URL }).catch((err) => ({ errors: [err.message.slice(0, 200)] }));
+  return { imported, replied, posts: published.length, follow };
 }
 
 function backendBase() {

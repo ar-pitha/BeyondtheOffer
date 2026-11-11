@@ -84,12 +84,29 @@ export const replyToComment = (commentId, message) =>
   });
 
 // Private reply using the Unified Login Instagram messaging endpoint.
-export const sendPrivateReply = (commentId, text) =>
+// quickReplies: button titles shown under the message; a tap sends the title back as a normal DM
+export const sendPrivateReply = (commentId, text, quickReplies = []) =>
   igRequest(`${igUserId()}/messages`, {
     method: "POST",
-    json: { recipient: { comment_id: commentId }, message: { text } },
+    json: {
+      recipient: { comment_id: commentId },
+      message: {
+        text,
+        ...(quickReplies.length && {
+          quick_replies: quickReplies.map((title) => ({ content_type: "text", title, payload: title })),
+        }),
+      },
+    },
     context: { commentId },
   });
+
+// Newest-first messages of our DM thread with one person
+export const listThreadMessages = async (userId, limit = 10) => {
+  const d = await igRequest(`${igUserId()}/conversations`, {
+    params: { platform: "instagram", user_id: userId, fields: `messages.limit(${limit}){from,created_time,message}` },
+  });
+  return d.data?.[0]?.messages?.data || [];
+};
 
 // Normal DM inside an open conversation
 export const sendDirectMessage = (userId, text) =>
