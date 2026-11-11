@@ -84,19 +84,34 @@ export const replyToComment = (commentId, message) =>
   });
 
 // Private reply using the Unified Login Instagram messaging endpoint.
-// quickReplies: button titles shown under the message; a tap sends the title back as a normal DM
-export const sendPrivateReply = (commentId, text, quickReplies = []) =>
+// buttons: attached under the message bubble. { title, url } opens a link; { title, payload }
+//   comes back as a postback (webhook field messaging_postbacks).
+// quickReplies: titles shown as chips above the keyboard; a tap sends the title back as a DM.
+const messageBody = (text, { buttons = [], quickReplies = [] } = {}) => {
+  if (buttons.length) {
+    return {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text,
+          buttons: buttons.map((b) =>
+            b.url ? { type: "web_url", url: b.url, title: b.title } : { type: "postback", title: b.title, payload: b.payload }
+          ),
+        },
+      },
+    };
+  }
+  if (quickReplies.length) {
+    return { text, quick_replies: quickReplies.map((title) => ({ content_type: "text", title, payload: title })) };
+  }
+  return { text };
+};
+
+export const sendPrivateReply = (commentId, text, extras) =>
   igRequest(`${igUserId()}/messages`, {
     method: "POST",
-    json: {
-      recipient: { comment_id: commentId },
-      message: {
-        text,
-        ...(quickReplies.length && {
-          quick_replies: quickReplies.map((title) => ({ content_type: "text", title, payload: title })),
-        }),
-      },
-    },
+    json: { recipient: { comment_id: commentId }, message: messageBody(text, extras) },
     context: { commentId },
   });
 
@@ -112,10 +127,10 @@ export const listThreadMessages = async (userId, limit = 10) => {
 };
 
 // Normal DM inside an open conversation
-export const sendDirectMessage = (userId, text) =>
+export const sendDirectMessage = (userId, text, extras) =>
   igRequest(`${igUserId()}/messages`, {
     method: "POST",
-    json: { recipient: { id: userId }, message: { text } },
+    json: { recipient: { id: userId }, message: messageBody(text, extras) },
   });
 
 // Permalinks differ by trailing slash and query string; compare on the shortcode.

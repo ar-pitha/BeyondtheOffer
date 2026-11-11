@@ -21,7 +21,7 @@ import {
   draftAnswer,
   COMMENTS_LOG_TAB,
 } from "./_lib/replies.js";
-import { startCommentDm, handleFollowReply, prepareCommentsLog, itemsForRow } from "./_lib/followgate.js";
+import { startCommentDm, handleFollowReply, prepareCommentsLog, itemsForRow, DONE_PAYLOAD } from "./_lib/followgate.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 const TIME_BUDGET_MS = 8000;
@@ -141,7 +141,9 @@ async function handleComment(value) {
 const DELETE_REQUEST = /\b(delete|remove|erase)\s+(my\s+)?(data|info|information|details)\b/i;
 
 async function handleMessage(event) {
-  const msg = event.message;
+  // A tap on the DONE button arrives as a postback instead of a message
+  const tapped = event.postback?.payload === DONE_PAYLOAD;
+  const msg = tapped ? { text: "DONE", mid: event.postback.mid } : event.message;
   if (!msg?.text || msg.is_echo || event.sender?.id === process.env.IG_USER_ID) return;
 
   // Data deletion requests (promised on /data-deletion): log for the team, confirm to the person

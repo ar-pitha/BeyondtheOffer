@@ -16,7 +16,11 @@ const HANDLE = "@beyond_the.offer";
 export const FOLLOW_PROMPT =
   `Hey! The apply links for this post are ready.\n\nFollow ${HANDLE}, then tap DONE (or reply DONE) here and I'll send them.`;
 const NOT_FOLLOWING =
-  `I can't see your follow yet. Follow ${HANDLE}, then reply DONE again and the links are yours.`;
+  `I can't see your follow yet. Follow ${HANDLE}, then tap DONE again and the links are yours.`;
+const PROFILE_URL = "https://www.instagram.com/beyond_the.offer";
+// A tap arrives as a postback with this payload (webhook), and as a "DONE" message in the thread
+export const DONE_PAYLOAD = "FOLLOW_DONE";
+const DONE_BUTTON = { title: "DONE", payload: DONE_PAYLOAD };
 // Replies that mean "send them now"
 const DONE = /^\s*(done|yes|yep|ok(ay)?|followed|following|send|sent|link|links|job|jobs)\b/i;
 const WAITING = "dm: waiting for follow";
@@ -36,8 +40,10 @@ export async function startCommentDm({ commentId, items, websiteUrl, postId }) {
       const res = await sendPrivateReply(commentId, buildLinksMessage(items, websiteUrl, postId));
       return { ok: true, status: "dm sent", recipientId: res.recipient_id || "" };
     }
-    // DONE button under the message; plain text if Instagram refuses the button
-    const res = await sendPrivateReply(commentId, FOLLOW_PROMPT, ["DONE"]).catch(() => sendPrivateReply(commentId, FOLLOW_PROMPT));
+    // DONE button attached under the message; a chip, then plain text, if Instagram refuses it
+    const res = await sendPrivateReply(commentId, FOLLOW_PROMPT, { buttons: [DONE_BUTTON] })
+      .catch(() => sendPrivateReply(commentId, FOLLOW_PROMPT, { quickReplies: ["DONE"] }))
+      .catch(() => sendPrivateReply(commentId, FOLLOW_PROMPT));
     return { ok: true, status: WAITING, recipientId: res.recipient_id || "" };
   } catch (err) {
     return { ok: false, status: "", recipientId: "", error: err.message.slice(0, 200) };
@@ -88,7 +94,8 @@ async function answerDone(senderId, waiting, headers, websiteUrl) {
     // Can't check: don't hold the links back
   }
   if (!follows) {
-    await sendDirectMessage(senderId, NOT_FOLLOWING);
+    await sendDirectMessage(senderId, NOT_FOLLOWING, { buttons: [{ title: "Follow", url: PROFILE_URL }, DONE_BUTTON] })
+      .catch(() => sendDirectMessage(senderId, NOT_FOLLOWING));
     return "asked again";
   }
   const postId = waiting[waiting.length - 1].Post_ID;
