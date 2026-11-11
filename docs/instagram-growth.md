@@ -40,14 +40,18 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 
 ## Change, 2026-11-11: carousels only
 
-No more AI-voice reels. Every Instagram post is now a white carousel with the real company logos
-(`automation/lib/post.js`, `templates/post.html`):
+No more AI-voice reels. Every Instagram post is now a clean white carousel
+(`automation/lib/post.js`, `templates/post.html`), rendered at 1440x1800 so text stays sharp:
 
-1. **Cover**: the hook (6 to 10 words, a number or a company name in it), one line under it,
-   and the logos of every company in the post.
-2. **One slide per opening**: logo, company, role, 2 to 3 facts, "Apply by …" bar, "Comment JOB".
-3. **Recap**: every opening and its date on one card. This is the slide people screenshot and send.
-4. **CTA**: "Comment JOB", save, send to your batch group, follow.
+1. **Cover**: the hook, one line under it, and the logos of every company in the post.
+2. **One card per opening**, built from the sheet row in `Item_IDs`: the company's real logo,
+   company, role, and only the facts that matter (eligibility, location, salary/stipend, apply by;
+   for govt: posts, qualification, age limit, last date). Job/requisition numbers, advert codes and
+   "not stated" placeholders are left out.
+3. **Profile card**: the account's Instagram profile picture, handle, Follow, "Comment JOB".
+
+No slide numbers (Instagram shows its own). Drafts without sheet rows fall back to the draft's lines,
+one card per line.
 
 - Old `Reel` and `Story` drafts are posted as carousels too. A row whose approved preview is a video
   is skipped until you press **Regenerate** in `/admin/feed` and approve the new slides.

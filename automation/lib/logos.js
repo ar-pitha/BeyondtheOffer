@@ -35,7 +35,9 @@ const KNOWN = {
   "staff-selection-commission": "ssc.gov.in", swiggy: "swiggy.com", "tata-consultancy-services": "tcs.com",
   "tata-steel": "tatasteel.com", tcs: "tcs.com", "tech-mahindra": "techmahindra.com", uber: "uber.com",
   upsc: "upsc.gov.in", walmart: "walmart.com", "walmart-global-tech": "walmart.com", wipro: "wipro.com",
-  zepto: "zeptonow.com", powergrid: "powergrid.in", "power-grid": "powergrid.in", "j-and-k-bank": "jkbank.com",
+  zepto: "zeptonow.com", dsssb: "dsssb.delhi.gov.in", upessc: "upessc.up.gov.in", appsc: "psc.ap.gov.in", tspsc: "websitenew.tspsc.gov.in",
+  dgma: "dgshipping.gov.in", "indian-air-force": "indianairforce.nic.in", "indian-army": "joinindianarmy.nic.in", "indian-navy": "joinindiannavy.gov.in",
+  afcat: "afcat.cdac.in", nta: "nta.ac.in", bsnl: "bsnl.co.in", rbi: "rbi.org.in", lic: "licindia.in", aai: "aai.aero", "coal-india": "coalindia.in", powergrid: "powergrid.in", "power-grid": "powergrid.in", "j-and-k-bank": "jkbank.com",
   "jk-bank": "jkbank.com", "jandk-bank": "jkbank.com", "bank-of-baroda": "bankofbaroda.in", "canara-bank": "canarabank.com", "punjab-national-bank": "pnbindia.in",
   pnb: "pnbindia.in", "union-bank": "unionbankofindia.co.in", "axis-bank": "axisbank.com", "kotak-mahindra-bank": "kotak.com",
   stripe: "stripe.com", honeywell: "honeywell.com", "analog-devices": "analog.com", anthropic: "anthropic.com", openai: "openai.com",
@@ -51,7 +53,8 @@ const NOT_COMPANY_HOST = /(greenhouse|lever|myworkdayjobs|workday|smartrecruiter
 
 export function domainFor({ name, domain, link } = {}) {
   if (domain) return String(domain).replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
-  const known = KNOWN[slugify(name)];
+  // "Delhi Subordinate Services Selection Board (DSSSB)" → the DSSSB entry
+  const known = KNOWN[slugify(name)] || KNOWN[slugify(knownIn(name))];
   if (known) return known;
   try {
     const host = new URL(link).hostname.toLowerCase();
@@ -59,7 +62,13 @@ export function domainFor({ name, domain, link } = {}) {
     // careers.razorpay.com → razorpay.com, but keep ssc.gov.in / sbi.co.in whole
     const parts = host.replace(/^www\./, "").split(".");
     const keep = /^(gov|co|ac|nic|org|net|edu)$/.test(parts[parts.length - 2]) ? 3 : 2;
-    return parts.slice(-keep).join(".");
+    const found = parts.slice(-keep).join(".");
+    // An apply link on a recruitment portal (edcil, cdac, ...) isn't the company's site: the site's
+    // name has to be in the company name, or be its initials ("DSSSB" → dsssb.delhi.gov.in)
+    const label = found.split(".")[0];
+    const words = String(name || "").toLowerCase();
+    const initials = (words.match(/\(([a-z]+)\)/) || [])[1] || words.split(/[^a-z]+/).filter((w) => w.length > 2).map((w) => w[0]).join("");
+    return words.replace(/[^a-z]/g, "").includes(label) || (initials && (initials === label || host.includes(initials))) ? found : null;
   } catch {
     return null;
   }
@@ -111,8 +120,11 @@ async function fromHomepage(domain) {
   if (!res.ok) return null;
   const html = (await res.text()).slice(0, 400_000);
   const urls = (re) => [...html.matchAll(re)].map((m) => m[1]);
+  // Only logo files named after the site itself ("sscLogo.webp" on ssc.gov.in): other "logo" images
+  // on a homepage are usually partners' logos. The touch icon is the site's own.
+  const brand = domain.split(".")[0];
   const candidates = [
-    ...urls(/<(?:img|link)[^>]+(?:src|href)=["']([^"']*logo[^"']*\.(?:png|svg|webp|jpe?g)[^"']*)["']/gi),
+    ...urls(/<(?:img|link)[^>]+(?:src|href)=["']([^"']*logo[^"']*\.(?:png|svg|webp|jpe?g)[^"']*)["']/gi).filter((u) => u.toLowerCase().includes(brand)),
     ...urls(/<link[^>]+rel=["']apple-touch-icon[^"']*["'][^>]*href=["']([^"']+)["']/gi),
     ...urls(/<link[^>]+href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon/gi),
   ];
@@ -128,7 +140,11 @@ async function lookup({ name, domain }) {
   if (domain && process.env.LOGO_DEV_TOKEN) {
     tries.push(() => fetchImage(`https://img.logo.dev/${domain}?token=${process.env.LOGO_DEV_TOKEN}&size=400&format=png&retina=true`));
   }
-  if (name) tries.push(() => fromWikidata(name, domain));
+  if (name) {
+    // "Delhi Subordinate Services Selection Board (DSSSB)" searches better without the bracket
+    const plain = name.replace(/\s*\([^)]*\)/g, "").trim();
+    tries.push(() => fromWikidata(plain || name, domain));
+  }
   if (domain) {
     tries.push(async () => {
       const img = await fetchImage(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
