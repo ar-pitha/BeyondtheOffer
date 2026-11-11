@@ -39,6 +39,7 @@ const tidy = (value) =>
     .replace(/\s*\((?:(?:req|jreq|job|ref|id)\s*[#:.-]?\s*\d|(?:requisition|notification|advt|official|per|source|as per)\b)[^)]*\)/gi, "")
     .replace(/,?\s*\b(?:advt\.?|advertisement|post code|notification|job id|req(?:uisition)?)\s*(?:no\.?)?\s*[\w./-]*\d[\w./-]*/gi, "")
     .replace(/[;,]?\s*see (the )?(official )?notification\.?/gi, "")
+    .replace(/[;,]?\s*(?:aggregators?|some sites?|unofficial sources?)\s+(?:lists?|says?|mentions?)[^;]*/gi, "")
     .replace(/\bRs\.?\s*/g, "₹")
     .replace(/^(\d{4,})$/, (n) => Number(n).toLocaleString("en-IN"))
     .replace(/\s+/g, " ")

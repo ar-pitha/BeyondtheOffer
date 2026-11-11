@@ -52,6 +52,47 @@ const PLATFORMS = {
 const canPublishToYouTube = (row) =>
   String(row.Format).toLowerCase() === "reel" && !row.YT_Video_Link && /\.mp4(\?|\s|$)/i.test(row.Preview_Link || "");
 
+// Days since the draft was written, for the stub on the right of each row
+function Age({ date }) {
+  const t = Date.parse(date);
+  const n = Number.isNaN(t) ? null : Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  return (
+    <span className="stub stub-later" aria-label={n === null ? "No date" : `${n} days ago`}>
+      <b>{n === null ? "–" : n}</b>
+      <small>{n === null ? "" : n === 0 ? "today" : n === 1 ? "day ago" : "days ago"}</small>
+    </span>
+  );
+}
+
+// One post as a flat row, like the job list: what it is on the left, how old it is on the right.
+// Everything else (slides, caption, preview, approve/publish) opens in a panel.
+function PostRow({ row, onOpen, building, posting }) {
+  const status = row.Status || "Draft";
+  const slides = parseSlides(row.Slides_or_Script).length;
+  const note = posting
+    ? "Publishing…"
+    : building && !row.Preview_Link
+      ? "Building preview…"
+      : row.Scheduled_Time_IST && status !== "Published"
+        ? `Posts at ${row.Scheduled_Time_IST} IST`
+        : status === "Approved"
+          ? row.Preview_Link ? "Preview ready" : "No preview yet"
+          : "";
+  return (
+    <li className={`row feed-post feed-post-${status.toLowerCase()}`}>
+      <button className="row-body feed-post-open" onClick={() => onOpen(row.ID)}>
+        <span className="row-title">{row.Title || "Untitled post"}</span>
+        <span className="row-org">
+          <span className={`kind feed-status-${status.toLowerCase()}`}>{status === "Draft" ? "To review" : status}</span>
+          {row.Format || "Post"}{slides ? ` · ${slides} slides` : ""}
+        </span>
+        {note && <span className="row-meta">{note}</span>}
+      </button>
+      <Age date={row.Date} />
+    </li>
+  );
+}
+
 const toInputTime = (v) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v || "") ? v.replace(" ", "T") : "");
 const fromInputTime = (v) => (v ? v.replace("T", " ").slice(0, 16) : "");
 
@@ -76,23 +117,21 @@ function PostCard({ row, slots, onSave, onApprove, onPublish, onPreview, onRegen
   ) : null;
 
   return (
-    <article className={`feed-card status-${status.toLowerCase()}`}>
-      <header className="feed-card-head">
-        <div className="ticket-tags">
-          <span className="tag tag-kind">{row.Format || "Post"}</span>
-          <span className={`tag feed-status-${status.toLowerCase()}`}>{status}</span>
-          {row.Scheduled_Time_IST && !published && <span className="tag">Posts at {row.Scheduled_Time_IST} IST</span>}
+    <article className="feed-panel">
+      {row.Preview_Link && !/\.mp4(\?|\s|$)/i.test(row.Preview_Link) && (
+        <div className="feed-thumbs" onClick={() => onPreview(row)} role="button" tabIndex={0} aria-label="Open the preview">
+          {row.Preview_Link.split(/\s+/).filter(Boolean).map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
         </div>
-        <small>{row.ID} · {row.Date}</small>
-      </header>
+      )}
 
-      <h3 className="ticket-title">{row.Title || "Untitled post"}</h3>
-
-      <ol className="feed-slides">
-        {slides.map((s, i) => (
-          <li key={i}>{s}</li>
-        ))}
-      </ol>
+      <details className="feed-caption">
+        <summary>Draft text ({slides.length} slides)</summary>
+        <ol className="feed-slides">
+          {slides.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+      </details>
 
       <details className="feed-caption" open={editing}>
         <summary>Caption and hashtags</summary>
@@ -268,6 +307,7 @@ function AdminFeed() {
   const [previewRow, setPreviewRow] = useState(null);
   const [previewRun, setPreviewRun] = useState(null);
   const [building, setBuilding] = useState({}); // post ID → when its preview build started
+  const [openId, setOpenId] = useState(null); // post shown in the side panel
 
   const load = useCallback(async (t = tab) => {
     setLoading(true);
@@ -462,6 +502,7 @@ function AdminFeed() {
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
   const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
+  const openRow = openId ? queue.find((r) => r.ID === openId) : null;
 
   useEffect(() => {
     setPostPage(1);
@@ -540,16 +581,50 @@ function AdminFeed() {
               <p>New drafts arrive every morning around 6:30 AM.</p>
             </div>
           ) : (
-            <div className="feed-grid">
+            <ul className="rows feed-posts">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}-${row.Scheduled_Time_IST}`} row={row} slots={data.slots} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
+                <PostRow key={row.ID} row={row} onOpen={setOpenId} building={!!building[row.ID]} posting={run?.id === row.ID && run.status !== "completed"} />
               ))}
-            </div>
+            </ul>
           )}
           <Pagination page={postPage} total={visiblePosts.length} onChange={setPostPage} />
         </>
       ) : (
         <SheetTable data={data} onSave={onSave} pending={pending} order={order} />
+      )}
+
+      {openRow && (
+        <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setOpenId(null);
+        }}>
+          <section className="modal feed-post-modal" role="dialog" aria-modal="true" aria-labelledby="post-panel-title">
+            <header className="modal-header feed-post-head">
+              <div>
+                <h3 id="post-panel-title">{openRow.Title || "Untitled post"}</h3>
+                <p className="stat-note">
+                  <span className={`feed-status-${(openRow.Status || "Draft").toLowerCase()}`}>{openRow.Status || "Draft"}</span>
+                  {" · "}{openRow.Format || "Post"} · {openRow.ID}
+                </p>
+              </div>
+              <button className="link-button" onClick={() => setOpenId(null)}>Close</button>
+            </header>
+            <div className="modal-body">
+              <PostCard
+                key={`${openRow.ID}-${openRow.Status}-${openRow.Scheduled_Time_IST}`}
+                row={openRow}
+                slots={data.slots}
+                onSave={onSave}
+                onApprove={onApprove}
+                onPublish={onPublish}
+                onPreview={(r) => { setOpenId(null); onPreview(r); }}
+                onRegenerate={onRegenerate}
+                building={!!building[openRow.ID]}
+                working={pending[openRow.ID]}
+                postingTo={run?.id === openRow.ID && run.status !== "completed" ? run.platform : null}
+              />
+            </div>
+          </section>
+        </div>
       )}
 
       {previewRow && (
