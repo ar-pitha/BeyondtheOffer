@@ -30,7 +30,7 @@ const LOOK = {
 const KEYWORD = { tech: "JOB", govt: "JOB", events: "LINK", news: "LINK", ai: "LINK" };
 
 // Placeholders the research task writes when a fact is missing; a card leaves those rows out
-const EMPTY = /^(-|n\/?a|na|tbd|tba|nil|none)$|not (stated|posted|disclosed|mentioned|specified|available)|see (the )?notification|no deadline/i;
+const EMPTY = /^(-|n\/?a|na|tbd|tba|nil|none|various|varies|multiple)$|not (stated|posted|disclosed|mentioned|specified|available|declared|given|known)|see (the )?(official )?notification|no deadline|^post[- ]?wise|^as per\b|^varies\b|^depends\b/i;
 const URL = /https?:\/\/|www\./i;
 
 // Job/requisition numbers, advert codes and source notes mean nothing to a student
@@ -46,8 +46,16 @@ const tidy = (value) =>
     .replace(/[\s,;:-]+$/, "")
     .trim();
 
+// Brackets read as clutter on a card: "(Gr B)" and "(BEL)" go, "(or PG 45%)" becomes ", or PG 45%"
+const unbracket = (s) =>
+  s
+    .replace(/\s*\(([^()]*)\)/g, (_, inner) => (/\d/.test(inner) && !/^\s*(gr|group|cen|advt|no)\b/i.test(inner) ? `, ${inner.trim()}` : ""))
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,/g, ",")
+    .trim();
+
 function clean(value, max = 90) {
-  const s = tidy(value);
+  const s = unbracket(tidy(value));
   if (!s || EMPTY.test(s) || URL.test(s)) return "";
   if (s.length <= max) return s;
   // Cut at a natural break rather than mid-word
@@ -63,6 +71,9 @@ function prettyDate(value) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
+// Names and titles drop every bracket, even ones with numbers: "(Electronics 200, Mechanical 150)"
+const heading = (value, max) => clean(String(value ?? "").replace(/\s*\([^)]*\)/g, ""), max);
+
 const row = (label, value, max) => {
   const v = clean(value, max);
   return v ? { label, value: v } : null;
@@ -75,52 +86,53 @@ function cardFromItem(item) {
   if (id.startsWith("GJ-")) {
     return {
       type: "item",
-      company: clean(item.Organisation, 60),
-      title: clean(item.Post_Exam, 110),
+      company: heading(item.Organisation, 60),
+      title: heading(item.Post_Exam, 110),
       rows: [
         row("Posts", item.Vacancies, 40),
         row("Qualification", item.Qualification),
         row("Age limit", item.Age_Limit, 50),
         prettyDate(item.Last_Date) && { label: "Last date", value: prettyDate(item.Last_Date) },
       ].filter(Boolean),
-      lookup: { name: clean(item.Organisation, 60), link },
+      lookup: { name: tidy(item.Organisation), link },
     };
   }
   if (id.startsWith("HQ-")) {
     return {
       type: "item",
-      company: clean(item.Organiser, 60),
-      title: clean(item.Name, 110),
+      company: heading(item.Organiser, 60),
+      title: heading(item.Name, 110),
       rows: [
         row("Eligibility", item.Eligibility),
         row("Prizes", item.Prizes_Perks),
         prettyDate(item.Event_Date) && { label: "Event date", value: prettyDate(item.Event_Date) },
         prettyDate(item.Register_By) && { label: "Register by", value: prettyDate(item.Register_By) },
       ].filter(Boolean),
-      lookup: { name: clean(item.Organiser, 60), link },
+      lookup: { name: tidy(item.Organiser), link },
     };
   }
   if (id.startsWith("TN-")) {
-    const company = knownIn(`${item.Headline} ${item.Summary}`);
+    // The headline names the company the story is about; the summary often mentions partners too
+    const company = knownIn(item.Headline) || knownIn(item.Summary);
     return {
       type: "news",
       company: company || clean(item.Source, 40),
-      title: clean(item.Headline, 120),
+      title: heading(item.Headline, 120),
       body: clean(item.Summary, 260),
       lookup: company ? { name: company } : null,
     };
   }
   return {
     type: "item",
-    company: clean(item.Company, 60),
-    title: clean(item.Role, 110),
+    company: heading(item.Company, 60),
+    title: heading(item.Role, 110),
     rows: [
       row("Eligibility", item.Eligibility_Batch),
       row("Location", item.Location, 70),
       row(/intern/i.test(`${item.Role} ${item.Job_Type}`) ? "Stipend" : "Salary", item.Salary_Stipend, 60),
       prettyDate(item.Apply_By) && { label: "Apply by", value: prettyDate(item.Apply_By) },
     ].filter(Boolean),
-    lookup: { name: clean(item.Company, 60), link },
+    lookup: { name: tidy(item.Company), link },
   };
 }
 

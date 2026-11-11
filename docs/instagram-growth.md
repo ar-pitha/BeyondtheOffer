@@ -19,7 +19,7 @@ Audit date: 2026-11-06. Numbers come from the Graph API that day.
 ## Fixed in code (this change)
 
 - `publish.js` posts the next approved row when today's category has nothing approved. It prefers reels, then carousels, then stories, because stories don't reach non-followers.
-- Two posting slots by default: `13:00,19:00` IST.
+- Two posting slots by default: `13:00,19:00` IST. (Since 11 Nov 2026: one post at `19:00`, plus its cover as a story.)
 - At most 5 hashtags: the row's own specific tags first, then category defaults. Brand tag dropped.
 - One search phrase per category ("jobs for freshers", "government jobs", "hackathon") is added to captions that lack it. It goes before the closing ask. Instagram search reads caption words.
 - No URL line in captions. The comment keyword DMs the `/links/<ID>` page.
@@ -63,14 +63,15 @@ one card per line.
 
 ## What only you can do (in order of impact)
 
-1. **Approve every day.** Open `/admin/feed` once a morning and approve or reject everything. Reject stale drafts whose deadlines have passed. Target: 1 reel + 1 carousel a day, every day, for 30 days. Nothing else on this list matters if posting stays at 3 a month.
+1. **Approve every day.** Open `/admin/feed` once a morning and approve or reject everything. Reject stale drafts whose deadlines have passed. Target: 1 carousel + 1 story a day, every day, for 30 days (the publish run posts at 19:00 IST and shares the cover to the story). Nothing else on this list matters if posting stays at 3 a month.
 2. **Change the profile** (Edit profile in the app):
-   - Name: `Jobs for Freshers | Off Campus Drives` (this is what search matches)
-   - Bio:
+   - Name: `Jobs for Freshers & Govt Jobs` (this is what search matches; the API can't change it)
+   - Bio (fresh start on 11 Nov 2026):
      ```
-     Off campus drives, internships & govt jobs for freshers
-     Verified links daily, 1 PM & 7 PM IST
-     Comment JOB on any post for the apply links 👇
+     Fresh start · 11.11.2026
+     Off campus drives, internships & govt jobs
+     1 verified post daily, 7 PM IST
+     Comment JOB for apply links 👇
      ```
    - Pin your 3 best posts. Add highlights: Jobs, Govt Jobs, Hackathons.
 3. **Give the token the insights permission.** Regenerate the Instagram token with `instagram_business_manage_insights` (Instagram login) or `instagram_manage_insights` (Facebook login). Update `IG_ACCESS_TOKEN` in GitHub secrets and Vercel. After that the Insights tab fills daily, and you can see which posts actually reached people.

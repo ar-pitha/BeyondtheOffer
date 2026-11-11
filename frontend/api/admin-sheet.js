@@ -264,7 +264,7 @@ export default async function handler(req, res) {
         rows: list,
         editable: Object.keys(cfg.editable),
         tabs: Object.keys(TABS),
-        slots: process.env.POST_SLOTS_IST || "09:00,13:00,19:00",
+        slots: process.env.POST_SLOTS_IST || "19:00",
         nowIST: nowInZone(),
       });
     }

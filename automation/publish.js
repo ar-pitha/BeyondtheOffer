@@ -101,7 +101,7 @@ const collaboratorsFor = (row) =>
     .filter(Boolean)
     .slice(0, 3);
 
-const slotMinutes = (process.env.POST_SLOTS_IST || "09:00,13:00,19:00")
+const slotMinutes = (process.env.POST_SLOTS_IST || "19:00")
   .split(",")
   .map((s) => s.trim().match(/^(\d{1,2}):(\d{2})$/))
   .filter(Boolean)
@@ -209,6 +209,21 @@ async function publishToInstagram(row, imageUrls) {
   await ig.waitUntilFinished(creationId);
   const mediaId = await ig.publish(creationId);
   return { mediaId, permalink: await ig.getPermalink(mediaId) };
+}
+
+// The day's story: the post's cover, so followers who skip the feed still see it.
+// A failed story never fails the post.
+async function shareCoverToStory(coverUrl) {
+  if (!coverUrl) return;
+  try {
+    const ig = await import("./lib/instagram.js");
+    const id = await ig.createStoryContainer(coverUrl);
+    await ig.waitUntilFinished(id);
+    await ig.publish(id);
+    console.log("Shared the cover to the story.");
+  } catch (err) {
+    console.error(`story failed (post is fine): ${err.message}`);
+  }
 }
 
 // Reels also go to YouTube as Shorts. Unlike Instagram, description links are clickable there,
@@ -340,6 +355,7 @@ async function main() {
 
     const { permalink } = await publishToInstagram(row, urls);
     console.log(`Published: ${permalink}`);
+    await shareCoverToStory(urls[0]);
 
     if (!sample) {
       await updateRow(TABS.queue, headers, row._row, {

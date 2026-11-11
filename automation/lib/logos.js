@@ -3,7 +3,8 @@
 //   1. automation/assets/logos/<slug>.png|jpg|svg|webp   (drop a file in to fix a bad logo)
 //   2. logo.dev, when LOGO_DEV_TOKEN is set              (best quality for small companies)
 //   3. Wikidata's "logo image" (P154) from Wikimedia Commons, the company's real wordmark
-//   4. Google's favicon service, only when it has a real icon (64 px or more)
+//   4. the logo or emblem at the top of its Wikipedia article (Indian government bodies)
+//   5. Google's favicon service, only when it has a real icon (64 px or more)
 // Nothing found → null, and the card draws a monogram instead.
 
 import fs from "node:fs";
@@ -44,6 +45,9 @@ const KNOWN = {
   "texas-instruments": "ti.com", juspay: "juspay.in", groww: "groww.in", zerodha: "zerodha.com", "american-express": "americanexpress.com",
   barclays: "barclays.com", visa: "visa.com", mastercard: "mastercard.com", siemens: "siemens.com", bosch: "bosch.com", zoho: "zoho.com", zomato: "zomato.com", "goldman-sachs": "goldmansachs.com",
   "morgan-stanley": "morganstanley.com", deshaw: "deshaw.com", "de-shaw": "deshaw.com", ibps: "ibps.in", rrb: "indianrailways.gov.in",
+  "railway-recruitment-board": "indianrailways.gov.in", "railway-recruitment-boards": "indianrailways.gov.in", "jammu-kashmir-bank": "jkbank.com",
+  "cabinet-secretariat": "cabsec.gov.in", "central-warehousing-corporation": "cewacor.nic.in", cwc: "cewacor.nic.in", kea: "kea.kar.nic.in",
+  "karnataka-examinations-authority": "kea.kar.nic.in", "andhra-pradesh-psc": "psc.ap.gov.in",
   "indian-railways": "indianrailways.gov.in", ongc: "ongcindia.com", ntpc: "ntpc.co.in", iocl: "iocl.com", gail: "gailonline.com",
   "smart-india-hackathon": "sih.gov.in", unstop: "unstop.com", devfolio: "devfolio.co", "mlh": "mlh.io",
 };
@@ -114,6 +118,16 @@ async function fromWikidata(name, domain) {
   return fetchImage(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(logo(pick))}?width=600`);
 }
 
+// The image at the top of the organisation's Wikipedia article, when it's a logo or emblem.
+// Covers Indian government bodies (IBPS, Indian Railways) that Wikidata has no logo for.
+async function fromWikipedia(name) {
+  const url = `https://en.wikipedia.org/w/api.php?format=json&action=query&redirects=1&prop=pageimages&piprop=name&titles=${encodeURIComponent(name)}`;
+  const { query } = await (await fetch(url, { headers: UA, signal: AbortSignal.timeout(8000) })).json();
+  const file = Object.values(query?.pages || {})[0]?.pageimage;
+  if (!file || !/logo|emblem|insignia|seal|symbol/i.test(file)) return null;
+  return fetchImage(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=600`);
+}
+
 // Last resort (government sites mostly): an image named "logo" on the homepage, else its touch icon
 async function fromHomepage(domain) {
   const res = await fetch(`https://${domain}`, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(10000) });
@@ -144,6 +158,7 @@ async function lookup({ name, domain }) {
     // "Delhi Subordinate Services Selection Board (DSSSB)" searches better without the bracket
     const plain = name.replace(/\s*\([^)]*\)/g, "").trim();
     tries.push(() => fromWikidata(plain || name, domain));
+    tries.push(() => fromWikipedia(plain || name));
   }
   if (domain) {
     tries.push(async () => {
@@ -164,14 +179,20 @@ const toDataUri = ({ type, bytes }) => `data:${type};base64,${bytes.toString("ba
 export async function logoFor({ name, domain, link } = {}) {
   const slug = slugify(name || domain);
   if (!slug) return null;
-  for (const ext of Object.keys(MIME)) {
-    const file = path.join(LOCAL_DIR, `${slug}.${ext}`);
-    if (fs.existsSync(file)) return toDataUri({ type: MIME[ext], bytes: fs.readFileSync(file) });
+  // A committed file wins, under the full name or any name for the same site
+  // ("Railway Recruitment Boards" → indianrailways.gov.in → rrb.jpg)
+  const site = domainFor({ name, domain, link });
+  const aliases = site ? Object.keys(KNOWN).filter((k) => KNOWN[k] === site) : [];
+  for (const s of new Set([slug, slugify(knownIn(name) || ""), ...aliases].filter(Boolean))) {
+    for (const ext of Object.keys(MIME)) {
+      const file = path.join(LOCAL_DIR, `${s}.${ext}`);
+      if (fs.existsSync(file)) return toDataUri({ type: MIME[ext], bytes: fs.readFileSync(file) });
+    }
   }
   const cached = path.join(CACHE_DIR, `${slug}.json`);
   if (fs.existsSync(cached)) return JSON.parse(fs.readFileSync(cached, "utf8")).uri;
 
-  const img = await lookup({ name, domain: domainFor({ name, domain, link }) });
+  const img = await lookup({ name, domain: site });
   if (!img) return null;
   const uri = toDataUri(img);
   fs.mkdirSync(CACHE_DIR, { recursive: true });
