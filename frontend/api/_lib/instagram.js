@@ -102,10 +102,13 @@ export const sendPrivateReply = (commentId, text, quickReplies = []) =>
 
 // Newest-first messages of our DM thread with one person
 export const listThreadMessages = async (userId, limit = 10) => {
+  // The API ignores user_id here and returns every thread, so match on participants.
+  // ponytail: looks at the 50 most recent threads only; page through if DMs outgrow that
   const d = await igRequest(`${igUserId()}/conversations`, {
-    params: { platform: "instagram", user_id: userId, fields: `messages.limit(${limit}){from,created_time,message}` },
+    params: { platform: "instagram", limit: 50, fields: `participants,messages.limit(${limit}){from,created_time,message}` },
   });
-  return d.data?.[0]?.messages?.data || [];
+  const thread = (d.data || []).find((c) => (c.participants?.data || []).some((p) => p.id === userId));
+  return thread?.messages?.data || [];
 };
 
 // Normal DM inside an open conversation
