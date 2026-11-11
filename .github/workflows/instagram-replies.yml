@@ -1,5 +1,10 @@
 name: instagram-replies
 
+# Meta only sends comment/DM webhooks for accounts with a role on the app until Advanced Access
+# is approved (docs/meta-app-review.md), so this polls instead: one run checks every 30 seconds
+# for almost 6 hours, and the 10-minute timer queues the next run to take over when it ends.
+# ponytail: polling, costs about 2,500 Vercel calls a day; go back to one curl per run once
+# the webhook delivers for everyone
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -12,7 +17,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 350
     steps:
       - name: Sync Instagram comments automatically
         env:
@@ -20,10 +25,20 @@ jobs:
           INSTAGRAM_SYNC_SECRET: ${{ secrets.INSTAGRAM_SYNC_SECRET }}
         run: |
           test -n "$INSTAGRAM_SYNC_SECRET"
-          # Retries cover a cold Vercel function or a brief Google outage
-          curl --fail-with-body --silent --show-error \
-            --retry 3 --retry-all-errors --retry-delay 20 --max-time 90 \
-            --request POST "${WEBSITE_URL%/}/api/admin-sheet" \
-            --header "Content-Type: application/json" \
-            --header "x-instagram-sync-secret: $INSTAGRAM_SYNC_SECRET" \
-            --data '{"action":"sync-comments"}'
+          end=$((SECONDS + 340 * 60))
+          failures=0
+          while [ "$SECONDS" -lt "$end" ]; do
+            if curl --fail-with-body --silent --show-error --max-time 60 \
+              --request POST "${WEBSITE_URL%/}/api/admin-sheet" \
+              --header "Content-Type: application/json" \
+              --header "x-instagram-sync-secret: $INSTAGRAM_SYNC_SECRET" \
+              --data '{"action":"sync-comments"}'; then
+              failures=0
+            else
+              failures=$((failures + 1))
+              # A cold function or a brief Google outage passes; ten in a row is a real fault
+              if [ "$failures" -ge 10 ]; then echo "::error::sync failed 10 times in a row"; exit 1; fi
+            fi
+            echo
+            sleep 30
+          done
