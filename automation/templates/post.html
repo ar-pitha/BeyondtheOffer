@@ -40,28 +40,26 @@
   .logos { margin-top: 72px; display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; max-width: 900px; }
   .logos .tile { width: 136px; height: 136px; }
 
-  /* opening: laid out like a profile, logo on the left and the heading beside it, details below.
-     The whole block sits in the middle of the card, left-aligned. */
-  .item, .news { justify-content: center; align-items: stretch; text-align: left; padding-bottom: 90px; }
-  .head { display: flex; align-items: center; gap: 40px; }
-  .logo { flex: none; width: 230px; height: 230px; }
-  .who { min-width: 0; }
-  .company { font-size: 31px; font-weight: 400; color: var(--muted); }
-  .company.long { font-size: 27px; line-height: 1.3; }
-  .title { margin-top: 8px; font-size: 56px; line-height: 1.14; font-weight: 700; }
-  .title.long { font-size: 46px; }
-  .no-logo .title { font-size: 64px; }
-  .rule { margin: 56px 0 8px; height: 2px; background: var(--line); }
-  /* details: a short label over each fact, with an accent mark on the left */
-  .facts { display: flex; flex-direction: column; gap: 34px; margin-top: 40px; }
-  .facts div { padding-left: 30px; border-left: 5px solid var(--accent); }
-  .facts small { display: block; font-size: 27px; font-weight: 400; color: var(--muted); }
-  .facts p { margin-top: 6px; font-size: 37px; line-height: 1.36; font-weight: 400; color: var(--ink); }
-  .facts.many { gap: 26px; }
+  /* opening: the whole block is centred on the card, however many facts it has */
+  .item, .news { justify-content: center; padding-bottom: 90px; }
+  .logo { width: 220px; height: 220px; }
+  .logo.wide { width: 400px; height: 130px; }
+  .company { margin-top: 40px; font-size: 32px; font-weight: 400; color: var(--muted); }
+  .title { margin-top: 12px; font-size: 62px; line-height: 1.16; font-weight: 700; max-width: 860px; }
+  .title.long { font-size: 52px; }
+  .rule { margin-top: 44px; width: 72px; height: 5px; border-radius: 3px; background: var(--accent); }
+  /* details: one soft panel, a label on the left and the fact on the right */
+  .facts { margin-top: 44px; width: 100%; background: #f6f7f9; border-radius: 30px; padding: 10px 44px; text-align: left; }
+  .facts div { display: grid; grid-template-columns: 236px 1fr; gap: 24px; align-items: baseline; padding: 26px 0; border-bottom: 2px solid #e6e8ee; }
+  .facts div:last-child { border-bottom: 0; }
+  .facts small { font-size: 29px; font-weight: 400; color: var(--muted); }
+  .facts p { font-size: 36px; line-height: 1.34; font-weight: 400; color: var(--ink); }
+  .facts div.solo { grid-template-columns: 1fr; }
+  .facts.many div { padding: 20px 0; }
   .facts.many p { font-size: 34px; }
 
   /* news */
-  .news .body { margin-top: 40px; font-size: 38px; line-height: 1.5; color: var(--body); }
+  .news .body { margin-top: 40px; font-size: 37px; line-height: 1.5; color: var(--body); max-width: 860px; }
 
   /* statement */
   .statement { justify-content: center; }
@@ -87,16 +85,6 @@
   const accentize = (s) => esc(s).replace(/\*([^*]+)\*/g, '<span class="hl">$1</span>');
   const arrow = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 
-  // Logo on the left, company and heading beside it
-  const head = (s, long) => `
-      <div class="head ${s.logo ? "" : "no-logo"}">
-        ${s.logo ? `<div class="tile logo"><img src="${s.logo}" alt=""></div>` : ""}
-        <div class="who">
-          ${s.company ? `<p class="company ${s.company.length > 34 ? "long" : ""}">${esc(s.company)}</p>` : ""}
-          <h2 class="title ${long ? "long" : ""}">${esc(s.title)}</h2>
-        </div>
-      </div>`;
-
   const views = {
     cover: (s, d) => `
       <h1 class="hook ${s.hook.length > 48 ? "long" : ""}">${accentize(s.hook)}</h1>
@@ -104,12 +92,16 @@
       <div class="logos">${s.logos.map((l) => `<div class="tile"><img src="${l}" alt=""></div>`).join("")}</div>
       <div class="foot"><span>${esc(d.handle)}</span><i class="dot"></i><span class="swipe">Swipe ${arrow}</span></div>`,
     item: (s, d) => `
-      ${head(s, s.title.length > 48)}
+      ${s.logo ? `<div class="tile logo"><img src="${s.logo}" alt=""></div>` : ""}
+      ${s.company ? `<p class="company">${esc(s.company)}</p>` : ""}
+      <h2 class="title ${s.title.length > 48 ? "long" : ""}">${esc(s.title)}</h2>
       <i class="rule"></i>
-      ${s.rows.length ? `<div class="facts ${s.rows.length > 3 ? "many" : ""}">${s.rows.map((r) => `<div>${r.label ? `<small>${esc(r.label)}</small>` : ""}<p>${esc(r.value)}</p></div>`).join("")}</div>` : ""}
+      ${s.rows.length ? `<div class="facts ${s.rows.length > 3 ? "many" : ""}">${s.rows.map((r) => `<div class="${r.label ? "" : "solo"}">${r.label ? `<small>${esc(r.label)}</small>` : ""}<p>${esc(r.value)}</p></div>`).join("")}</div>` : ""}
       <div class="foot"><span>${esc(d.handle)}</span></div>`,
     news: (s, d) => `
-      ${head(s, true)}
+      ${s.logo ? `<div class="tile logo"><img src="${s.logo}" alt=""></div>` : ""}
+      ${s.company ? `<p class="company">${esc(s.company)}</p>` : ""}
+      <h2 class="title long">${esc(s.title)}</h2>
       <i class="rule"></i>
       ${s.body ? `<p class="body">${esc(s.body)}</p>` : ""}
       <div class="foot"><span>${esc(d.handle)}</span></div>`,
@@ -128,6 +120,8 @@
     document.getElementById("root").innerHTML = `<section class="slide ${d.slide.type}">${views[d.slide.type](d.slide, d)}</section>`;
     const imgs = [...document.querySelectorAll("img")];
     await Promise.all(imgs.map((img) => (img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; }))));
+    // Wordmarks get a wide tile, icons a square one
+    for (const img of document.querySelectorAll(".logo img")) if (img.naturalWidth / Math.max(1, img.naturalHeight) > 1.6) img.parentElement.classList.add("wide");
     await document.fonts.ready;
   };
 </script>
