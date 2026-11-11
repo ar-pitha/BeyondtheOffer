@@ -82,12 +82,16 @@ jobs:
         working-directory: automation
         run: node publish.js --check $NOW_FLAG $PLATFORM_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
 
-      - name: Install Chromium and ffmpeg
+      # No --with-deps: the runner already has Chromium's libraries and the templates load web
+      # fonts, so a post doesn't fail when Ubuntu's apt mirrors can't be reached
+      - name: Install Chromium
         if: steps.check.outputs.due == 'true'
         working-directory: automation
-        run: |
-          npx playwright install --with-deps chromium
-          sudo apt-get install -y -o Acquire::Retries=3 ffmpeg
+        run: npx playwright install chromium
+
+      - name: Install ffmpeg
+        if: steps.check.outputs.due == 'true' && inputs.platform == 'youtube'
+        run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 ffmpeg
 
       - name: Publish
         if: steps.check.outputs.due == 'true'
