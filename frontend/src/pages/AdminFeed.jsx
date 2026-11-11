@@ -65,7 +65,7 @@ function Age({ date }) {
   );
 }
 
-function PostCard({ row, onSave, onPublish, onPreview, onRegenerate, building, working, postingTo }) {
+function PostCard({ row, repeatsIn = [], onSave, onPublish, onPreview, onRegenerate, building, working, postingTo }) {
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
   const slides = parseSlides(row.Slides_or_Script);
@@ -102,6 +102,9 @@ function PostCard({ row, onSave, onPublish, onPreview, onRegenerate, building, w
           {row.Format || "Post"} · {slides.length} slides · {row.ID}
         </p>
         {note && <p className="row-meta">{note}</p>}
+        {!published && repeatsIn.length > 0 && (
+          <p className="row-meta feed-repeat">Repeats openings from {repeatsIn.join(", ")}. Reject one of them.</p>
+        )}
 
         <ol className="feed-slides">
           {slides.map((s, i) => (
@@ -442,6 +445,12 @@ function AdminFeed() {
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
   const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
+  // Which other live posts already carry each opening, so a repeat is flagged before it's published
+  const repeats = (row) => {
+    const ids = String(row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
+    const others = queue.filter((r) => r.ID !== row.ID && r.Status !== "Rejected" && String(r.Item_IDs || "").split(/[,\s]+/).some((id) => ids.includes(id)));
+    return others.map((r) => (r.Status === "Published" ? `${r.ID} (published)` : r.ID));
+  };
 
   useEffect(() => {
     setPostPage(1);
@@ -522,7 +531,7 @@ function AdminFeed() {
           ) : (
             <ul className="feed-list">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}`} row={row} onSave={onSave} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
+                <PostCard key={`${row.ID}-${row.Status}`} row={row} repeatsIn={repeats(row)} onSave={onSave} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
               ))}
             </ul>
           )}

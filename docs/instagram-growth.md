@@ -94,6 +94,12 @@ Instagram drafts (Content_Queue) – carousels only, no reels, no voiceover:
   hackathon, Post 2 is the news post (3 stories from the last 2 days), and the other way round.
 - Leave Scheduled_Time_IST empty: nothing posts on a timer; the admin publishes by hand.
 - No emojis anywhere: not in the hook, the slides, the caption or the title.
+- Never repeat an opening: skip any item with Posted_On_IG=Y (Used_In_Post=Y for news), and any
+  item already listed in another Content_Queue row that isn't Rejected. One company role, one post.
+  The publish run drops repeats and closed openings from the slides anyway, and refuses a post
+  with nothing new left.
+- News posts use the "Did you know?" design automatically: pick 3 stories with a surprising number
+  or first, and fill Why_It_Matters_For_Students in Tech_News for each (it's shown on the slide).
 - Niche: openings and deadlines for Indian freshers (2025–2027 batches).
 - 3 to 6 openings per carousel. Put every item's ID in Item_IDs so the slide gets the company's
   real logo and the DM gets the right apply link.

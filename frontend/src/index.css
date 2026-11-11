@@ -1395,6 +1395,7 @@ select.form-control {
 .feed-status-approved { color: var(--ink); }
 .feed-status-published { color: var(--ok); }
 .feed-status-rejected { color: var(--urgent); }
+.feed-repeat { color: var(--urgent); }
 .feed-status-draft { color: var(--soon); }
 
 .feed-slides {

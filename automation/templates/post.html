@@ -5,7 +5,7 @@
 <!-- Carousel slides for lib/post.js: clean white cards set in Times New Roman (Tinos, its metric twin, where it is not installed), one company per card. Laid out at 1080x1350,
      captured at 1440x1800 (deviceScaleFactor) so text stays sharp after Instagram's compression. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&display=block" rel="stylesheet">
 <style>
   :root {
     --accent: #2f54eb;
@@ -58,8 +58,20 @@
   .facts.many div { padding: 20px 0; }
   .facts.many p { font-size: 34px; }
 
-  /* news */
-  .news .body { margin-top: 40px; font-size: 37px; line-height: 1.5; color: var(--body); max-width: 860px; }
+  /* news: a "Did you know?" card. The fact is the headline, numbers in the accent colour,
+     a short explainer, then why it matters to a student in the same soft panel as the job facts. */
+  .dyk { display: flex; align-items: center; gap: 22px; font-size: 40px; font-style: italic; color: var(--accent); }
+  .dyk::before, .dyk::after { content: ""; width: 64px; height: 2px; background: var(--accent); opacity: 0.5; }
+  .cover .dyk { margin-bottom: 44px; font-size: 46px; }
+  .news .dyk { margin-bottom: 40px; }
+  .news .logo { width: 160px; height: 160px; }
+  .news .logo.wide { width: 320px; height: 110px; }
+  .news .company { margin-top: 28px; }
+  .news .title { font-size: 54px; line-height: 1.18; }
+  .news .body { margin-top: 30px; font-size: 35px; line-height: 1.5; color: var(--body); max-width: 860px; }
+  .why { margin-top: 40px; width: 100%; background: #f6f7f9; border-radius: 30px; padding: 30px 44px; text-align: left; }
+  .why small { display: block; font-size: 28px; color: var(--accent); }
+  .why p { margin-top: 8px; font-size: 34px; line-height: 1.42; color: var(--ink); }
 
   /* statement */
   .statement { justify-content: center; }
@@ -83,10 +95,13 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   // *word* in the hook → accent colour; stars never show
   const accentize = (s) => esc(s).replace(/\*([^*]+)\*/g, '<span class="hl">$1</span>');
+  // Figures in a news headline ("1,122 repos", "95%", "13x") stand out in the accent colour
+  const numbers = (s) => esc(s).replace(/(?<![\w.-])(?:US\$|\$|₹)?\d[\d,.]*(?:\s?(?:%|x|lakh|crore|million|billion|trillion))?\+?(?![\w-])/g, '<span class="hl">$&</span>');
   const arrow = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 
   const views = {
     cover: (s, d) => `
+      ${s.dyk ? `<p class="dyk">Did you know?</p>` : ""}
       <h1 class="hook ${s.hook.length > 48 ? "long" : ""}">${accentize(s.hook)}</h1>
       ${s.sub ? `<p class="sub">${esc(s.sub)}</p>` : ""}
       <div class="logos">${s.logos.map((l) => `<div class="tile"><img src="${l}" alt=""></div>`).join("")}</div>
@@ -99,11 +114,12 @@
       ${s.rows.length ? `<div class="facts ${s.rows.length > 3 ? "many" : ""}">${s.rows.map((r) => `<div class="${r.label ? "" : "solo"}">${r.label ? `<small>${esc(r.label)}</small>` : ""}<p>${esc(r.value)}</p></div>`).join("")}</div>` : ""}
       <div class="foot"><span>${esc(d.handle)}</span></div>`,
     news: (s, d) => `
+      <p class="dyk">Did you know?</p>
       ${s.logo ? `<div class="tile logo"><img src="${s.logo}" alt=""></div>` : ""}
       ${s.company ? `<p class="company">${esc(s.company)}</p>` : ""}
-      <h2 class="title long">${esc(s.title)}</h2>
-      <i class="rule"></i>
+      <h2 class="title">${numbers(s.title)}</h2>
       ${s.body ? `<p class="body">${esc(s.body)}</p>` : ""}
+      ${s.why ? `<div class="why"><small>Why it matters for you</small><p>${esc(s.why)}</p></div>` : ""}
       <div class="foot"><span>${esc(d.handle)}</span></div>`,
     statement: (s, d) => `<p>${accentize(s.text)}</p><div class="foot"><span>${esc(d.handle)}</span></div>`,
     profile: (s, d) => `

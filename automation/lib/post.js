@@ -117,11 +117,13 @@ function cardFromItem(item) {
   if (id.startsWith("TN-")) {
     // The headline names the company the story is about; the summary often mentions partners too
     const company = knownIn(item.Headline) || knownIn(item.Summary);
+    // "Did you know?" card: the fact, a short explainer, and why a student should care
     return {
       type: "news",
-      company: company || clean(item.Source, 40),
-      title: heading(item.Headline, 120),
-      body: clean(item.Summary, 260),
+      company: company || "",
+      title: heading(item.Headline, 110),
+      body: clean(item.Summary, 200),
+      why: clean(item.Why_It_Matters_For_Students, 170),
       lookup: company ? { name: company } : null,
     };
   }
@@ -183,6 +185,9 @@ function cardFromFields(fields) {
 
 // ---- deck ----
 
+// Marked by publish.js once a post with this item goes out
+const alreadyPosted = (item) => item.Posted_On_IG === "Y" || item.Used_In_Post === "Y";
+
 // Still open: not marked expired, and its last date (if any) hasn't passed
 function isOpen(item) {
   if (/expired|closed/i.test(item.Status || "")) return false;
@@ -224,6 +229,8 @@ export function planDeck(row, category, items = []) {
       hook: String(hook || row.Title || "Openings this week").replace(EMOJI, "").replace(/\s{2,}/g, " ").trim(),
       sub: clean(String(sub || "").replace(/,?\s*no (closing date|deadline)[^,]*/i, ""), 110),
       kicker: look.kicker,
+      // News covers open with "Did you know?"; job covers carry no label
+      dyk: isNews,
       logos: cards.filter((c) => c.lookup).slice(0, 6).map((c) => c.lookup),
     },
     ...cards,
@@ -270,10 +277,11 @@ async function attachImages(deck) {
 // Renders every slide to a 1440x1800 JPEG in outDir and returns the file paths
 export async function renderPost(row, outDir, { category = "tech", items } = {}) {
   fs.mkdirSync(outDir, { recursive: true });
-  // Openings that closed since the draft was written are left out, unless every one has
+  // Openings that have closed, or that an earlier post already covered, are left out:
+  // the same opening never goes out twice
   const found = items ?? (await loadItems(row.Item_IDs).catch(() => []));
-  const open = found.filter(isOpen);
-  const keep = open.length ? open : found;
+  const keep = found.filter((i) => isOpen(i) && !alreadyPosted(i));
+  if (found.length && !keep.length) throw new Error("every opening in this post has closed or was already posted");
   if (keep.length < found.length) row = { ...row, Item_IDs: keep.map((i) => i.ID).join(", ") };
   const deck = planDeck(row, category, keep);
   await attachImages(deck);
