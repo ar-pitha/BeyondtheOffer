@@ -237,7 +237,7 @@ export function planDeck(row, category, items = []) {
     {
       type: "profile",
       keyword,
-      line: isNews ? "Daily tech news for students, in plain words." : "Verified openings for freshers, every day.",
+      line: isNews ? "Daily tech news for students." : "Verified openings for freshers, every day.",
       ask: isNews ? `Comment ${keyword} for the sources` : `Comment ${keyword} and we'll DM you every apply link`,
     },
   ];

@@ -27,6 +27,26 @@ const POST_FILTERS = [
   { value: "all", label: "All" },
 ];
 
+// What a post is about, from its item IDs (same rule as automation/lib/category.js)
+const POST_KINDS = [
+  { value: "all", label: "All types" },
+  { value: "tech", label: "Tech jobs" },
+  { value: "govt", label: "Govt jobs" },
+  { value: "events", label: "Hackathons" },
+  { value: "news", label: "Tech news" },
+];
+function kindOf(row) {
+  const ids = String(row.Item_IDs || "").toUpperCase().split(/[,\s]+/).filter(Boolean);
+  if (ids.length && ids.every((id) => id.startsWith("TN-"))) return "news";
+  if (ids.some((id) => id.startsWith("GJ-"))) return "govt";
+  if (ids.some((id) => id.startsWith("HQ-"))) return "events";
+  if (ids.some((id) => id.startsWith("TN-"))) return "news";
+  const text = `${row.Title || ""} ${row.Hashtags || ""}`.toLowerCase();
+  if (/\b(govt|government|sarkari|ssc|upsc|psc)\b/.test(text)) return "govt";
+  if (/\b(hackathon|contest|ctf|quiz)\b/.test(text)) return "events";
+  return "tech";
+}
+
 const SELECT_OPTIONS = {
   Status: ["Active", "Expired"],
   Verified: ["Official", "Multi-source", "Single-source"],
@@ -262,6 +282,7 @@ function AdminFeed() {
   const [pending, setPending] = useState({}); // row ID (or "sync-comments") → the action running on it
   const [filter, setFilter] = useState("Draft");
   const [order, setOrder] = useState("newest"); // the API sends rows newest first
+  const [kind, setKind] = useState("all");
   const [run, setRun] = useState(null); // { id, platform, status, conclusion, url }
   const [postPage, setPostPage] = useState(1);
   const [previewRow, setPreviewRow] = useState(null);
@@ -441,7 +462,8 @@ function AdminFeed() {
   const queue = data?.tab === "Content_Queue" ? data.rows : [];
   // Like the cards, only a publish of this same post blocks the preview's buttons
   const previewPosting = !!previewRow && run?.id === previewRow.ID && run.status !== "completed";
-  const posts = order === "oldest" ? [...queue].reverse() : queue;
+  const sorted = order === "oldest" ? [...queue].reverse() : queue;
+  const posts = kind === "all" ? sorted : sorted.filter((r) => kindOf(r) === kind);
   const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
   const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
   const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
@@ -454,7 +476,7 @@ function AdminFeed() {
 
   useEffect(() => {
     setPostPage(1);
-  }, [tab, filter, order]);
+  }, [tab, filter, order, kind]);
 
   return (
     <div className="page container">
@@ -506,6 +528,16 @@ function AdminFeed() {
           <option value="oldest">Oldest first</option>
         </select>
       </label>
+      {tab === "Content_Queue" && (
+        <label className="sort">
+          <span>Type</span>
+          <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            {POST_KINDS.map((k) => (
+              <option key={k.value} value={k.value}>{k.label}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {loading ? (
         <Loader />
