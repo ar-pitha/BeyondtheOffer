@@ -46,7 +46,8 @@ export async function startCommentDm({ commentId, items, websiteUrl, postId }) {
       .catch(() => sendPrivateReply(commentId, FOLLOW_PROMPT));
     return { ok: true, status: WAITING, recipientId: res.recipient_id || "" };
   } catch (err) {
-    return { ok: false, status: "", recipientId: "", error: err.message.slice(0, 200) };
+    // 2534023: this comment already has its one private reply (the webhook and the sync overlapped)
+    return { ok: false, status: "", recipientId: "", error: err.message.slice(0, 200), duplicate: err.subcode === 2534023 };
   }
 }
 

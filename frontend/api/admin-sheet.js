@@ -7,7 +7,7 @@
 
 import { readTab, appendRow, updateRow, ensureColumns, nowInZone } from "./_lib/sheets.js";
 import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
-import { buildPublicLinksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
+import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
@@ -134,11 +134,10 @@ async function syncInstagramComments() {
       const replies = comment.replies?.data || [];
       const existing = existingRows.find((row) => row.Comment_ID === comment.id);
       const alreadyReplied = replies.some((reply) => reply.from?.id === process.env.IG_USER_ID);
-      // The webhook logs "processing" before it replies; leave the comment to it for two minutes
-      // so the two never answer the same comment (a second DM fails and the links go public)
-      const loggedAt = Date.parse(`${String(existing?.Time_IST || "").replace(" ", "T").replace(/T(\d):/, "T0$1:")}:00+05:30`);
-      const webhookBusy = existing?.Status === "processing" && Date.now() - loggedAt < 120000;
-      if (existing?.Reply_Text || alreadyReplied || webhookBusy) {
+      // The webhook answers within seconds; give it 45 so the two never answer the same comment.
+      // By then its reply shows up under the comment and this skips it.
+      const webhookFirst = Date.now() - Date.parse(comment.timestamp) < 45000;
+      if (existing?.Reply_Text || alreadyReplied || webhookFirst) {
         known.add(comment.id);
         continue;
       }
@@ -164,9 +163,10 @@ async function syncInstagramComments() {
       }
 
       // Same as the webhook: DM first (follow check, _lib/followgate.js), then a public reply
-      // that points to the DM, or carries the links page when the DM couldn't be sent
+      // that points to the DM, or is a plain thank-you when the DM couldn't be sent
       const dm = await startCommentDm({ commentId: comment.id, items, websiteUrl: WEBSITE_URL, postId: queueRow?.ID });
-      const publicReply = dm.ok ? PUBLIC_LINKS_REPLY : buildPublicLinksReply(items, WEBSITE_URL, queueRow?.ID);
+      if (dm.duplicate) continue; // the webhook is answering this one
+      const publicReply = dm.ok ? PUBLIC_LINKS_REPLY : thanksReply(comment.id);
       let replyText = "";
       let status = "received";
       try {

@@ -16,7 +16,7 @@ import {
 } from "./_lib/instagram.js";
 import {
   classifyComment,
-  buildPublicLinksReply,
+  thanksReply,
   PUBLIC_LINKS_REPLY,
   draftAnswer,
   COMMENTS_LOG_TAB,
@@ -101,9 +101,11 @@ async function handleComment(value) {
     // A thank-you or an emoji gets the same DM as a keyword; links never go in the public reply
     if (action === "links" || action === "thanks") {
       const { items, postId } = await linksForMedia(mediaId);
-      // DM first; the public reply points to it, or carries the links page when the DM failed
       const dm = await startCommentDm({ commentId, items, websiteUrl: WEBSITE_URL, postId });
-      const publicReply = dm.ok ? PUBLIC_LINKS_REPLY : buildPublicLinksReply(items, WEBSITE_URL, postId);
+      // The 30-second sync got to this comment first and has already sent the DM and the reply
+      if (dm.duplicate) return finishLog({ Action: "links", Reply_Text: "", Status: "skipped", Post_ID: postId || "" });
+      // DM first; the public reply points to it, or is a plain thank-you when the DM failed
+      const publicReply = dm.ok ? PUBLIC_LINKS_REPLY : thanksReply(commentId);
       let publicError = "";
       try {
         await replyToComment(commentId, publicReply);
