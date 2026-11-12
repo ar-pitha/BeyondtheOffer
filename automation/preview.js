@@ -5,6 +5,7 @@ import { closeBrowser } from "./lib/render.js";
 import { renderPost } from "./lib/post.js";
 import { categoryForRow } from "./lib/category.js";
 import { uploadSlides, hasCloudinary } from "./lib/cloudinary.js";
+import { GROUPED } from "../frontend/api/_lib/queue.js";
 
 if (!hasCloudinary()) throw new Error("Cloudinary is required for admin previews");
 
@@ -14,8 +15,9 @@ const all = argv.includes("--all");
 if (!requestedId && !all) throw new Error("Usage: node preview.js --id <Content_Queue_ID> or --all");
 
 const { headers, rows } = await readTab("Content_Queue");
+// --all builds only the posts waiting on the board (grouped in /admin/feed); --id builds any row
 const targets = rows.filter((row) =>
-  (!requestedId || row.ID === requestedId) &&
+  (requestedId ? row.ID === requestedId : GROUPED.test(row.ID) && ["Draft", "Approved"].includes(row.Status || "Draft")) &&
   row.Format &&
   row.Slides_or_Script &&
   row.Status !== "Published" &&

@@ -44,6 +44,16 @@ export function isOpen(item) {
 // The website and the carousels only carry openings confirmed by the source or by two sources
 export const TRUSTED = ["Official", "Multi-source"];
 
+// Rejected in /admin/feed → Openings: never offered for a post again (the website still shows it)
+export const igRejected = (item) => item.IG_Rejected === "Y";
+
+// IDs of carousels grouped in /admin/feed (CQ-20261112-G1)
+export const GROUPED = /-G\d+$/;
+
+// Posts that hold openings: published and approved ones, and drafts grouped in the admin.
+// Drafts written any other way (the daily task's) hold nothing and are never shown.
+const holds = (r) => r.Status === "Published" || r.Status === "Approved" || ((r.Status || "Draft") === "Draft" && GROUPED.test(r.ID));
+
 // The next carousel for one sheet tab: trusted openings that are open, not on Instagram and not
 // in `taken`, fewest days left first (no closing date goes last, newest first), cut to `size`.
 // One that closes within a day is skipped: it would be shut before most people see the post.
@@ -51,7 +61,7 @@ export function pickOpenings(rows, dateColumn, taken, size = 4) {
   const closes = (r) => parseSheetDate(r[dateColumn])?.getTime() ?? Infinity;
   const soonest = Date.now() + 86_400_000;
   return rows
-    .filter((r) => r.ID && TRUSTED.includes(r.Verified) && isOpen(r) && closes(r) > soonest && !alreadyPosted(r) && !taken.has(r.ID))
+    .filter((r) => r.ID && TRUSTED.includes(r.Verified) && isOpen(r) && closes(r) > soonest && !alreadyPosted(r) && !igRejected(r) && !taken.has(r.ID))
     .sort((a, b) => closes(a) - closes(b) || String(b.Date_Added || "").localeCompare(String(a.Date_Added || "")))
     .slice(0, size);
 }
@@ -65,10 +75,11 @@ const labelOf = (i) => String(i.Company || i.Organisation || i.Name || i.Headlin
 // post that isn't out yet keeps it (approved posts first, then the newest draft). The rest of
 // the carousel stays. state is set only when nothing is left to post: "expired" when every
 // opening has closed, otherwise "duplicate". Tech news has no closing date and never expires.
+// Only posts that hold openings (see holds) are planned.
 export function planQueue(queue, itemsById) {
   const rank = { Published: 0, Approved: 1 };
   const order = queue
-    .filter((r) => r.Status !== "Rejected")
+    .filter(holds)
     .sort((a, b) => (rank[a.Status] ?? 2) - (rank[b.Status] ?? 2) || b._row - a._row);
   const out = new Set(); // item IDs in published posts
   const owner = new Map(); // item ID → the unpublished post that keeps it
@@ -117,22 +128,23 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/queue.js")) {
   );
   const queue = [
     { ID: "A", _row: 2, Status: "Published", Item_IDs: "TJ-3" },
-    { ID: "B", _row: 3, Status: "Draft", Item_IDs: "TJ-1, TJ-2, TJ-5" }, // keeps TJ-5 only
-    { ID: "C", _row: 4, Status: "Draft", Item_IDs: "TJ-2" }, // closed
-    { ID: "D", _row: 5, Status: "Draft", Item_IDs: "TJ-1 TJ-3" }, // newer than B: keeps TJ-1
+    { ID: "B-G1", _row: 3, Status: "Draft", Item_IDs: "TJ-1, TJ-2, TJ-5" }, // keeps TJ-5 only
+    { ID: "C-G1", _row: 4, Status: "Draft", Item_IDs: "TJ-2" }, // closed
+    { ID: "D-G1", _row: 5, Status: "Draft", Item_IDs: "TJ-1 TJ-3" }, // newer than B: keeps TJ-1
     { ID: "E", _row: 6, Status: "Approved", Item_IDs: "TJ-4" },
-    { ID: "F", _row: 7, Status: "Draft", Item_IDs: "TJ-4, TJ-3" }, // TJ-4 is approved in E, TJ-3 is out
-    { ID: "G", _row: 8, Status: "Draft", Item_IDs: "TN-1" }, // news never expires
-    { ID: "H", _row: 9, Status: "Rejected", Item_IDs: "TJ-1" },
-    { ID: "I", _row: 10, Status: "Draft", Item_IDs: "" },
+    { ID: "F-G1", _row: 7, Status: "Draft", Item_IDs: "TJ-4, TJ-3" }, // TJ-4 is approved in E, TJ-3 is out
+    { ID: "G-G1", _row: 8, Status: "Draft", Item_IDs: "TN-1" }, // news never expires
+    { ID: "H-G1", _row: 9, Status: "Rejected", Item_IDs: "TJ-1" },
+    { ID: "I-G1", _row: 10, Status: "Draft", Item_IDs: "" },
+    { ID: "K", _row: 11, Status: "Draft", Item_IDs: "TJ-5" }, // a daily-task draft: holds nothing
   ];
   const p = planQueue(queue, items);
-  assert.deepStrictEqual(Object.fromEntries(Object.entries(p).filter(([, v]) => v.state).map(([k, v]) => [k, v.state])), { C: "expired", F: "duplicate" });
-  assert.deepStrictEqual(p.B.keep, ["TJ-5"]);
-  assert.deepStrictEqual(p.B.dropped.map((d) => `${d.label}: ${d.why}`), ["Acme: in D", "Bolt: closed"]);
-  assert.deepStrictEqual(p.D.keep, ["TJ-1"]);
-  assert.deepStrictEqual(p.G.keep, ["TN-1"]);
-  assert.ok(!p.H && !p.A);
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(p).filter(([, v]) => v.state).map(([k, v]) => [k, v.state])), { "C-G1": "expired", "F-G1": "duplicate" });
+  assert.deepStrictEqual(p["B-G1"].keep, ["TJ-5"]);
+  assert.deepStrictEqual(p["B-G1"].dropped.map((d) => `${d.label}: ${d.why}`), ["Acme: in D-G1", "Bolt: closed"]);
+  assert.deepStrictEqual(p["D-G1"].keep, ["TJ-1"]);
+  assert.deepStrictEqual(p["G-G1"].keep, ["TN-1"]);
+  assert.ok(!p["H-G1"] && !p.A && !p.K);
 
   const tab = [
     { ID: "X1", Verified: "Official", Apply_By: day(9) },
@@ -144,6 +156,7 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/queue.js")) {
     { ID: "X6", Verified: "Official", Apply_By: "", Date_Added: "2026-11-01" }, // no date: last
     { ID: "X7", Verified: "Official", Apply_By: day(4) }, // taken by another post
     { ID: "X8", Verified: "Official", Apply_By: "", Date_Added: "2026-11-09" },
+    { ID: "X0", Verified: "Official", Apply_By: day(2), IG_Rejected: "Y" }, // rejected in the admin
   ];
   assert.deepStrictEqual(pickOpenings(tab, "Apply_By", new Set(["X7"])).map((r) => r.ID), ["X3", "X1", "X8", "X6"]);
   assert.deepStrictEqual(pickOpenings(tab, "Apply_By", new Set(), 2).map((r) => r.ID), ["X3", "X7"]);

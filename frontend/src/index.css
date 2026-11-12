@@ -1284,56 +1284,156 @@ select.form-control {
   opacity: 0.7;
 }
 
-/* Openings picker: tick up to 4 of one kind, fewest days left at the top */
-.pick-bar {
+/* Instagram board (/admin/feed): Openings → Posts → Published, plus Rejected and Expired.
+   Flat rows like the rest of the site; colour only on the kind and the days left. */
+.board-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.board-tabs::-webkit-scrollbar { display: none; }
+
+.board-tabs button {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.board-tabs button span {
+  margin-left: 6px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-tabs button[aria-pressed="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+@media (max-width: 479px) {
+  .board-tabs { gap: 0; }
+  .board-tabs button { padding: 10px 8px; font-size: 13px; }
+  .board-tabs button span { margin-left: 4px; }
+}
+
+.board-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.board-tools .seg { margin-bottom: 0; min-width: 0; }
+
+.board-search {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+  gap: 8px;
+  flex: 1 1 220px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
 }
 
-.pick-list {
-  border-top: 1px solid var(--line);
+.board-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
 }
 
-.pick-list li {
+.board-search:focus-within { border-color: var(--ink-3); }
+
+.board-hint { margin: 10px 0 4px; }
+
+.op-section { margin-top: 12px; }
+
+.op-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0 6px;
+  font-size: 13px;
+}
+
+.op-heading .kind { font-size: 13px; }
+.op-heading span:last-child { color: var(--ink-3); font-weight: 500; }
+
+.op-list { border-top: 1px solid var(--line); }
+
+.op-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border-bottom: 1px solid var(--line);
 }
 
-.pick-list label {
+.op-row.is-picked { background: var(--soft); }
+.op-row.is-locked .op-pick { opacity: 0.45; cursor: not-allowed; }
+
+.op-pick {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 0;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 4px;
   cursor: pointer;
 }
 
-.pick-list input {
-  margin-top: 3px;
+.op-pick input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
   flex-shrink: 0;
+  accent-color: var(--ink);
 }
 
-.pick-list li.is-off label {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.pick-main {
+.op-main {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
   flex: 1;
+  min-width: 0;
 }
 
-.pick-main small {
-  color: var(--ink-3);
+.op-main b {
+  font-size: 15px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.pick-days {
+.op-main small {
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.op-main small.op-meta { color: var(--ink-3); font-size: 12px; }
+
+/* Two lines are enough to decide; the full text is in the tooltip */
+.op-main small.op-detail {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.op-when {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1341,15 +1441,216 @@ select.form-control {
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.pick-days small {
-  font-weight: 400;
+.op-when small { font-weight: 400; color: var(--ink-3); }
+.op-when.is-urgent { color: var(--urgent); }
+.op-when.is-soon { color: var(--soon); }
+
+.op-reject {
+  flex-shrink: 0;
+  padding: 8px 4px;
+  font-size: 13px;
   color: var(--ink-3);
 }
 
-.pick-days.is-urgent {
-  color: var(--urgent);
+.op-reject:hover { color: var(--urgent); }
+
+/* What you picked, always in reach above the bottom tabs */
+.pick-dock {
+  position: sticky;
+  bottom: 12px;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 899px) {
+  .pick-dock { bottom: calc(var(--tabbar) + 8px + env(safe-area-inset-bottom)); }
+}
+
+.pick-dock-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.pick-dock-text b { font-size: 14px; }
+
+.pick-dock-text small {
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-dock-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Posts waiting to go out */
+.post-list { display: grid; gap: 12px; }
+
+.post-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.post-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.post-id { font-size: 12px; color: var(--ink-3); }
+
+.post-title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.post-items { border-top: 1px solid var(--line); }
+
+.post-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.post-items li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.post-items li.is-closed > span:first-child { color: var(--ink-3); text-decoration: line-through; }
+.post-items .op-when { flex-direction: row; gap: 6px; align-items: baseline; }
+
+.post-note { font-size: 13px; color: var(--soon); }
+
+.post-thumbs {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.post-thumbs img {
+  width: 88px;
+  aspect-ratio: 4 / 5;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+
+.post-building {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--soft);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--soon);
+  animation: board-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes board-pulse {
+  50% { opacity: 0.25; }
+}
+
+.post-caption summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.post-caption[open] summary { margin-bottom: 8px; }
+
+.post-caption-text {
+  white-space: pre-line;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.post-tags { margin: 6px 0; font-size: 13px; color: var(--ink-3); }
+
+.post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.post-ungroup { margin-left: auto; color: var(--ink-3); }
+.post-ungroup:hover { color: var(--urgent); }
+
+/* Published */
+.pub-list { border-top: 1px solid var(--line); }
+
+.pub-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pub-thumb {
+  width: 48px;
+  aspect-ratio: 4 / 5;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--soft);
+}
+
+.pub-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.toast-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toast-undo .link-button { font-weight: 600; }
+
+.spin { animation: board-spin 0.8s linear infinite; }
+
+@keyframes board-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse, .spin { animation: none; }
 }
 
 /* Post list: every word of the post on the left, its age and buttons in a column on the right */

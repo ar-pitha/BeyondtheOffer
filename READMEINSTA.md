@@ -419,22 +419,20 @@ Instagram only delivers these DMs to the public when:
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
 - The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe both the app and the account with `cd automation; node subscribe-webhooks.js` (`--show` only prints them). `messaging_postbacks` is needed for taps on the DONE button.
 
-### Grouping carousels by hand
+### The Instagram board (/admin/feed)
 
-`/admin/feed` → **Group openings** lists every tech job, govt job and hackathon that can still go out (`Official` or `Multi-source`, still open, not on Instagram), sorted by fewest days left (no closing date last). Closed and posted openings are never listed. **Tech news** lists every story not yet used in a post, newest first; news never expires and gets the "Did you know?" look.
-- Tick up to 4 of one kind and press **Create carousel**. It becomes a `Draft` in To review with an ID like `CQ-20261112-G1`, and the title, slide lines and caption are written for it. Then **Approve** builds the preview.
-- An opening already in a waiting post shows as taken and can't be picked, so no opening is in two posts.
-- `automation/refresh.js` runs after every sync (`npm run refresh`, `refresh:dry` to only print). When an opening in a waiting `-G` carousel closes, only that opening is replaced by the next most urgent free one of the same kind. The text is rewritten and the preview is cleared, and `instagram-preview.yml` rebuilds it within minutes. Edits to that carousel's caption are replaced too.
-- Older drafts (written by the daily task) are not rewritten. A closed opening in one is only left off its slides.
+Five tabs, left to right (`frontend/src/pages/AdminFeed.jsx`, data from `GET /api/admin-sheet?view=board`, built in `frontend/api/_lib/carousel.js`):
 
-### Expired and duplicate posts
+1. **Openings**: every tech job, govt job, hackathon and tech news story that can still go out. Filter by kind or search. Jobs and hackathons must be `Official` or `Multi-source`, still open and not on Instagram, and are sorted by fewest days left (no closing date last). News is newest first and never expires. Tick up to 4 of one kind; the dock at the bottom has **Create post** and **Reject**.
+2. **Posts**: **Create post** writes a `Draft` to Content_Queue with an ID like `CQ-20261112-G1`, with the title, slide lines and caption written for it, and starts the preview build at once (about 3 minutes). **Review and publish** shows the slides and publishes from there. **Ungroup** puts its openings back in Openings (with Undo).
+3. **Published**: what went out, with a link to the post.
+4. **Rejected**: openings rejected in Openings (`IG_Rejected=Y` in their tab). They're never offered for a post again until restored. The website still lists them.
+5. **Expired**: openings whose last date passed in the last 30 days. They move here on their own.
 
-`/admin/feed` sorts posts itself (`frontend/api/_lib/queue.js`, nothing is written to the sheet):
-- It works one opening at a time. An opening is left off its carousel when it has closed, is already on Instagram, or another post that isn't out yet keeps it (approved posts first, then the newest draft). The card lists what is left off; the preview and the published post leave off the same ones.
-- A carousel moves to the **Expired** tab only when nothing is left: **Expired** when every opening has closed, **Duplicate** otherwise. Reject the newer post and the older one gets its openings back.
-- Tech news has no closing date and never expires.
-- A post with nothing left can't be approved or published (the API refuses with the reason).
-- **Approve** on a draft moves it to Approved and builds a fresh preview; **Publish to Instagram** posts it once the preview is there.
+Rules behind it:
+- An opening is in one post at most. One that is in a waiting post doesn't show in Openings, and the API refuses to group or reject it.
+- When an opening in a waiting post closes, `automation/refresh.js` replaces only that opening with the next most urgent free one of the same kind. It rewrites the text and clears the preview so it is rebuilt. It runs before every `instagram-preview.yml` run and after every sync (`npm run refresh`, `refresh:dry` to only print). Caption edits on that post are replaced too.
+- Drafts written any other way (the daily task's) hold no openings and aren't shown; `preview.js --all` only builds grouped posts.
 
 ### Generated admin previews
 

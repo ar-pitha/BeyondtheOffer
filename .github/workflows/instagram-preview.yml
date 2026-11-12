@@ -38,5 +38,8 @@ jobs:
       # No --with-deps: see publish.yml
       - run: npx playwright install chromium
         working-directory: automation
+      # A waiting post whose opening closed gets the next most urgent one; its preview is rebuilt below
+      - run: node refresh.js
+        working-directory: automation
       - run: node preview.js ${{ inputs.id && format('--id {0}', inputs.id) || '--all' }}
         working-directory: automation

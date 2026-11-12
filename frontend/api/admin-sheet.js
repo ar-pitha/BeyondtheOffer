@@ -10,7 +10,7 @@ import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "
 import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
 import { planQueue } from "./_lib/queue.js";
-import { CATEGORIES, openingsList, checkGroup, carouselFields, nextGroupId } from "./_lib/carousel.js";
+import { CATEGORIES, GROUPED, buildBoard, checkGroup, carouselFields, nextGroupId, categoryOfId, takenBy } from "./_lib/carousel.js";
 
 // The opening tabs the picker groups from, by tab name
 async function openingTabs() {
@@ -278,13 +278,10 @@ export default async function handler(req, res) {
 
     if (req.method === "GET") {
       const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
-      // Openings to group by hand: open, trusted, not on Instagram, fewest days left first
-      if (q.view === "openings") {
+      // The whole Instagram board: openings, posts, published, rejected, expired (_lib/carousel.js)
+      if (q.view === "board") {
         const [{ rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
-        return send(res, 200, {
-          categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, c]) => [k, c.label])),
-          openings: openingsList(queue, tabRows),
-        });
+        return send(res, 200, buildBoard(queue, tabRows));
       }
       const tab = q.tab || "Content_Queue";
       const cfg = TABS[tab];
@@ -322,7 +319,7 @@ export default async function handler(req, res) {
         return send(res, 200, await syncInstagramComments());
       }
 
-      // A carousel grouped by hand in the Openings picker becomes a Draft in Content_Queue
+      // Openings picked on the board become one post, and its preview starts building at once
       if (body.action === "create-carousel") {
         const [{ headers, rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
         let group;
@@ -334,7 +331,49 @@ export default async function handler(req, res) {
         const { date } = nowInZone();
         const row = { ID: nextGroupId(queue, date), Date: date, Format: "Carousel", Status: "Draft", ...carouselFields(group.category, group.items) };
         await appendRow("Content_Queue", headers, row);
-        return send(res, 201, { row });
+        // instagram-preview.yml also builds it on its next 5-minute run if this dispatch fails
+        const previewStarted = await dispatchPreview(row.ID).then(() => true, () => false);
+        return send(res, 201, { row, previewStarted });
+      }
+
+      // Reject or restore openings on the board. A rejected opening is never offered for a post
+      // again (IG_Rejected=Y in its tab); the website keeps showing it.
+      if (body.action === "reject-openings" || body.action === "restore-openings") {
+        const reject = body.action === "reject-openings";
+        const ids = [...new Set((body.ids || []).map(String))];
+        if (!ids.length) return send(res, 400, { message: "Send the openings to change." });
+        const [{ rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
+        if (reject) {
+          const owner = takenBy(queue, new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r])));
+          const held = ids.filter((id) => owner.has(id));
+          if (held.length) return send(res, 409, { message: `${held.join(", ")} ${held.length === 1 ? "is" : "are"} in ${owner.get(held[0])}. Ungroup that post first.` });
+        }
+        for (const id of ids) {
+          const cfg = CATEGORIES[categoryOfId(id)];
+          const row = cfg && tabRows[cfg.tab].find((r) => r.ID === id);
+          if (!row) return send(res, 404, { message: `No opening with ID ${id}.` });
+          const headers = await ensureColumns(cfg.tab, ["IG_Rejected"]);
+          await updateRow(cfg.tab, headers, row._row, { IG_Rejected: reject ? "Y" : "" }, { raw: true });
+        }
+        return send(res, 200, { ids, rejected: reject });
+      }
+
+      // Ungroup a post that isn't out yet: its openings go back to the board
+      if (body.action === "ungroup" || body.action === "regroup") {
+        const { headers, rows } = await readTab("Content_Queue");
+        const row = rows.find((r) => r.ID === body.id);
+        if (!row || !GROUPED.test(row.ID)) return send(res, 404, { message: `No grouped post with ID ${body.id}.` });
+        if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
+        if (body.action === "regroup") {
+          // Undo of an ungroup: only if none of its openings were picked for another post since
+          const tabRows = await openingTabs();
+          const owner = takenBy(rows, new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r])));
+          const ids = String(row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
+          const held = ids.find((id) => owner.has(id));
+          if (held) return send(res, 409, { message: `${held} is in ${owner.get(held)} now.` });
+        }
+        await updateRow("Content_Queue", headers, row._row, { Status: body.action === "ungroup" ? "Rejected" : "Draft" }, { raw: true });
+        return send(res, 200, { id: row.ID });
       }
 
       if (body.action === "preview-now") {

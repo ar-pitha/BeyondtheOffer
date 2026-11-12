@@ -1,316 +1,291 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { HiExternalLink, HiRefresh } from "react-icons/hi";
+import { HiExternalLink, HiRefresh, HiSearch } from "react-icons/hi";
 import Loader from "../components/Loader";
 import usePageMeta from "../hooks/usePageMeta";
-import Pagination from "../components/Pagination";
 
 // The admin sheet API is a Vercel function on this site, not the backend API
 const api = { baseURL: "" };
 
-const TAB_LABELS = {
-  Content_Queue: "Instagram posts",
-  Openings: "Group openings",
-  Tech_Jobs: "Tech jobs",
-  Govt_Jobs: "Govt jobs",
-  Hackathons_Quizzes: "Hackathons",
-  Tech_News: "Tech news",
-  Run_Log: "Run log",
-  Comments_Log: "Comment replies",
-};
-
-const POST_FILTERS = [
-  { value: "Draft", label: "To review" },
-  { value: "Approved", label: "Approved" },
-  { value: "Published", label: "Published" },
-  { value: "Rejected", label: "Rejected" },
-  { value: "Expired", label: "Expired" },
-  { value: "all", label: "All" },
+// The flow, left to right: pick openings → a post waits with its preview → publish.
+// Rejected openings and ones that closed on their own each have their own list.
+const TABS = [
+  { key: "openings", label: "Openings" },
+  { key: "posts", label: "Posts" },
+  { key: "published", label: "Published" },
+  { key: "rejected", label: "Rejected" },
+  { key: "expired", label: "Expired" },
 ];
+const ORDER = ["tech", "govt", "events", "news"];
+const KIND_CLASS = { tech: "kind-tech", govt: "kind-govt", events: "kind-event", news: "kind-news" };
+const MAX_PICK = 4;
+const BUILD_MINUTES = 20; // stop waiting for a preview after this long
 
-// The list a post sits in. The API marks a post that has nothing left to post with _state
-// ("expired" or "duplicate"); those leave the review and approved lists on their own.
-const bucketOf = (row) => (row._state && !["Published", "Rejected"].includes(row.Status) ? "Expired" : row.Status || "Draft");
+const slides = (post) =>
+  String(post.Preview_Link || "")
+    .split(/\s+/)
+    .filter((u) => /^https?:\/\//.test(u) && !/\.mp4(\?|$)/i.test(u));
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-// What a post is about, from its item IDs (same rule as automation/lib/category.js)
-const POST_KINDS = [
-  { value: "all", label: "All types" },
-  { value: "tech", label: "Tech jobs" },
-  { value: "govt", label: "Govt jobs" },
-  { value: "events", label: "Hackathons" },
-  { value: "news", label: "Tech news" },
-];
-function kindOf(row) {
-  const ids = String(row.Item_IDs || "").toUpperCase().split(/[,\s]+/).filter(Boolean);
-  if (ids.length && ids.every((id) => id.startsWith("TN-"))) return "news";
-  if (ids.some((id) => id.startsWith("GJ-"))) return "govt";
-  if (ids.some((id) => id.startsWith("HQ-"))) return "events";
-  if (ids.some((id) => id.startsWith("TN-"))) return "news";
-  const text = `${row.Title || ""} ${row.Hashtags || ""}`.toLowerCase();
-  if (/\b(govt|government|sarkari|ssc|upsc|psc)\b/.test(text)) return "govt";
-  if (/\b(hackathon|contest|ctf|quiz)\b/.test(text)) return "events";
-  return "tech";
-}
-
-const SELECT_OPTIONS = {
-  Status: ["Active", "Expired"],
-  Verified: ["Official", "Multi-source", "Single-source"],
-};
-
-// "Slide 2: A | B | C" lines → [{ n, text }]
-const parseSlides = (script = "") =>
-  script
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => {
-      const m = l.match(/^(?:slide\s*\d+|hook|point|cta)\s*(?:\([^)]*\))?\s*[:.\-–]\s*(.*)$/i);
-      return (m ? m[1] : l).replace(/\*([^*]+)\*/g, "$1").split("|").map((s) => s.trim()).filter(Boolean).join(" · ");
-    });
-
-const PLATFORMS = {
-  instagram: { name: "Instagram", action: "publish-now" },
-  youtube: { name: "YouTube", action: "publish-youtube" },
-};
-
-// Reels are the only format that goes to YouTube, and it uploads the approved preview video
-const canPublishToYouTube = (row) =>
-  String(row.Format).toLowerCase() === "reel" && !row.YT_Video_Link && /\.mp4(\?|\s|$)/i.test(row.Preview_Link || "");
-
-// Days since the draft was written, shown at the top of the action column
-function Age({ date }) {
-  const t = Date.parse(date);
-  const n = Number.isNaN(t) ? null : Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
-  if (n === null) return null;
+// Days left (jobs, hackathons) or age (news)
+function When({ o }) {
+  if (o.age !== undefined) {
+    return <span className="op-when">{o.age === null ? "" : o.age === 0 ? "Today" : `${o.age}d ago`}</span>;
+  }
+  if (o.closed) return <span className="op-when is-urgent">Closed{o.closes && <small>{o.closes}</small>}</span>;
+  const d = o.daysLeft;
   return (
-    <p className="feed-age">
-      <b>{n === 0 ? "Today" : n}</b>
-      {n > 0 && <small>{n === 1 ? "day ago" : "days ago"}</small>}
-    </p>
+    <span className={`op-when${d !== null && d <= 2 ? " is-urgent" : d !== null && d <= 7 ? " is-soon" : ""}`}>
+      {d === null ? "No date" : d === 0 ? "Closes today" : `${plural(d, "day")} left`}
+      {o.closes && <small>{o.closes}</small>}
+    </span>
   );
 }
 
-function PostCard({ row, onSave, onApprove, onPublish, onPreview, onRegenerate, building, working, postingTo }) {
-  const [caption, setCaption] = useState(row.Caption || "");
-  const [editing, setEditing] = useState(false);
-  const slides = parseSlides(row.Slides_or_Script);
-  const published = row.Status === "Published";
-  const status = row.Status || "Draft";
-  // Expired or a duplicate: it can't be approved or published, only rejected
-  const dead = bucketOf(row) === "Expired";
-  // Publishing needs the slide images; an old reel's video preview has to be regenerated first
-  const hasImages = !!row.Preview_Link && !/\.mp4(\?|\s|$)/i.test(row.Preview_Link);
+function Kind({ category, labels }) {
+  return <span className={`kind ${KIND_CLASS[category] || ""}`}>{labels[category] || "Post"}</span>;
+}
 
-  const save = (patch, done, action) => onSave(row.ID, patch, done, action);
-
-  const youTubeAction = row.YT_Video_Link ? (
-    <a className="btn btn-secondary btn-sm" href={row.YT_Video_Link} target="_blank" rel="noopener noreferrer">
-      View on YouTube <HiExternalLink aria-hidden />
-    </a>
-  ) : canPublishToYouTube(row) ? (
-    <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo} onClick={() => onPublish(row, "youtube")}>
-      {postingTo === "youtube" ? "Uploading…" : "Publish to YouTube"}
-    </button>
-  ) : null;
-
-  const note = postingTo
-    ? `Publishing to ${PLATFORMS[postingTo].name}…`
-    : building && !row.Preview_Link
-      ? "Building preview…"
-      : "";
-
-  // All the text on the left; the age and every button in a column on the right
+function Empty({ title, children }) {
   return (
-    <li className={`feed-item feed-post-${status.toLowerCase()}`}>
-      <div className="feed-main">
-        <h3 className="feed-title">{row.Title || "Untitled post"}</h3>
-        <p className="row-org">
-          <span className={`kind feed-status-${dead ? "rejected" : status.toLowerCase()}`}>
-            {dead ? (row._state === "duplicate" ? "Duplicate" : "Expired") : status === "Draft" ? "To review" : status}
-          </span>
-          {row.Format || "Post"} · {slides.length} slides · {row.ID}
-        </p>
-        {note && <p className="row-meta">{note}</p>}
-        {dead && <p className="row-meta feed-repeat">{row._reason} It can't be posted.</p>}
-        {!dead && !published && row._dropped?.length > 0 && (
-          <p className="row-meta">Left off this carousel: {row._dropped.join(", ")}. The other openings are posted as usual.</p>
-        )}
+    <div className="empty-state">
+      <h3>{title}</h3>
+      {children && <p>{children}</p>}
+    </div>
+  );
+}
 
-        <ol className="feed-slides">
-          {slides.map((s, i) => (
-            <li key={i}>{s}</li>
+// ── Openings: tick up to 4 of one kind, then create the post ─────────────────
+function OpeningsTab({ board, creating, onCreate, onReject }) {
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState([]);
+  const byId = useMemo(() => new Map(board.openings.map((o) => [o.id, o])), [board.openings]);
+
+  // A pick that left the list (rejected, grouped, closed) drops out of the selection
+  useEffect(() => {
+    setPicked((p) => (p.every((id) => byId.has(id)) ? p : p.filter((id) => byId.has(id))));
+  }, [byId]);
+
+  const kind = picked.length ? byId.get(picked[0])?.category : null;
+  const q = query.trim().toLowerCase();
+  const visible = board.openings.filter(
+    (o) => (filter === "all" || o.category === filter) && (!q || `${o.name} ${o.detail} ${o.id}`.toLowerCase().includes(q))
+  );
+  const count = (c) => board.openings.filter((o) => o.category === c).length;
+  const sections = (filter === "all" ? ORDER : [filter])
+    .map((c) => [c, visible.filter((o) => o.category === c)])
+    .filter(([, list]) => list.length);
+
+  const lockReason = (o) => {
+    if (picked.includes(o.id)) return "";
+    if (kind && o.category !== kind) return `A post holds one kind. You're picking ${board.categories[kind].toLowerCase()}.`;
+    if (picked.length >= MAX_PICK) return `A post holds up to ${MAX_PICK}.`;
+    return "";
+  };
+  const toggle = (o) =>
+    setPicked((p) => (p.includes(o.id) ? p.filter((id) => id !== o.id) : lockReason(o) ? p : [...p, o.id]));
+  const done = (ok) => ok && setPicked([]);
+
+  return (
+    <>
+      <div className="board-tools">
+        <div className="seg" role="group" aria-label="Kind of opening">
+          <button aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
+            All<span>{board.openings.length}</span>
+          </button>
+          {ORDER.map((c) => (
+            <button key={c} aria-pressed={filter === c} onClick={() => setFilter(c)}>
+              {board.categories[c]}<span>{count(c)}</span>
+            </button>
           ))}
-        </ol>
-
-        <div className="feed-caption">
-          {editing ? (
-            <>
-              <textarea className="form-control" rows={8} value={caption} onChange={(e) => setCaption(e.target.value)} />
-              <div className="feed-row">
-                <button className="btn btn-primary btn-sm" disabled={!!working} onClick={() => save({ Caption: caption }, "Caption saved", "caption").then(() => setEditing(false))}>
-                  {working === "caption" ? "Saving…" : "Save caption"}
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setCaption(row.Caption || ""); setEditing(false); }}>
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {row.Caption && <p className="feed-caption-text">{row.Caption}</p>}
-              {row.Hashtags && <p className="feed-hashtags">{row.Hashtags}</p>}
-              {!published && (
-                <button className="link-button" onClick={() => setEditing(true)}>Edit caption</button>
-              )}
-            </>
-          )}
         </div>
+        <label className="board-search">
+          <HiSearch aria-hidden />
+          <input type="search" placeholder="Search company, role or ID" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search openings" />
+        </label>
+      </div>
+      <p className="stat-note board-hint">
+        Tick up to {MAX_PICK} of one kind and create a post. Most urgent first; closed and posted openings are already gone
+        {board.inPosts > 0 && `, and ${board.inPosts} are in Posts`}.
+      </p>
 
-        {row.Preview_Link && !/\.mp4(\?|\s|$)/i.test(row.Preview_Link) && (
-          <div className="feed-thumbs" onClick={() => onPreview(row)} role="button" tabIndex={0} aria-label="Open the preview">
-            {row.Preview_Link.split(/\s+/).filter(Boolean).map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
+      {sections.length === 0 ? (
+        <Empty title={q ? "Nothing matches" : "No openings here"}>{q ? "Try another word." : "New ones arrive with every sync."}</Empty>
+      ) : (
+        sections.map(([c, list]) => (
+          <section key={c} className="op-section" aria-label={board.categories[c]}>
+            {filter === "all" && (
+              <h2 className="op-heading">
+                <Kind category={c} labels={board.categories} /> <span>{list.length}</span>
+              </h2>
+            )}
+            <ul className="op-list">
+              {list.map((o) => {
+                const on = picked.includes(o.id);
+                const lock = lockReason(o);
+                return (
+                  <li key={o.id} className={`op-row${on ? " is-picked" : ""}${lock ? " is-locked" : ""}`}>
+                    <label className="op-pick" title={lock}>
+                      <input type="checkbox" checked={on} disabled={!!lock} onChange={() => toggle(o)} />
+                      <span className="op-main">
+                        <b>{o.name}</b>
+                        {o.detail && <small className="op-detail" title={o.detail}>{o.detail}</small>}
+                        <small className="op-meta">{o.id} · {o.verified}</small>
+                      </span>
+                      <When o={o} />
+                    </label>
+                    <button className="link-button op-reject" onClick={() => onReject([o.id])} aria-label={`Reject ${o.name}`}>
+                      Reject
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      )}
+
+      {picked.length > 0 && (
+        <div className="pick-dock" role="region" aria-label="Picked openings">
+          <div className="pick-dock-text">
+            <b>
+              {picked.length} of {MAX_PICK} · {board.categories[kind]}
+            </b>
+            <small>{picked.map((id) => byId.get(id)?.name).join(", ")}</small>
           </div>
+          <div className="pick-dock-actions">
+            <button className="link-button" onClick={() => setPicked([])}>Clear</button>
+            <button className="btn btn-secondary btn-sm" disabled={creating} onClick={() => onReject(picked).then(done)}>
+              Reject
+            </button>
+            <button className="btn btn-primary btn-sm" disabled={creating} onClick={() => onCreate(picked).then(done)}>
+              {creating ? "Creating…" : "Create post"}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Posts: waiting for their preview, then publish ───────────────────────────
+function PostCard({ post, labels, building, posting, busy, onOpen, onBuild, onRebuild, onUngroup, onSaveCaption }) {
+  const pics = slides(post);
+  const [editing, setEditing] = useState(false);
+  const [caption, setCaption] = useState(post.Caption);
+  const closed = post.items.filter((i) => i.closed).length;
+  const locked = busy || posting;
+
+  return (
+    <li className="post-card">
+      <div className="post-top">
+        <Kind category={post.category} labels={labels} />
+        <span className="post-id">{post.ID}</span>
+      </div>
+      <h3 className="post-title">{post.Title}</h3>
+      <ul className="post-items">
+        {post.items.map((i) => (
+          <li key={i.id} className={i.closed ? "is-closed" : ""}>
+            <span>{i.name}</span>
+            <When o={i} />
+          </li>
+        ))}
+      </ul>
+      {closed > 0 && (
+        <p className="post-note">
+          {closed === 1 ? "1 opening has" : `${closed} openings have`} closed. It's swapped for the next most urgent one within a few minutes, and the preview is rebuilt.
+        </p>
+      )}
+
+      <div className="post-preview">
+        {pics.length > 0 ? (
+          <button className="post-thumbs" onClick={onOpen} aria-label={`Open the ${pics.length} slides`}>
+            {pics.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
+          </button>
+        ) : building ? (
+          <p className="post-building"><span className="pulse" aria-hidden /> Building the preview… about 3 minutes</p>
+        ) : (
+          <p className="post-building">
+            No preview yet.{" "}
+            <button className="link-button" disabled={locked} onClick={onBuild}>Build it now</button>
+          </p>
         )}
       </div>
 
-      <div className="feed-side">
-        <Age date={row.Date} />
-        {published ? (
+      <details className="post-caption" onToggle={(e) => !e.currentTarget.open && setEditing(false)}>
+        <summary>Caption</summary>
+        {editing ? (
           <>
-            {row.IG_Post_Link?.startsWith("http") ? (
-              <a className="btn btn-secondary btn-sm" href={row.IG_Post_Link} target="_blank" rel="noopener noreferrer">
-                View on Instagram <HiExternalLink aria-hidden />
-              </a>
-            ) : (
-              <span className="stat-note">{row.IG_Post_Link || "Published"}</span>
-            )}
-            {youTubeAction}
+            <textarea className="form-control" rows={8} value={caption} onChange={(e) => setCaption(e.target.value)} />
+            <div className="post-actions">
+              <button className="btn btn-primary btn-sm" disabled={locked} onClick={() => onSaveCaption(caption).then((ok) => ok && setEditing(false))}>
+                Save caption
+              </button>
+              <button className="link-button" onClick={() => { setCaption(post.Caption); setEditing(false); }}>Cancel</button>
+            </div>
           </>
-        ) : dead ? (
-          <button className="btn btn-danger btn-sm" disabled={!!working} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.", "reject")}>
-            {working === "reject" ? "Rejecting…" : "Reject"}
-          </button>
         ) : (
           <>
-            {status === "Draft" && (
-              <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo} onClick={() => onApprove(row)}>
-                {working === "approve" ? "Approving…" : "Approve"}
-              </button>
-            )}
-            {status !== "Rejected" && (
-              <button className={`btn btn-sm ${status === "Draft" ? "btn-secondary" : "btn-primary"}`} disabled={!!working || !!postingTo || !hasImages} onClick={() => onPublish(row, "instagram")}>
-                {postingTo === "instagram" ? "Posting…" : "Publish to Instagram"}
-              </button>
-            )}
-            {building && !row.Preview_Link ? (
-              <button className="btn btn-secondary btn-sm" disabled>Building preview…</button>
-            ) : (
-              <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onPreview(row)}>
-                {hasImages ? "View preview" : "Generate preview"}
-              </button>
-            )}
-            {row.Preview_Link && (
-              <button className="btn btn-secondary btn-sm" disabled={!!working} onClick={() => onRegenerate(row)}>
-                {working === "regenerate" ? "Starting…" : "Regenerate preview"}
-              </button>
-            )}
-            {status !== "Rejected" ? (
-              <button className="btn btn-danger btn-sm" disabled={!!working} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.", "reject")}>
-                {working === "reject" ? "Rejecting…" : "Reject"}
-              </button>
-            ) : (
-              <button className="link-button" disabled={!!working} onClick={() => save({ Status: "Draft" }, "Back in the review list", "draft")}>
-                {working === "draft" ? "Moving…" : "Back to review"}
-              </button>
-            )}
+            <p className="post-caption-text">{post.Caption}</p>
+            {post.Hashtags && <p className="post-tags">{post.Hashtags}</p>}
+            <button className="link-button" disabled={locked} onClick={() => setEditing(true)}>Edit caption</button>
           </>
         )}
+      </details>
+
+      <div className="post-actions">
+        <button className="btn btn-primary btn-sm" disabled={!pics.length || locked} onClick={onOpen}>
+          {posting ? "Publishing…" : "Review and publish"}
+        </button>
+        {pics.length > 0 && (
+          <button className="btn btn-secondary btn-sm" disabled={locked} onClick={onRebuild}>Rebuild preview</button>
+        )}
+        <button className="link-button post-ungroup" disabled={locked} onClick={onUngroup}>Ungroup</button>
       </div>
     </li>
   );
 }
 
-function SheetTable({ data, onSave, pending, order }) {
-  const { headers, editable } = data;
-  const rows = order === "oldest" ? [...data.rows].reverse() : data.rows;
-  const [page, setPage] = useState(1);
-  const visibleRows = rows.slice((page - 1) * 10, page * 10);
-  const cleanCommentReply = (value) => {
-    const match = String(value || "").match(/https:\/\/beyondtheoffer\.vercel\.app\/links\/[A-Za-z0-9_-]+/);
-    return match ? match[0] : value;
-  };
-
-  useEffect(() => {
-    setPage(1);
-  }, [data.tab, order]);
-
-  if (!rows.length) {
-    return (
-      <div className="empty-state">
-        <h3>Nothing here yet</h3>
-        <p>Rows appear as soon as the daily task or the webhook writes them.</p>
-      </div>
-    );
-  }
+// A plain row for the Rejected and Expired lists
+function ItemRow({ o, labels, action }) {
   return (
-    <div className="admin-table-wrapper">
-      <table className="admin-table feed-table">
-        <thead>
-          <tr>{headers.map((h) => <th key={h}>{h.replace(/_/g, " ")}</th>)}</tr>
-        </thead>
-        <tbody>
-          {visibleRows.map((r, i) => (
-            <tr key={r.ID || i} className={r.Status === "Expired" ? "is-off" : ""}>
-              {headers.map((h) => (
-                <td key={h}>
-                  {editable.includes(h) && SELECT_OPTIONS[h] && r.ID ? (
-                    <select
-                      className="form-control feed-cell-select"
-                      value={r[h]}
-                      disabled={!!pending[r.ID]}
-                      onChange={(e) => onSave(r.ID, { [h]: e.target.value }, `${r.ID}: ${h} set to ${e.target.value}`)}
-                      aria-label={`${h} for ${r.ID}`}
-                    >
-                      {!SELECT_OPTIONS[h].includes(r[h]) && <option value={r[h]}>{r[h] || "—"}</option>}
-                      {SELECT_OPTIONS[h].map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                  ) : /^https?:\/\//.test(data.tab === "Comments_Log" && h === "Reply_Text" ? cleanCommentReply(r[h]) : r[h]) ? (
-                    <a href={data.tab === "Comments_Log" && h === "Reply_Text" ? cleanCommentReply(r[h]) : r[h]} target="_blank" rel="noopener noreferrer" className="link-button">Open</a>
-                  ) : (
-                    <span className="feed-cell" title={r[h]}>
-                      {data.tab === "Comments_Log" && h === "Status" && ["partial", "error"].includes(r[h]) && /DM failed/i.test(r.Reply_Text || "") ? "sent" : r[h]}
-                    </span>
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <Pagination page={page} total={rows.length} onChange={setPage} />
-    </div>
+    <li className="op-row">
+      <div className="op-pick">
+        <span className="op-main">
+          <b>{o.name}</b>
+          {o.detail && <small className="op-detail" title={o.detail}>{o.detail}</small>}
+          <small className="op-meta"><Kind category={o.category} labels={labels} /> · {o.id}</small>
+        </span>
+        <When o={o} />
+      </div>
+      {action}
+    </li>
   );
 }
 
-// Every opening that can still go out, fewest days left first. Tick up to 4 of one kind and
-// they become one carousel in the review list. Closed and posted openings never show up, and
-// one already in a waiting post can't be picked again.
-const MAX_PICK = 4;
-function OpeningsPicker({ onCreated }) {
-  const [data, setData] = useState(null);
+function AdminFeed() {
+  usePageMeta("Instagram");
+  const [board, setBoard] = useState(null);
   const [error, setError] = useState("");
-  const [category, setCategory] = useState("tech");
-  const [picked, setPicked] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState("openings");
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState({}); // post ID → an action on it is running
+  const [building, setBuilding] = useState({}); // post ID → when its preview build started
+  const [run, setRun] = useState(null); // { id, status, conclusion, url } of a publish
+  const [openId, setOpenId] = useState(null); // post shown in the slides dialog
 
   const load = useCallback(async () => {
-    setError("");
     try {
-      const { data: res } = await axios.get("/api/admin-sheet", { ...api, params: { view: "openings" } });
-      setData(res);
+      const { data } = await axios.get("/api/admin-sheet", { ...api, params: { view: "board" } });
+      setBoard(data);
+      setError("");
+      return data;
     } catch (err) {
-      setError(err.response?.data?.message || "Couldn't load the openings.");
+      setError(err.response?.data?.message || "Couldn't load the board. Check your connection and try again.");
+      return null;
     }
   }, []);
 
@@ -318,253 +293,179 @@ function OpeningsPicker({ onCreated }) {
     load();
   }, [load]);
 
-  const toggle = (id) =>
-    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < MAX_PICK ? [...p, id] : p));
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
-  const create = async () => {
+  const call = (body) => axios.post("/api/admin-sheet", body, api).then((r) => r.data);
+  const fail = (err, fallback) => toast.error(err.response?.data?.message || fallback);
+  const withBusy = async (id, fn) => {
+    setBusy((b) => ({ ...b, [id]: true }));
+    try {
+      return await fn();
+    } finally {
+      setBusy(({ [id]: _done, ...rest }) => rest);
+    }
+  };
+
+  const createPost = async (ids) => {
     setCreating(true);
     try {
-      const { data: res } = await axios.post("/api/admin-sheet", { action: "create-carousel", ids: picked }, api);
-      toast.success(`${res.row.ID} is in To review. Approve it to build the preview.`);
-      setPicked([]);
-      onCreated();
+      const { row } = await call({ action: "create-carousel", ids });
+      setBuilding((b) => ({ ...b, [row.ID]: Date.now() }));
+      await load();
+      setTab("posts");
+      toast.success("Post created. Its preview is building.");
+      return true;
     } catch (err) {
-      toast.error(err.response?.data?.message || "Couldn't create the carousel.");
+      fail(err, "Couldn't create the post.");
       load();
+      return false;
     } finally {
       setCreating(false);
     }
   };
 
-  if (error) {
-    return (
-      <div className="empty-state">
-        <h3>{error}</h3>
-        <button className="btn btn-secondary" onClick={load}>Try again</button>
-      </div>
-    );
-  }
-  if (!data) return <Loader />;
-
-  const list = data.openings[category] || [];
-  const free = list.filter((o) => !o.takenBy).length;
-  return (
-    <>
-      <div className="seg" role="group" aria-label="Kind of opening">
-        {Object.entries(data.categories).map(([key, label]) => (
-          <button key={key} aria-pressed={category === key} onClick={() => { setCategory(key); setPicked([]); }}>
-            {label}<span>{(data.openings[key] || []).filter((o) => !o.takenBy).length}</span>
-          </button>
-        ))}
-      </div>
-      <div className="pick-bar">
-        <span className="stat-note">
-          {picked.length}/{MAX_PICK} picked · {free} free · closed, already posted and used items are left out
-        </span>
-        <button className="btn btn-primary btn-sm" disabled={!picked.length || creating} onClick={create}>
-          {creating ? "Creating…" : `Create carousel${picked.length ? ` (${picked.length})` : ""}`}
-        </button>
-      </div>
-      {list.length === 0 ? (
-        <div className="empty-state"><h3>No open openings here</h3></div>
-      ) : (
-        <ul className="pick-list">
-          {list.map((o) => {
-            const on = picked.includes(o.id);
-            const locked = !!o.takenBy || (!on && picked.length >= MAX_PICK);
-            return (
-              <li key={o.id} className={o.takenBy ? "is-off" : ""}>
-                <label>
-                  <input type="checkbox" checked={on} disabled={locked} onChange={() => toggle(o.id)} />
-                  <span className="pick-main">
-                    <b>{o.name}</b>
-                    <small>{o.detail}</small>
-                    <small>{o.id} · {o.verified}{o.takenBy ? ` · in ${o.takenBy}` : ""}</small>
-                  </span>
-                  {o.age !== undefined ? (
-                    <span className="pick-days">
-                      {o.age === null ? "No date" : o.age === 0 ? "Today" : `${o.age} ${o.age === 1 ? "day" : "days"} ago`}
-                    </span>
-                  ) : (
-                    <span className={`pick-days${o.daysLeft !== null && o.daysLeft <= 2 ? " is-urgent" : ""}`}>
-                      {o.daysLeft === null ? "No date" : o.daysLeft === 0 ? "Closes today" : `${o.daysLeft} ${o.daysLeft === 1 ? "day" : "days"}`}
-                      {o.closes && <small>{o.closes}</small>}
-                    </span>
-                  )}
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </>
-  );
-}
-
-function AdminFeed() {
-  usePageMeta("Instagram");
-  const [tab, setTab] = useState("Content_Queue");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState({}); // row ID (or "sync-comments") → the action running on it
-  const [filter, setFilter] = useState("Draft");
-  const [order, setOrder] = useState("newest"); // the API sends rows newest first
-  const [kind, setKind] = useState("all");
-  const [run, setRun] = useState(null); // { id, platform, status, conclusion, url }
-  const [postPage, setPostPage] = useState(1);
-  const [previewRow, setPreviewRow] = useState(null);
-  const [previewRun, setPreviewRun] = useState(null);
-  const [building, setBuilding] = useState({}); // post ID → when its preview build started
-
-  const load = useCallback(async (t = tab) => {
-    if (t === "Openings") return setLoading(false); // the picker loads its own list
-    setLoading(true);
-    setError("");
+  // Moves openings to Rejected (or back), at once on screen, then confirms with the sheet
+  const setRejected = async (ids, reject) => {
+    setBoard((b) => {
+      const from = reject ? "openings" : "rejected";
+      const to = reject ? "rejected" : "openings";
+      const moving = b[from].filter((o) => ids.includes(o.id));
+      return { ...b, [from]: b[from].filter((o) => !ids.includes(o.id)), [to]: [...moving, ...b[to]] };
+    });
+    const what = ids.length === 1 ? "Opening" : plural(ids.length, "opening");
     try {
-      const { data } = await axios.get("/api/admin-sheet", { ...api, params: { tab: t } });
-      setData(data);
-    } catch (err) {
-      setError(err.response?.data?.message || "Couldn't load the sheet. Check your connection and try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [tab]);
-
-  useEffect(() => {
-    load(tab);
-  }, [tab, load]);
-
-  // Locks only the row the action belongs to, so other posts stay usable
-  const track = async (key, action, fn) => {
-    setPending((p) => ({ ...p, [key]: action }));
-    try {
-      return await fn();
-    } finally {
-      setPending(({ [key]: _done, ...rest }) => rest);
-    }
-  };
-
-  const onSave = (id, patch, doneMessage, action = "save") => track(id, action, async () => {
-    try {
-      const { data: res } = await axios.post("/api/admin-sheet", { tab, id, patch }, api);
-      setData((d) => ({ ...d, rows: d.rows.map((r) => (r.ID === id ? { ...r, ...res.row } : r)) }));
-      toast.success(doneMessage || "Saved");
+      await call({ action: reject ? "reject-openings" : "restore-openings", ids });
+      if (reject) {
+        toast(
+          (t) => (
+            <span className="toast-undo">
+              {what} moved to Rejected
+              <button className="link-button" onClick={() => { toast.dismiss(t.id); setRejected(ids, false); }}>Undo</button>
+            </span>
+          ),
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(`${what} back in Openings`);
+      }
+      load();
       return true;
     } catch (err) {
-      toast.error(err.response?.data?.message || "Couldn't save. Try again.");
+      fail(err, "Couldn't update the opening.");
+      load();
+      return false;
     }
-  });
+  };
 
-  // Starts a GitHub publish run for one platform once the approved post has a preview
-  const onPublish = async (row, platform) => {
-    setRun({ id: row.ID, platform, status: "starting" });
+  const ungroup = (post) =>
+    withBusy(post.ID, async () => {
+      try {
+        await call({ action: "ungroup", id: post.ID });
+        await load();
+        toast(
+          (t) => (
+            <span className="toast-undo">
+              Ungrouped. Its openings are back in Openings.
+              <button
+                className="link-button"
+                onClick={async () => {
+                  toast.dismiss(t.id);
+                  try {
+                    await call({ action: "regroup", id: post.ID });
+                    toast.success("Post restored");
+                  } catch (err) {
+                    fail(err, "Couldn't restore the post.");
+                  }
+                  load();
+                }}
+              >
+                Undo
+              </button>
+            </span>
+          ),
+          { duration: 6000 }
+        );
+      } catch (err) {
+        fail(err, "Couldn't ungroup the post.");
+      }
+    });
+
+  const buildPreview = (post, again) =>
+    withBusy(post.ID, async () => {
+      try {
+        await call({ action: again ? "regenerate-preview" : "preview-now", id: post.ID });
+        setBuilding((b) => ({ ...b, [post.ID]: Date.now() }));
+        if (again) setBoard((b) => ({ ...b, posts: b.posts.map((p) => (p.ID === post.ID ? { ...p, Preview_Link: "" } : p)) }));
+        toast.success("Building the preview. It takes about 3 minutes.");
+      } catch (err) {
+        fail(err, "Couldn't start the preview.");
+      }
+    });
+
+  const saveCaption = (post, Caption) =>
+    withBusy(post.ID, async () => {
+      try {
+        await call({ tab: "Content_Queue", id: post.ID, patch: { Caption } });
+        setBoard((b) => ({ ...b, posts: b.posts.map((p) => (p.ID === post.ID ? { ...p, Caption } : p)) }));
+        toast.success("Caption saved");
+        return true;
+      } catch (err) {
+        fail(err, "Couldn't save the caption.");
+        return false;
+      }
+    });
+
+  const publish = async (post) => {
+    setOpenId(null);
+    setRun({ id: post.ID, status: "starting" });
     try {
-      await axios.post("/api/admin-sheet", { action: PLATFORMS[platform].action, id: row.ID }, api);
-      toast.success(`Publishing to ${PLATFORMS[platform].name} started. This takes about 2 minutes.`);
+      await call({ action: "publish-now", id: post.ID });
+      toast.success("Publishing started. It takes about 2 minutes.");
     } catch (err) {
       setRun(null);
-      toast.error(err.response?.data?.message || "Couldn't start posting.");
+      fail(err, "Couldn't start publishing.");
     }
   };
 
-  const markBuilding = (id) => setBuilding((b) => ({ ...b, [id]: Date.now() }));
-
-  // Moves a draft to Approved; the server builds a fresh preview of it straight away
-  const onApprove = (row) =>
-    onSave(row.ID, { Status: "Approved" }, "Approved. Building the preview (about 5 minutes).", "approve").then((ok) => ok && markBuilding(row.ID));
-  const updateRowLocally = (row) => setData((d) => ({ ...d, rows: d.rows.map((r) => (r.ID === row.ID ? { ...r, ...row } : r)) }));
-
-  // Starts a preview build, unless one for this post started in the last 15 minutes
-  const startPreview = async (id) => {
-    if (Date.now() - (building[id] || 0) > 15 * 60_000) {
-      await axios.post("/api/admin-sheet", { action: "preview-now", id }, api);
-      markBuilding(id);
-    }
-    setPreviewRun({ id, status: "waiting" });
-  };
-
-  // Replaces the current preview with a newly built one
-  const onRegenerate = (row) => track(row.ID, "regenerate", async () => {
-    try {
-      const { data: res } = await axios.post("/api/admin-sheet", { action: "regenerate-preview", id: row.ID }, api);
-      updateRowLocally(res.row);
-      markBuilding(row.ID);
-      toast.success("Building a new preview (about 5 minutes).");
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Couldn't start a new preview.");
-    }
-  });
-
-  // While previews are building, check every 20 s and swap them in when ready
-  const buildingIds = Object.keys(building).join(",");
+  // While previews build, check every 20 s and say when each is ready
+  const waiting = (board?.posts || [])
+    .filter((p) => !slides(p).length && Date.now() - (building[p.ID] || 0) < BUILD_MINUTES * 60_000)
+    .map((p) => p.ID)
+    .join(",");
   useEffect(() => {
-    if (!buildingIds || tab !== "Content_Queue") return;
+    if (!waiting) return;
     const timer = setInterval(async () => {
-      try {
-        const { data: fresh } = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
-        setData(fresh);
-        const ready = fresh.rows.filter((r) => building[r.ID] && r.Preview_Link);
-        ready.forEach((r) => toast.success(`Preview ready: ${r.Title || r.ID}`));
-        setBuilding((b) => {
-          const next = { ...b };
-          for (const id of Object.keys(next)) {
-            if (ready.some((r) => r.ID === id) || Date.now() - next[id] > 20 * 60_000) delete next[id];
-          }
-          return next;
-        });
-      } catch {
-        /* keep waiting */
-      }
+      const fresh = await load();
+      fresh?.posts
+        .filter((p) => waiting.split(",").includes(p.ID) && slides(p).length)
+        .forEach((p) => toast.success(`Preview ready: ${p.Title}`));
     }, 20000);
     return () => clearInterval(timer);
-  }, [buildingIds, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [waiting, load]);
 
-  // Always shows the newest preview: re-reads the row first, and builds it now if it's missing
-  const onPreview = async (row) => {
-    setPreviewRow(row);
-    setPreviewRun({ id: row.ID, status: "loading" });
-    try {
-      const { data: fresh } = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
-      const latest = fresh.rows.find((r) => r.ID === row.ID) || row;
-      setData(fresh);
-      setPreviewRow(latest);
-      if (latest.Preview_Link) {
-        setPreviewRun(null);
-        return;
-      }
-      await startPreview(row.ID);
-      toast("Building the preview. It appears here in about 5 minutes.");
-    } catch (err) {
-      setPreviewRun(null);
-      toast.error(err.response?.data?.message || "Couldn't load the preview.");
-    }
-  };
-
-  const onSyncComments = () => track("sync-comments", "sync", async () => {
-    try {
-      const { data: result } = await axios.post("/api/admin-sheet", { action: "sync-comments" }, api);
-      toast.success(`Imported ${result.imported} existing comment${result.imported === 1 ? "" : "s"}.`);
-      await load("Comments_Log");
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Couldn't sync Instagram comments.");
-    }
-  });
-
+  // Follows a publish until GitHub says it finished
   useEffect(() => {
     if (!run || run.status === "completed") return;
     const started = Date.now();
     const timer = setInterval(async () => {
       try {
-        const { data: s } = await axios.post("/api/admin-sheet", { action: "publish-status" }, api);
+        const s = await call({ action: "publish-status" });
         // Ignore the previous run until GitHub registers the new one
         if (s.startedAt && new Date(s.startedAt).getTime() < started - 60_000) return;
         setRun((r) => ({ ...r, ...s }));
         if (s.status === "completed") {
           clearInterval(timer);
-          if (s.conclusion === "success") toast.success(`Published to ${PLATFORMS[run.platform].name}`);
-          else toast.error(`Publishing to ${PLATFORMS[run.platform].name} failed. Open the run for details.`);
-          load("Content_Queue");
+          await load();
+          if (s.conclusion === "success") {
+            toast.success("Live on Instagram");
+            setTab("published");
+          } else {
+            toast.error("Publishing failed. Open the run for details.");
+          }
         }
       } catch {
         /* keep polling */
@@ -573,58 +474,50 @@ function AdminFeed() {
     return () => clearInterval(timer);
   }, [run?.id, run?.status === "completed"]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Escape closes the slides dialog
   useEffect(() => {
-    if (!previewRun || previewRun.status !== "waiting") return;
-    const timer = setInterval(async () => {
-      try {
-        const result = await axios.get("/api/admin-sheet", { ...api, params: { tab: "Content_Queue" } });
-        const updated = result.data.rows.find((item) => item.ID === previewRow?.ID);
-        if (updated?.Preview_Link) {
-          clearInterval(timer);
-          setPreviewRow(updated);
-          setData(result.data);
-          setPreviewRun({ id: updated.ID, status: "completed" });
-          toast.success("Generated preview is ready.");
-        }
-      } catch {
-        /* keep waiting */
-      }
-    }, 20000);
-    return () => clearInterval(timer);
-  }, [previewRun?.status, previewRow?.ID]);
+    if (!openId) return;
+    const onKey = (e) => e.key === "Escape" && setOpenId(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openId]);
 
-  const queue = data?.tab === "Content_Queue" ? data.rows : [];
-  // Like the cards, only a publish of this same post blocks the preview's buttons
-  const previewPosting = !!previewRow && run?.id === previewRow.ID && run.status !== "completed";
-  const sorted = order === "oldest" ? [...queue].reverse() : queue;
-  const posts = kind === "all" ? sorted : sorted.filter((r) => kindOf(r) === kind);
-  const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => bucketOf(r) === f.value).length]));
-  const visiblePosts = filter === "all" ? posts : posts.filter((r) => bucketOf(r) === filter);
-  const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
+  if (!board) {
+    return (
+      <div className="page container">
+        {error ? (
+          <div className="empty-state">
+            <h3>{error}</h3>
+            <button className="btn btn-secondary" onClick={refresh}>Try again</button>
+          </div>
+        ) : (
+          <Loader />
+        )}
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    setPostPage(1);
-  }, [tab, filter, order, kind]);
+  const labels = board.categories;
+  const counts = {
+    openings: board.openings.length,
+    posts: board.posts.length,
+    published: board.published.length,
+    rejected: board.rejected.length,
+    expired: board.expired.length,
+  };
+  const open = board.posts.find((p) => p.ID === openId) || board.published.find((p) => p.ID === openId);
+  const posting = (id) => run?.id === id && run.status !== "completed";
 
   return (
     <div className="page container">
       <div className="admin-header">
         <div>
           <h1>Instagram</h1>
-          <p className="stat-note">
-            Live from the BeyondTheOffer Feed sheet. Nothing posts on a timer: a post goes to Instagram when you press Publish.
-          </p>
+          <p className="stat-note">Pick openings, make a post, publish it.</p>
         </div>
-        <div className="feed-row">
-          {tab === "Comments_Log" && (
-            <button className="btn btn-secondary" onClick={onSyncComments} disabled={loading || !!pending["sync-comments"]}>
-              {pending["sync-comments"] ? "Syncing…" : "Sync Instagram replies"}
-            </button>
-          )}
-          <button className="btn btn-secondary" onClick={() => load(tab)} disabled={loading}>
-            <HiRefresh aria-hidden /> Refresh
-          </button>
-        </div>
+        <button className="btn btn-secondary btn-sm" onClick={refresh} disabled={refreshing} aria-label="Refresh">
+          <HiRefresh aria-hidden className={refreshing ? "spin" : ""} /> Refresh
+        </button>
       </div>
 
       {run && (
@@ -632,125 +525,134 @@ function AdminFeed() {
           <span>
             {run.status === "completed"
               ? run.conclusion === "success"
-                ? `${run.id} is ${run.platform === "youtube" ? "uploaded to" : "live on"} ${PLATFORMS[run.platform].name}.`
-                : `Publishing ${run.id} to ${PLATFORMS[run.platform].name} failed.`
-              : `Publishing ${run.id} to ${PLATFORMS[run.platform].name}… (about 2 minutes).`}
+                ? `${run.id} is live on Instagram.`
+                : `Publishing ${run.id} failed.`
+              : `Publishing ${run.id}… about 2 minutes.`}
           </span>
           {run.url && <a href={run.url} target="_blank" rel="noopener noreferrer" className="link-button">See the run</a>}
           {run.status === "completed" && <button className="link-button" onClick={() => setRun(null)}>Dismiss</button>}
         </div>
       )}
 
-      <div className="chips" role="group" aria-label="Sheet tab">
-        {Object.keys(TAB_LABELS).map((t) => (
-          <button key={t} className="chip" aria-pressed={tab === t} onClick={() => setTab(t)}>
-            {TAB_LABELS[t]}
+      <nav className="board-tabs" aria-label="Instagram board">
+        {TABS.map((t) => (
+          <button key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
+            {t.label}
+            <span>{counts[t.key]}</span>
           </button>
         ))}
-      </div>
+      </nav>
 
-      {tab !== "Openings" && (
-        <label className="sort">
-          <span>Sort</span>
-          <select value={order} onChange={(e) => setOrder(e.target.value)}>
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
-        </label>
+      {tab === "openings" && (
+        <OpeningsTab board={board} creating={creating} onCreate={createPost} onReject={(ids) => setRejected(ids, true)} />
       )}
-      {tab === "Content_Queue" && (
-        <label className="sort">
-          <span>Type</span>
-          <select value={kind} onChange={(e) => setKind(e.target.value)}>
-            {POST_KINDS.map((k) => (
-              <option key={k.value} value={k.value}>{k.label}</option>
+
+      {tab === "posts" &&
+        (board.posts.length === 0 ? (
+          <Empty title="No posts waiting">Pick openings in Openings and create one.</Empty>
+        ) : (
+          <ul className="post-list">
+            {board.posts.map((p) => (
+              <PostCard
+                key={`${p.ID}-${p.Item_IDs}`}
+                post={p}
+                labels={labels}
+                building={Date.now() - (building[p.ID] || 0) < BUILD_MINUTES * 60_000}
+                posting={posting(p.ID)}
+                busy={!!busy[p.ID]}
+                onOpen={() => setOpenId(p.ID)}
+                onBuild={() => buildPreview(p, false)}
+                onRebuild={() => buildPreview(p, true)}
+                onUngroup={() => ungroup(p)}
+                onSaveCaption={(caption) => saveCaption(p, caption)}
+              />
             ))}
-          </select>
-        </label>
-      )}
+          </ul>
+        ))}
 
-      {loading ? (
-        <Loader />
-      ) : error ? (
-        <div className="empty-state">
-          <h3>{error}</h3>
-          <button className="btn btn-secondary" onClick={() => load(tab)}>Try again</button>
-        </div>
-      ) : tab === "Openings" ? (
-        <OpeningsPicker onCreated={() => { setFilter("Draft"); setTab("Content_Queue"); }} />
-      ) : tab === "Content_Queue" ? (
+      {tab === "published" &&
+        (board.published.length === 0 ? (
+          <Empty title="Nothing published yet" />
+        ) : (
+          <ul className="pub-list">
+            {board.published.map((p) => {
+              const thumb = slides(p)[0] || (/^https?:\/\//.test(p.Design_Link) ? p.Design_Link : "");
+              return (
+                <li key={p.ID}>
+                  {thumb ? (
+                    <button className="pub-thumb" onClick={() => setOpenId(p.ID)} aria-label="Open the slides">
+                      <img src={thumb} alt="" loading="lazy" />
+                    </button>
+                  ) : (
+                    <span className="pub-thumb" aria-hidden />
+                  )}
+                  <span className="op-main">
+                    <b>{p.Title}</b>
+                    <small><Kind category={p.category} labels={labels} /> · {p.Date} · {p.ID}</small>
+                  </span>
+                  {/^https?:\/\//.test(p.IG_Post_Link) && (
+                    <a className="btn btn-secondary btn-sm" href={p.IG_Post_Link} target="_blank" rel="noopener noreferrer">
+                      View <HiExternalLink aria-hidden />
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ))}
+
+      {tab === "rejected" &&
+        (board.rejected.length === 0 ? (
+          <Empty title="Nothing rejected">Openings you reject land here. Restore one to offer it again.</Empty>
+        ) : (
+          <ul className="op-list">
+            {board.rejected.map((o) => (
+              <ItemRow
+                key={o.id}
+                o={o}
+                labels={labels}
+                action={<button className="link-button op-reject" onClick={() => setRejected([o.id], false)}>Restore</button>}
+              />
+            ))}
+          </ul>
+        ))}
+
+      {tab === "expired" && (
         <>
-          <div className="seg" role="group" aria-label="Post status">
-            {POST_FILTERS.map((f) => (
-              <button key={f.value} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>
-                {f.label}<span>{counts[f.value]}</span>
-              </button>
-            ))}
-          </div>
-          {visiblePosts.length === 0 ? (
-            <div className="empty-state">
-              <h3>{filter === "Draft" ? "Nothing to review" : "No posts here"}</h3>
-              <p>New drafts arrive every morning around 6:30 AM.</p>
-            </div>
+          <p className="stat-note board-hint">Openings move here on their own once their last date passes (last 30 days). News never expires.</p>
+          {board.expired.length === 0 ? (
+            <Empty title="Nothing expired" />
           ) : (
-            <ul className="feed-list">
-              {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}`} row={row} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
-              ))}
+            <ul className="op-list">
+              {board.expired.map((o) => <ItemRow key={o.id} o={o} labels={labels} />)}
             </ul>
           )}
-          <Pagination page={postPage} total={visiblePosts.length} onChange={setPostPage} />
         </>
-      ) : (
-        <SheetTable data={data} onSave={onSave} pending={pending} order={order} />
       )}
 
-      {previewRow && (
-        <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) { setPreviewRow(null); setPreviewRun(null); }
-        }}>
-          <section className="modal feed-preview-modal" role="dialog" aria-modal="true" aria-labelledby="generated-preview-title">
+      {open && (
+        <div className="modal-overlay" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setOpenId(null)}>
+          <section className="modal feed-preview-modal" role="dialog" aria-modal="true" aria-labelledby="slides-title">
             <header className="modal-header">
-              <h3 id="generated-preview-title">Generated preview</h3>
-              <p className="stat-note">{previewRow.Title || previewRow.ID}</p>
+              <h3 id="slides-title">{open.Title}</h3>
+              <p className="stat-note">{plural(slides(open).length, "slide")}, in the order Instagram shows them</p>
             </header>
             <div className="modal-body">
-              {previewRun?.status === "loading" ? (
-                <p>Loading the latest preview…</p>
-              ) : previewRun && previewRun.status !== "completed" ? (
-                <p>Building the preview with the same pipeline used for posting (about 5 minutes)…</p>
-              ) : previewRow.Preview_Link ? (
-                /\.mp4(\?|$)/i.test(previewRow.Preview_Link.split(/\s+/)[0]) ? (
-                  <video key={previewRow.Preview_Link} className="feed-preview-video" src={previewRow.Preview_Link.split(/\s+/)[0]} controls playsInline />
-                ) : (
-                  <div className="feed-preview-images">
-                    {previewRow.Preview_Link.split(/\r?\n/).filter(Boolean).map((src) => <img key={src} src={src} alt="" />)}
-                  </div>
-                )
-              ) : <p>No generated preview yet.</p>}
+              <div className="feed-preview-images">
+                {slides(open).map((src) => <img key={src} src={src} alt="" />)}
+              </div>
             </div>
             <footer className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => { setPreviewRow(null); setPreviewRun(null); }}>Close</button>
-              {previewRow.Status === "Approved" && previewRow.Preview_Link && (
-                <button className="btn btn-secondary" disabled={!!pending[previewRow.ID]} onClick={() => { setPreviewRow(null); setPreviewRun(null); onRegenerate(previewRow); }}>
-                  Regenerate preview
-                </button>
-              )}
-              {previewRow.Status === "Approved" && (
-                <button className="btn btn-primary" disabled={!!pending[previewRow.ID] || previewPosting || !previewRow.Preview_Link || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "instagram"); }}>
+              <button className="btn btn-secondary" onClick={() => setOpenId(null)}>Close</button>
+              {open.Status !== "Published" && (
+                <button className="btn btn-primary" disabled={posting(open.ID) || !!busy[open.ID]} onClick={() => publish(open)}>
                   Publish to Instagram
-                </button>
-              )}
-              {previewRow.Status === "Approved" && canPublishToYouTube(previewRow) && (
-                <button className="btn btn-primary" disabled={!!pending[previewRow.ID] || previewPosting || (previewRun && previewRun.status !== "completed")} onClick={() => { setPreviewRow(null); onPublish(previewRow, "youtube"); }}>
-                  Publish to YouTube
                 </button>
               )}
             </footer>
           </section>
         </div>
       )}
-
     </div>
   );
 }

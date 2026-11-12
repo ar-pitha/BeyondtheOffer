@@ -1,11 +1,13 @@
-// Carousels the admin groups by hand from /admin/feed → Openings, and the swap that keeps them
-// current. Used by admin-sheet.js (list, create) and automation/refresh.js (swap closed openings).
+// The Instagram board in /admin/feed: openings to pick from, the posts grouped from them, and
+// the swap that keeps a waiting post current. Used by admin-sheet.js (board, create, reject) and
+// automation/refresh.js (swap closed openings).
 
-import { TRUSTED, isOpen, alreadyPosted, parseSheetDate, planQueue, pickOpenings } from "./queue.js";
+import { TRUSTED, GROUPED, isOpen, alreadyPosted, igRejected, parseSheetDate, planQueue, pickOpenings } from "./queue.js";
 
+export { GROUPED };
 export const MAX_OPENINGS = 4;
-// IDs of carousels grouped this way (CQ-20261112-G1). Only these are rewritten by the swap.
-export const GROUPED = /-G\d+$/;
+// The Expired list only goes back this far
+const EXPIRED_DAYS = 30;
 
 const name = (v) => String(v || "").replace(/\s*\([^)]*\)/g, "").trim();
 const shortDate = (v) => {
@@ -25,7 +27,7 @@ export const CATEGORIES = {
     tab: "Tech_Jobs",
     prefix: "TJ-",
     date: "Apply_By",
-    show: (i) => ({ name: name(i.Company), detail: [i.Role, i.Eligibility_Batch, i.Location].filter(Boolean).join(" · ") }),
+    show: (i) => ({ name: name(i.Company), detail: [name(i.Role), name(i.Location), i.Eligibility_Batch].filter(Boolean).join(" · ") }),
     draft(items) {
       const names = items.map((i) => name(i.Company));
       const more = items.length - 2;
@@ -51,7 +53,7 @@ export const CATEGORIES = {
     tab: "Govt_Jobs",
     prefix: "GJ-",
     date: "Last_Date",
-    show: (i) => ({ name: name(i.Organisation), detail: [i.Post_Exam, i.Vacancies && `${i.Vacancies} posts`, i.Qualification].filter(Boolean).join(" · ") }),
+    show: (i) => ({ name: name(i.Organisation), detail: [name(i.Post_Exam), i.Vacancies && `${i.Vacancies} posts`, i.Qualification].filter(Boolean).join(" · ") }),
     draft(items) {
       const closes = firstClose(items, "Last_Date");
       const n = items.length;
@@ -145,44 +147,78 @@ export function carouselFields(category, items) {
   };
 }
 
-// Which waiting post (Draft or Approved) keeps each opening, after the per-opening rules
+const DAY = 86_400_000;
+const itemsMap = (tabRows) => new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r]));
+const idsIn = (row) => String(row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
+const isWaitingPost = (r) => GROUPED.test(r.ID) && ["Draft", "Approved"].includes(r.Status || "Draft");
+
+// Which waiting post keeps each opening, after the per-opening rules
 export function takenBy(queue, itemsById) {
   const plan = planQueue(queue, itemsById);
   const owner = new Map();
-  for (const row of queue) {
-    if (["Draft", "Approved", ""].includes(row.Status || "") && plan[row.ID]) plan[row.ID].keep.forEach((id) => owner.set(id, row.ID));
-  }
+  for (const row of queue) if (row.Status !== "Published" && plan[row.ID]) plan[row.ID].keep.forEach((id) => owner.set(id, row.ID));
   return owner;
 }
 
-// What the picker lists: per category, trusted openings that are still open and not on
-// Instagram, fewest days left first. Closed and posted ones never appear.
-export function openingsList(queue, tabRows) {
-  const itemsById = new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r]));
+// One opening as the board shows it
+function describe(r, category, cfg, now) {
+  const at = closesAt(r, cfg);
+  const dated = parseSheetDate(r.Date)?.getTime();
+  return {
+    id: r.ID,
+    category,
+    ...cfg.show(r),
+    closes: Number.isFinite(at) ? shortDate(r[cfg.date]) : "",
+    daysLeft: Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / DAY)) : null,
+    // News: whole days since the story's date (0 = today)
+    ...(cfg.news && { age: dated ? Math.max(0, Math.ceil((now - dated) / DAY)) : null }),
+    verified: r.Verified || (cfg.news ? r.Source || "News" : ""),
+    closed: !isOpen(r),
+  };
+}
+
+const POST_FIELDS = ["ID", "Date", "Title", "Caption", "Hashtags", "Item_IDs", "Status", "Preview_Link", "IG_Post_Link", "Design_Link"];
+const postFields = (row) => Object.fromEntries(POST_FIELDS.map((k) => [k, row[k] || ""]));
+const kindOf = (row) => categoryOfId(idsIn(row)[0]) || null;
+
+// Everything the board shows, in one read:
+// - openings: trusted, open, not on Instagram, not rejected and not in a waiting post. Jobs and
+//   hackathons fewest days left first; news newest first.
+// - posts: carousels grouped in the admin that aren't out yet, with their openings.
+// - published; rejected (openings); expired (openings that closed in the last 30 days).
+export function buildBoard(queue, tabRows) {
+  const itemsById = itemsMap(tabRows);
   const owner = takenBy(queue, itemsById);
   const now = Date.now();
-  return Object.fromEntries(
-    Object.entries(CATEGORIES).map(([category, cfg]) => [
-      category,
-      (tabRows[cfg.tab] || [])
-        .filter((r) => r.ID && trusted(r, cfg) && isOpen(r) && !alreadyPosted(r))
-        .sort(byUrgency(cfg))
-        .map((r) => {
-          const at = closesAt(r, cfg);
-          const added = parseSheetDate(r.Date)?.getTime();
-          return {
-            id: r.ID,
-            ...cfg.show(r),
-            closes: Number.isFinite(at) ? shortDate(r[cfg.date]) : "",
-            daysLeft: Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / 86_400_000)) : null,
-            // News: whole days since the story's date (0 = today)
-            ...(cfg.news && { age: added ? Math.max(0, Math.ceil((now - added) / 86_400_000)) : null }),
-            verified: r.Verified || (cfg.news ? r.Source || "News" : ""),
-            takenBy: owner.get(r.ID) || "",
-          };
-        }),
-    ])
-  );
+  const board = { openings: [], inPosts: 0, rejected: [], expired: [] };
+  for (const [category, cfg] of Object.entries(CATEGORIES)) {
+    const rows = (tabRows[cfg.tab] || []).filter((r) => r.ID && trusted(r, cfg) && !alreadyPosted(r)).sort(byUrgency(cfg));
+    for (const r of rows) {
+      const o = describe(r, category, cfg, now);
+      if (igRejected(r)) board.rejected.push(o);
+      else if (o.closed) {
+        const at = closesAt(r, cfg);
+        if (!Number.isFinite(at) || now - at < EXPIRED_DAYS * DAY) board.expired.push({ ...o, closedAt: Number.isFinite(at) ? at : 0 });
+      } else if (owner.has(r.ID)) board.inPosts += 1;
+      else board.openings.push(o);
+    }
+  }
+  board.expired.sort((x, y) => y.closedAt - x.closedAt);
+  board.posts = queue
+    .filter(isWaitingPost)
+    .reverse()
+    .map((row) => ({
+      ...postFields(row),
+      category: kindOf(row),
+      items: idsIn(row).map((id) => {
+        const r = itemsById.get(id);
+        const c = categoryOfId(id);
+        return r && c ? describe(r, c, CATEGORIES[c], now) : { id, name: id, detail: "", closed: true };
+      }),
+    }));
+  board.published = queue.filter((r) => r.Status === "Published").reverse().map((row) => ({ ...postFields(row), category: kindOf(row) }));
+  board.categories = Object.fromEntries(Object.entries(CATEGORIES).map(([k, c]) => [k, c.label]));
+  return board;
 }
 
 // Checks a hand-picked group. Returns { category, items } or throws with the reason.
@@ -193,14 +229,14 @@ export function checkGroup(ids, queue, tabRows) {
   if (!category || unique.some((id) => categoryOfId(id) !== category)) throw new Error("A carousel holds one kind: tech jobs, govt jobs, hackathons or tech news.");
   const cfg = CATEGORIES[category];
   const rows = tabRows[cfg.tab] || [];
-  const itemsById = new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r]));
-  const owner = takenBy(queue, itemsById);
+  const owner = takenBy(queue, itemsMap(tabRows));
   const items = unique.map((id) => {
     const r = rows.find((x) => x.ID === id);
     if (!r) throw new Error(`${id} isn't in ${cfg.tab}.`);
     if (!trusted(r, cfg)) throw new Error(`${id} is ${r.Verified || "not verified"}; only Official and Multi-source go out.`);
     if (!isOpen(r)) throw new Error(`${id} has closed.`);
     if (alreadyPosted(r)) throw new Error(`${id} is already on Instagram.`);
+    if (igRejected(r)) throw new Error(`${id} was rejected. Restore it first.`);
     if (owner.has(id)) throw new Error(`${id} is already in ${owner.get(id)}.`);
     return r;
   });
@@ -216,13 +252,13 @@ export function nextGroupId(queue, date) {
 // opening replaced by the next most urgent free one of its kind (fewer if none are left).
 // Returns [{ row, category, closed: [ids], added: [ids], fields }].
 export function planSwaps(queue, tabRows) {
-  const itemsById = new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r]));
+  const itemsById = itemsMap(tabRows);
   const taken = new Set(takenBy(queue, itemsById).keys());
-  queue.filter((r) => r.Status === "Published").forEach((r) => String(r.Item_IDs || "").split(/[,\s]+/).forEach((id) => id && taken.add(id)));
+  queue.filter((r) => r.Status === "Published").forEach((r) => idsIn(r).forEach((id) => taken.add(id)));
   const swaps = [];
   for (const row of queue) {
-    if (!["Draft", "Approved"].includes(row.Status) || !GROUPED.test(row.ID)) continue;
-    const ids = String(row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
+    if (!isWaitingPost(row)) continue;
+    const ids = idsIn(row);
     const category = categoryOfId(ids[0]);
     if (!category) continue;
     const cfg = CATEGORIES[category];
@@ -257,10 +293,26 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
     { ID: "TN-3", Headline: "Used story", Date: day(0), Used_In_Post: "Y" },
   ];
   const tabRows = { Tech_Jobs: tech, Govt_Jobs: [{ ID: "GJ-1", Organisation: "SSC", Verified: "Official", Last_Date: day(4) }], Hackathons_Quizzes: [], Tech_News: news };
-  const queue = [{ ID: "CQ-1-G1", _row: 2, Status: "Draft", Item_IDs: "TJ-1, TJ-2" }];
+  tech.push({ ID: "TJ-7", Company: "Gale", Verified: "Official", Apply_By: day(4), IG_Rejected: "Y" });
+  tech.push({ ID: "TJ-8", Company: "Halo", Verified: "Official", Apply_By: day(-60) }); // closed long ago
+  const queue = [
+    { ID: "CQ-0", _row: 1, Status: "Published", Item_IDs: "TJ-5" },
+    { ID: "CQ-1-G1", _row: 2, Status: "Draft", Item_IDs: "TJ-1, TJ-2" },
+    { ID: "CQ-OLD", _row: 3, Status: "Draft", Item_IDs: "TJ-6" }, // daily-task draft: holds nothing
+  ];
 
-  const list = openingsList(queue, tabRows);
-  assert.deepStrictEqual(list.tech.map((o) => `${o.id}:${o.takenBy}`), ["TJ-3:", "TJ-6:", "TJ-2:CQ-1-G1"]);
+  const board = buildBoard(queue, tabRows);
+  assert.deepStrictEqual(board.openings.filter((o) => o.category === "tech").map((o) => o.id), ["TJ-3", "TJ-6"]);
+  assert.strictEqual(board.inPosts, 1);
+  assert.deepStrictEqual(board.rejected.map((o) => o.id), ["TJ-7"]);
+  assert.deepStrictEqual(board.expired.map((o) => o.id), ["TJ-1"]);
+  assert.deepStrictEqual(
+    board.posts.map((p) => [p.ID, p.category, p.items.map((i) => `${i.id}${i.closed ? "(closed)" : ""}`).join(" ")]),
+    [["CQ-1-G1", "tech", "TJ-1(closed) TJ-2"]]
+  );
+  assert.deepStrictEqual(board.published.map((p) => p.ID), ["CQ-0"]);
+  assert.throws(() => checkGroup(["TJ-7"], queue, tabRows), /rejected/);
+  const list = { news: board.openings.filter((o) => o.category === "news") };
   assert.throws(() => checkGroup(["TJ-2"], queue, tabRows), /already in CQ-1-G1/);
   assert.throws(() => checkGroup(["TJ-1"], queue, tabRows), /closed/);
   assert.throws(() => checkGroup(["TJ-4"], queue, tabRows), /Single-source/);
