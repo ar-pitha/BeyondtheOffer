@@ -83,6 +83,13 @@ one card per line.
 
 ## Brief for the daily drafting task
 
+**Since 12 Nov 2026 the task should draft only the news post.** Job, govt and hackathon carousels
+are grouped by `automation/group.js` (4 most urgent trusted openings per category, one carousel
+waiting per category), and any job or hackathon draft written another way is marked Rejected on
+the next run. Replace the "2 rows, two lanes" rule below with: "Draft 1 row a day, the news post
+(TN- items only). Do not draft posts from TJ-, GJ- or HQ- items; keep adding those rows to their
+tabs with Verified and the closing date filled in, because the grouping reads them."
+
 Paste this into the Claude scheduled task that writes Content_Queue rows (updated 11 Nov 2026: two posts a day in two lanes, no emojis, no timer):
 
 ```

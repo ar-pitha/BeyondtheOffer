@@ -419,6 +419,14 @@ Instagram only delivers these DMs to the public when:
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
 - The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe both the app and the account with `cd automation; node subscribe-webhooks.js` (`--show` only prints them). `messaging_postbacks` is needed for taps on the DONE button.
 
+### Carousels grouped by rule
+
+`automation/group.js` (`npm run group`, `group:dry` to only print) makes the job, govt and hackathon drafts, so an opening is only ever in one post:
+- Per category it takes the openings that are `Official` or `Multi-source`, still open for more than a day, not on Instagram and not in another waiting post, sorts them by fewest days left (no closing date last) and puts the first 4 in one `Draft` row with an ID like `CQ-20261112-G1`.
+- One carousel waits per category. The next one is drafted once it is published or rejected; the script runs after every sync (6-hourly) and after every publish.
+- A job or hackathon draft made any other way is marked `Rejected` (approved ones are left alone). News drafts are untouched: the daily task still writes those.
+- A group whose openings have all closed or gone out is rejected and replaced.
+
 ### Expired and duplicate posts
 
 `/admin/feed` sorts posts itself (`frontend/api/_lib/queue.js`, nothing is written to the sheet):

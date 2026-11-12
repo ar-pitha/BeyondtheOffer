@@ -41,6 +41,21 @@ export function isOpen(item) {
   return !date || Number.isNaN(date.getTime()) || date.getTime() > Date.now();
 }
 
+// The website and the carousels only carry openings confirmed by the source or by two sources
+export const TRUSTED = ["Official", "Multi-source"];
+
+// The next carousel for one sheet tab: trusted openings that are open, not on Instagram and not
+// in `taken`, fewest days left first (no closing date goes last, newest first), cut to `size`.
+// One that closes within a day is skipped: it would be shut before most people see the post.
+export function pickOpenings(rows, dateColumn, taken, size = 4) {
+  const closes = (r) => parseSheetDate(r[dateColumn])?.getTime() ?? Infinity;
+  const soonest = Date.now() + 86_400_000;
+  return rows
+    .filter((r) => r.ID && TRUSTED.includes(r.Verified) && isOpen(r) && closes(r) > soonest && !alreadyPosted(r) && !taken.has(r.ID))
+    .sort((a, b) => closes(a) - closes(b) || String(b.Date_Added || "").localeCompare(String(a.Date_Added || "")))
+    .slice(0, size);
+}
+
 const idsOf = (row) => String(row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
 const labelOf = (i) => String(i.Company || i.Organisation || i.Name || i.Headline || i.ID).replace(/\s*\([^)]*\)/g, "").trim();
 
@@ -118,5 +133,19 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/queue.js")) {
   assert.deepStrictEqual(p.D.keep, ["TJ-1"]);
   assert.deepStrictEqual(p.G.keep, ["TN-1"]);
   assert.ok(!p.H && !p.A);
+
+  const tab = [
+    { ID: "X1", Verified: "Official", Apply_By: day(9) },
+    { ID: "X2", Verified: "Single-source", Apply_By: day(1) }, // not trusted
+    { ID: "X3", Verified: "Multi-source", Apply_By: day(2) },
+    { ID: "X9", Verified: "Official", Apply_By: day(0) }, // closes today: too late to post
+    { ID: "X4", Verified: "Official", Apply_By: day(-1) }, // closed
+    { ID: "X5", Verified: "Official", Apply_By: day(3), Posted_On_IG: "Y" }, // already out
+    { ID: "X6", Verified: "Official", Apply_By: "", Date_Added: "2026-11-01" }, // no date: last
+    { ID: "X7", Verified: "Official", Apply_By: day(4) }, // taken by another post
+    { ID: "X8", Verified: "Official", Apply_By: "", Date_Added: "2026-11-09" },
+  ];
+  assert.deepStrictEqual(pickOpenings(tab, "Apply_By", new Set(["X7"])).map((r) => r.ID), ["X3", "X1", "X8", "X6"]);
+  assert.deepStrictEqual(pickOpenings(tab, "Apply_By", new Set(), 2).map((r) => r.ID), ["X3", "X7"]);
   console.log("queue.js ok");
 }

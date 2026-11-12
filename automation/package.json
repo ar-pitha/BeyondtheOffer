@@ -14,7 +14,9 @@
     "publish:dry": "node publish.js --dry-run",
     "publish:sample": "node publish.js --dry-run --sample",
     "reel:sample": "node reels.js --sample",
-    "insights": "node insights.js"
+    "insights": "node insights.js",
+    "group": "node group.js",
+    "group:dry": "node group.js --dry-run"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
