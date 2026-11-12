@@ -137,6 +137,7 @@ function cardFromItem(item) {
     rows: [
       row("Eligibility", item.Eligibility_Batch, 60),
       row("Qualification", item.Qualification, 60),
+      row("Experience", item.Experience, 40),
       row("Skills", item.Skills, 60),
       row("Process", item.Selection_Process, 60),
       row("Location", item.Location, 40),
@@ -229,15 +230,13 @@ export function planDeck(row, category, items = []) {
       ? items.map(cardFromItem)
       : slides.filter((s) => s.variant === "item").map((s) => cardFromFields(s.fields));
 
-  // A news cover is an overview of the whole post: how many stories, then each one in a line.
+  // A news cover says what the whole post is about ("*6* security stories ...") above the logos.
   // Built from the stories, so older drafts whose cover repeats the first headline get it too.
   const newsItems = isNews && items.length && items.length === wanted.length ? items : null;
   const [hook, sub] = newsItems ? [newsHook(newsItems)] : cover;
   const deck = [
     {
       type: "cover",
-      // A headline too long for its line ends in an ellipsis rather than mid-thought
-      points: newsItems ? cards.map((c) => { const p = clean(c.title, 96); return p.length < c.title.length ? `${p.replace(/[s,;:-]+$/, "")}…` : p; }) : null,
       hook: String(hook || row.Title || "Openings this week").replace(EMOJI, "").replace(/\s{2,}/g, " ").trim(),
       sub: clean(String(sub || "").replace(/,?\s*no (closing date|deadline)[^,]*/i, ""), 110),
       kicker: look.kicker,

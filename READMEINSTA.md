@@ -186,7 +186,7 @@ Don't rename tabs or reorder columns; the daily Claude task depends on them. Add
 
 | Tab | Columns |
 |---|---|
-| `Tech_Jobs` | ID, Date_Added, Company, Role, Job_Type, Category, Eligibility_Batch, Qualification, Skills, Selection_Process, Location, Salary_Stipend, Apply_By, Apply_Link, Source, Verified, Status, Posted_On_IG, Notes |
+| `Tech_Jobs` | ID, Date_Added, Company, Role, Job_Type, Category, Eligibility_Batch, Location, Salary_Stipend, Apply_By, Apply_Link, Source, Verified, Status, Posted_On_IG, Notes, Qualification, Experience, Skills, Selection_Process |
 | `Govt_Jobs` | ID, Date_Added, Organisation, Post_Exam, Sector, Vacancies, Qualification, Age_Limit, Application_Start, Last_Date, Official_Link, Notification_Link, Source, Verified, Status, Posted_On_IG, Notes |
 | `Hackathons_Quizzes` | ID, Date_Added, Name, Organiser, Type, Eligibility, Prizes_Perks, Register_By, Event_Date, Link, Verified, Status, Posted_On_IG |
 | `Tech_News` | ID, Date, Headline, Summary, Why_It_Matters_For_Students, Topic, Source, Link, Used_In_Post |
