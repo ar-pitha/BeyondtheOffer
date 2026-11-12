@@ -24,8 +24,13 @@ const POST_FILTERS = [
   { value: "Approved", label: "Approved" },
   { value: "Published", label: "Published" },
   { value: "Rejected", label: "Rejected" },
+  { value: "Expired", label: "Expired" },
   { value: "all", label: "All" },
 ];
+
+// The list a post sits in. The API marks a post that has nothing left to post with _state
+// ("expired" or "duplicate"); those leave the review and approved lists on their own.
+const bucketOf = (row) => (row._state && !["Published", "Rejected"].includes(row.Status) ? "Expired" : row.Status || "Draft");
 
 // What a post is about, from its item IDs (same rule as automation/lib/category.js)
 const POST_KINDS = [
@@ -85,12 +90,14 @@ function Age({ date }) {
   );
 }
 
-function PostCard({ row, repeatsIn = [], onSave, onPublish, onPreview, onRegenerate, building, working, postingTo }) {
+function PostCard({ row, onSave, onApprove, onPublish, onPreview, onRegenerate, building, working, postingTo }) {
   const [caption, setCaption] = useState(row.Caption || "");
   const [editing, setEditing] = useState(false);
   const slides = parseSlides(row.Slides_or_Script);
   const published = row.Status === "Published";
   const status = row.Status || "Draft";
+  // Expired or a duplicate: it can't be approved or published, only rejected
+  const dead = bucketOf(row) === "Expired";
   // Publishing needs the slide images; an old reel's video preview has to be regenerated first
   const hasImages = !!row.Preview_Link && !/\.mp4(\?|\s|$)/i.test(row.Preview_Link);
 
@@ -118,13 +125,13 @@ function PostCard({ row, repeatsIn = [], onSave, onPublish, onPreview, onRegener
       <div className="feed-main">
         <h3 className="feed-title">{row.Title || "Untitled post"}</h3>
         <p className="row-org">
-          <span className={`kind feed-status-${status.toLowerCase()}`}>{status === "Draft" ? "To review" : status}</span>
+          <span className={`kind feed-status-${dead ? "rejected" : status.toLowerCase()}`}>
+            {dead ? (row._state === "duplicate" ? "Duplicate" : "Expired") : status === "Draft" ? "To review" : status}
+          </span>
           {row.Format || "Post"} · {slides.length} slides · {row.ID}
         </p>
         {note && <p className="row-meta">{note}</p>}
-        {!published && repeatsIn.length > 0 && (
-          <p className="row-meta feed-repeat">Shares openings with {repeatsIn.join(", ")}. Whichever is published first keeps them; the other leaves them out.</p>
-        )}
+        {dead && <p className="row-meta feed-repeat">{row._reason} It can't be posted.</p>}
 
         <ol className="feed-slides">
           {slides.map((s, i) => (
@@ -176,10 +183,19 @@ function PostCard({ row, repeatsIn = [], onSave, onPublish, onPreview, onRegener
             )}
             {youTubeAction}
           </>
+        ) : dead ? (
+          <button className="btn btn-danger btn-sm" disabled={!!working} onClick={() => save({ Status: "Rejected" }, "Rejected. It won't be posted.", "reject")}>
+            {working === "reject" ? "Rejecting…" : "Reject"}
+          </button>
         ) : (
           <>
+            {status === "Draft" && (
+              <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo} onClick={() => onApprove(row)}>
+                {working === "approve" ? "Approving…" : "Approve"}
+              </button>
+            )}
             {status !== "Rejected" && (
-              <button className="btn btn-primary btn-sm" disabled={!!working || !!postingTo || !hasImages} onClick={() => onPublish(row, "instagram")}>
+              <button className={`btn btn-sm ${status === "Draft" ? "btn-secondary" : "btn-primary"}`} disabled={!!working || !!postingTo || !hasImages} onClick={() => onPublish(row, "instagram")}>
                 {postingTo === "instagram" ? "Posting…" : "Publish to Instagram"}
               </button>
             )}
@@ -321,6 +337,7 @@ function AdminFeed() {
       const { data: res } = await axios.post("/api/admin-sheet", { tab, id, patch }, api);
       setData((d) => ({ ...d, rows: d.rows.map((r) => (r.ID === id ? { ...r, ...res.row } : r)) }));
       toast.success(doneMessage || "Saved");
+      return true;
     } catch (err) {
       toast.error(err.response?.data?.message || "Couldn't save. Try again.");
     }
@@ -339,6 +356,10 @@ function AdminFeed() {
   };
 
   const markBuilding = (id) => setBuilding((b) => ({ ...b, [id]: Date.now() }));
+
+  // Moves a draft to Approved; the server builds a fresh preview of it straight away
+  const onApprove = (row) =>
+    onSave(row.ID, { Status: "Approved" }, "Approved. Building the preview (about 5 minutes).", "approve").then((ok) => ok && markBuilding(row.ID));
   const updateRowLocally = (row) => setData((d) => ({ ...d, rows: d.rows.map((r) => (r.ID === row.ID ? { ...r, ...row } : r)) }));
 
   // Starts a preview build, unless one for this post started in the last 15 minutes
@@ -464,15 +485,9 @@ function AdminFeed() {
   const previewPosting = !!previewRow && run?.id === previewRow.ID && run.status !== "completed";
   const sorted = order === "oldest" ? [...queue].reverse() : queue;
   const posts = kind === "all" ? sorted : sorted.filter((r) => kindOf(r) === kind);
-  const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => (r.Status || "Draft") === f.value).length]));
-  const visiblePosts = filter === "all" ? posts : posts.filter((r) => (r.Status || "Draft") === filter);
+  const counts = Object.fromEntries(POST_FILTERS.map((f) => [f.value, f.value === "all" ? posts.length : posts.filter((r) => bucketOf(r) === f.value).length]));
+  const visiblePosts = filter === "all" ? posts : posts.filter((r) => bucketOf(r) === filter);
   const pagedPosts = visiblePosts.slice((postPage - 1) * 10, postPage * 10);
-  // Which other live posts already carry each opening, so a repeat is flagged before it's published
-  const repeats = (row) => {
-    const ids = String(row.Item_IDs || "").split(/[,\s]+/).filter(Boolean);
-    const others = queue.filter((r) => r.ID !== row.ID && r.Status !== "Rejected" && String(r.Item_IDs || "").split(/[,\s]+/).some((id) => ids.includes(id)));
-    return others.map((r) => (r.Status === "Published" ? `${r.ID} (published)` : r.ID));
-  };
 
   useEffect(() => {
     setPostPage(1);
@@ -563,7 +578,7 @@ function AdminFeed() {
           ) : (
             <ul className="feed-list">
               {pagedPosts.map((row) => (
-                <PostCard key={`${row.ID}-${row.Status}`} row={row} repeatsIn={repeats(row)} onSave={onSave} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
+                <PostCard key={`${row.ID}-${row.Status}`} row={row} onSave={onSave} onApprove={onApprove} onPublish={onPublish} onPreview={onPreview} onRegenerate={onRegenerate} building={!!building[row.ID]} working={pending[row.ID]} postingTo={run?.id === row.ID && run.status !== "completed" ? run.platform : null} />
               ))}
             </ul>
           )}

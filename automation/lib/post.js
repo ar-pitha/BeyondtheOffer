@@ -11,6 +11,8 @@ import { ROOT, TABS } from "./config.js";
 import { parseSlides, parseReelScript, getBrowser } from "./render.js";
 import { logoFor, slugify, knownIn } from "./logos.js";
 import { parseSheetDate } from "./mapping.js";
+// The same rules the admin panel uses to keep closed and repeated posts out of the review list
+import { isOpen, alreadyPosted } from "../../frontend/api/_lib/queue.js";
 
 const TEMPLATE = path.join(ROOT, "templates", "post.html");
 const PROFILE_PIC = path.join(ROOT, "assets", "profile.jpg");
@@ -184,16 +186,6 @@ function cardFromFields(fields) {
 }
 
 // ---- deck ----
-
-// Marked by publish.js once a post with this item goes out
-const alreadyPosted = (item) => item.Posted_On_IG === "Y" || item.Used_In_Post === "Y";
-
-// Still open: not marked expired, and its last date (if any) hasn't passed
-function isOpen(item) {
-  if (/expired|closed/i.test(item.Status || "")) return false;
-  const date = parseSheetDate(item.Last_Date || item.Apply_By || item.Register_By || "");
-  return !date || Number.isNaN(date.getTime()) || date.getTime() > Date.now();
-}
 
 export async function loadItems(itemIds) {
   const ids = String(itemIds || "").split(/[,\s]+/).filter(Boolean);

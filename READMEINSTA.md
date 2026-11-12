@@ -419,6 +419,14 @@ Instagram only delivers these DMs to the public when:
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
 - The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe both the app and the account with `cd automation; node subscribe-webhooks.js` (`--show` only prints them). `messaging_postbacks` is needed for taps on the DONE button.
 
+### Expired and duplicate posts
+
+`/admin/feed` sorts posts itself (`frontend/api/_lib/queue.js`, nothing is written to the sheet):
+- **Expired** tab: every opening has closed, or it's a news post (or a draft without sheet items) more than 7 days old.
+- **Duplicate** (also in the Expired tab): every opening is already on Instagram, or the post shares an opening with another post that isn't out yet. Approved posts keep their openings, then the newest draft wins; older drafts sharing one are the duplicates. Reject the newer post and the older one comes back to review.
+- Neither can be approved or published (the API refuses with the reason). **To review** only holds drafts that can go out, and no opening is in two of them.
+- **Approve** on a draft moves it to Approved and builds a fresh preview; **Publish to Instagram** posts it once the preview is there.
+
 ### Generated admin previews
 
 The Instagram admin page can generate a real preview before posting. For Reel

@@ -2,35 +2,9 @@
 
 export const TRUSTED = ["Official", "Multi-source"];
 
-const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-
-// Deadlines are end-of-day in IST (23:59:59 IST = 18:29:59 UTC).
-const endOfDayIST = (y, m, d) => new Date(Date.UTC(y, m, d, 18, 29, 59));
-
-// Accepts 2026-11-15, 15/11/2026, 15-11-2026, 15 Nov 2026, Nov 15, 2026.
-// Returns null for blanks and words like "Rolling", "ASAP", "TBA".
-export function parseSheetDate(value) {
-  const s = String(value ?? "").trim();
-  if (!s || /^(rolling|asap|tba|tbd|na|n\/a|-|open|ongoing|soon)$/i.test(s)) return null;
-
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) return endOfDayIST(+m[1], +m[2] - 1, +m[3]);
-
-  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
-  if (m) {
-    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
-    return endOfDayIST(y, +m[2] - 1, +m[1]);
-  }
-
-  m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s-]+([a-z]{3})[a-z]*[\s,-]+(\d{4})$/i);
-  if (m && MONTHS[m[2].toLowerCase()] !== undefined) return endOfDayIST(+m[3], MONTHS[m[2].toLowerCase()], +m[1]);
-
-  m = s.match(/^([a-z]{3})[a-z]*[\s-]+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/i);
-  if (m && MONTHS[m[1].toLowerCase()] !== undefined) return endOfDayIST(+m[3], MONTHS[m[1].toLowerCase()], +m[2]);
-
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? null : new Date(t);
-}
+// Sheet dates are parsed in one place, shared with the admin panel (deadlines are end-of-day IST)
+import { parseSheetDate } from "../../frontend/api/_lib/queue.js";
+export { parseSheetDate };
 
 export function mapJobType(value = "") {
   const v = value.toLowerCase();

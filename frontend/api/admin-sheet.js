@@ -9,8 +9,25 @@ import { readTab, appendRow, updateRow, ensureColumns, nowInZone } from "./_lib/
 import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
 import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
+import { queueStates } from "./_lib/queue.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
+
+// Posts with nothing left to post (expired, or every opening is in another post): see _lib/queue.js
+async function postStates(queue) {
+  const tabs = await Promise.all(
+    ["Tech_Jobs", "Govt_Jobs", "Hackathons_Quizzes", "Tech_News"].map((t) => readTab(t).catch(() => ({ rows: [] })))
+  );
+  const items = new Map(tabs.flatMap((t) => t.rows).filter((r) => r.ID).map((r) => [r.ID, r]));
+  return queueStates(queue, items);
+}
+
+// Why this post can't be approved or published, or "" when it can
+async function blocked(queue, id) {
+  const s = (await postStates(queue))[id];
+  if (!s) return "";
+  return s.state === "expired" ? `This post has expired. ${s.reason}` : `This post is a duplicate. ${s.reason}`;
+}
 
 const STATUS_DATA = ["Active", "Expired"];
 const VERIFIED = ["Official", "Multi-source", "Single-source"];
@@ -264,6 +281,10 @@ export default async function handler(req, res) {
       // Rows are appended at the bottom of every tab, so newest first is the reverse
       let list = [...rows].reverse();
       if (cfg.limit) list = list.slice(0, cfg.limit);
+      if (tab === "Content_Queue") {
+        const states = await postStates(rows);
+        list = list.map((r) => (states[r.ID] ? { ...r, _state: states[r.ID].state, _reason: states[r.ID].reason } : r));
+      }
       return send(res, 200, {
         tab,
         headers,
@@ -308,6 +329,8 @@ export default async function handler(req, res) {
         if (!row) return send(res, 404, { message: `No post with ID ${body.id}.` });
         if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
         if (!row.Preview_Link) return send(res, 409, { message: "Generate and review the preview before posting." });
+        const why = await blocked(rows, row.ID);
+        if (why) return send(res, 409, { message: why });
         const headers = await ensureColumns("Content_Queue", ["Preview_Link", "Publish_Confirmed"]);
         if (row.Status !== "Approved") {
           await updateRow("Content_Queue", headers, row._row, { Status: "Approved", Publish_Confirmed: "Y" }, { raw: true });
@@ -353,6 +376,10 @@ export default async function handler(req, res) {
       if (!row) return send(res, 404, { message: `No row with ID ${id} in ${tab}.` });
       if (tab === "Content_Queue" && row.Status === "Published") {
         return send(res, 409, { message: "This post is already published and can't be changed here." });
+      }
+      if (tab === "Content_Queue" && patch.Status === "Approved") {
+        const why = await blocked(rows, id);
+        if (why) return send(res, 409, { message: why });
       }
 
       await updateRow(tab, headers, row._row, patch, { raw: true });
