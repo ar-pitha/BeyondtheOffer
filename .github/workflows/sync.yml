@@ -58,10 +58,10 @@ jobs:
         working-directory: automation
         run: node sync.js ${{ inputs.dry_run && '--dry-run' || '' }} ${{ inputs.include_single && '--include-single' || '' }}
 
-      # One carousel of the 4 most urgent openings per category waits in /admin/feed
-      - name: Group openings into carousels
+      # Carousels grouped in /admin/feed: swap openings that closed for the next most urgent ones
+      - name: Refresh waiting carousels
         working-directory: automation
-        run: node group.js ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: node refresh.js ${{ inputs.dry_run && '--dry-run' || '' }}
 
       # Once a day: the 02:00 UTC scheduled run, or when ticked on a manual run
       - name: Instagram insights

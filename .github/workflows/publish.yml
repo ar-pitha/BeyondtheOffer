@@ -98,12 +98,6 @@ jobs:
         working-directory: automation
         run: node publish.js $NOW_FLAG $PLATFORM_FLAG ${{ inputs.id && format('--id {0}', inputs.id) || '' }}
 
-      # The published openings are out of the pool now: draft the next carousel for that category
-      - name: Group the next carousel
-        if: steps.check.outputs.due == 'true' && inputs.platform != 'youtube'
-        working-directory: automation
-        run: node group.js
-
       - name: Keep renders
         if: steps.check.outputs.due == 'true' && always()
         uses: actions/upload-artifact@v4

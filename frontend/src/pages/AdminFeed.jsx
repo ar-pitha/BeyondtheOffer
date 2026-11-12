@@ -11,6 +11,7 @@ const api = { baseURL: "" };
 
 const TAB_LABELS = {
   Content_Queue: "Instagram posts",
+  Openings: "Group openings",
   Tech_Jobs: "Tech jobs",
   Govt_Jobs: "Govt jobs",
   Hackathons_Quizzes: "Hackathons",
@@ -292,6 +293,108 @@ function SheetTable({ data, onSave, pending, order }) {
   );
 }
 
+// Every opening that can still go out, fewest days left first. Tick up to 4 of one kind and
+// they become one carousel in the review list. Closed and posted openings never show up, and
+// one already in a waiting post can't be picked again.
+const MAX_PICK = 4;
+function OpeningsPicker({ onCreated }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [category, setCategory] = useState("tech");
+  const [picked, setPicked] = useState([]);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const { data: res } = await axios.get("/api/admin-sheet", { ...api, params: { view: "openings" } });
+      setData(res);
+    } catch (err) {
+      setError(err.response?.data?.message || "Couldn't load the openings.");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggle = (id) =>
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < MAX_PICK ? [...p, id] : p));
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const { data: res } = await axios.post("/api/admin-sheet", { action: "create-carousel", ids: picked }, api);
+      toast.success(`${res.row.ID} is in To review. Approve it to build the preview.`);
+      setPicked([]);
+      onCreated();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Couldn't create the carousel.");
+      load();
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="empty-state">
+        <h3>{error}</h3>
+        <button className="btn btn-secondary" onClick={load}>Try again</button>
+      </div>
+    );
+  }
+  if (!data) return <Loader />;
+
+  const list = data.openings[category] || [];
+  const free = list.filter((o) => !o.takenBy).length;
+  return (
+    <>
+      <div className="seg" role="group" aria-label="Kind of opening">
+        {Object.entries(data.categories).map(([key, label]) => (
+          <button key={key} aria-pressed={category === key} onClick={() => { setCategory(key); setPicked([]); }}>
+            {label}<span>{(data.openings[key] || []).filter((o) => !o.takenBy).length}</span>
+          </button>
+        ))}
+      </div>
+      <div className="pick-bar">
+        <span className="stat-note">
+          {picked.length}/{MAX_PICK} picked · {free} free · closed and already posted openings are left out
+        </span>
+        <button className="btn btn-primary btn-sm" disabled={!picked.length || creating} onClick={create}>
+          {creating ? "Creating…" : `Create carousel${picked.length ? ` (${picked.length})` : ""}`}
+        </button>
+      </div>
+      {list.length === 0 ? (
+        <div className="empty-state"><h3>No open openings here</h3></div>
+      ) : (
+        <ul className="pick-list">
+          {list.map((o) => {
+            const on = picked.includes(o.id);
+            const locked = !!o.takenBy || (!on && picked.length >= MAX_PICK);
+            return (
+              <li key={o.id} className={o.takenBy ? "is-off" : ""}>
+                <label>
+                  <input type="checkbox" checked={on} disabled={locked} onChange={() => toggle(o.id)} />
+                  <span className="pick-main">
+                    <b>{o.name}</b>
+                    <small>{o.detail}</small>
+                    <small>{o.id} · {o.verified}{o.takenBy ? ` · in ${o.takenBy}` : ""}</small>
+                  </span>
+                  <span className={`pick-days${o.daysLeft !== null && o.daysLeft <= 2 ? " is-urgent" : ""}`}>
+                    {o.daysLeft === null ? "No date" : o.daysLeft === 0 ? "Closes today" : `${o.daysLeft} ${o.daysLeft === 1 ? "day" : "days"}`}
+                    {o.closes && <small>{o.closes}</small>}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function AdminFeed() {
   usePageMeta("Instagram");
   const [tab, setTab] = useState("Content_Queue");
@@ -309,6 +412,7 @@ function AdminFeed() {
   const [building, setBuilding] = useState({}); // post ID → when its preview build started
 
   const load = useCallback(async (t = tab) => {
+    if (t === "Openings") return setLoading(false); // the picker loads its own list
     setLoading(true);
     setError("");
     try {
@@ -539,13 +643,15 @@ function AdminFeed() {
         ))}
       </div>
 
-      <label className="sort">
-        <span>Sort</span>
-        <select value={order} onChange={(e) => setOrder(e.target.value)}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-        </select>
-      </label>
+      {tab !== "Openings" && (
+        <label className="sort">
+          <span>Sort</span>
+          <select value={order} onChange={(e) => setOrder(e.target.value)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </label>
+      )}
       {tab === "Content_Queue" && (
         <label className="sort">
           <span>Type</span>
@@ -564,6 +670,8 @@ function AdminFeed() {
           <h3>{error}</h3>
           <button className="btn btn-secondary" onClick={() => load(tab)}>Try again</button>
         </div>
+      ) : tab === "Openings" ? (
+        <OpeningsPicker onCreated={() => { setFilter("Draft"); setTab("Content_Queue"); }} />
       ) : tab === "Content_Queue" ? (
         <>
           <div className="seg" role="group" aria-label="Post status">

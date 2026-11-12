@@ -10,6 +10,14 @@ import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "
 import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
 import { planQueue } from "./_lib/queue.js";
+import { CATEGORIES, openingsList, checkGroup, carouselFields, nextGroupId } from "./_lib/carousel.js";
+
+// The opening tabs the picker groups from, by tab name
+async function openingTabs() {
+  const tabs = Object.values(CATEGORIES).map((c) => c.tab);
+  const read = await Promise.all(tabs.map((t) => readTab(t).catch(() => ({ rows: [] }))));
+  return Object.fromEntries(tabs.map((t, i) => [t, read[i].rows]));
+}
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
@@ -270,6 +278,14 @@ export default async function handler(req, res) {
 
     if (req.method === "GET") {
       const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
+      // Openings to group by hand: open, trusted, not on Instagram, fewest days left first
+      if (q.view === "openings") {
+        const [{ rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
+        return send(res, 200, {
+          categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, c]) => [k, c.label])),
+          openings: openingsList(queue, tabRows),
+        });
+      }
       const tab = q.tab || "Content_Queue";
       const cfg = TABS[tab];
       if (!cfg) return send(res, 400, { message: `Unknown tab "${tab}"` });
@@ -304,6 +320,21 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       if (body.action === "sync-comments") {
         return send(res, 200, await syncInstagramComments());
+      }
+
+      // A carousel grouped by hand in the Openings picker becomes a Draft in Content_Queue
+      if (body.action === "create-carousel") {
+        const [{ headers, rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
+        let group;
+        try {
+          group = checkGroup(body.ids, queue, tabRows);
+        } catch (err) {
+          return send(res, 409, { message: err.message });
+        }
+        const { date } = nowInZone();
+        const row = { ID: nextGroupId(queue, date), Date: date, Format: "Carousel", Status: "Draft", ...carouselFields(group.category, group.items) };
+        await appendRow("Content_Queue", headers, row);
+        return send(res, 201, { row });
       }
 
       if (body.action === "preview-now") {

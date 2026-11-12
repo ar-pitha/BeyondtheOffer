@@ -419,13 +419,13 @@ Instagram only delivers these DMs to the public when:
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
 - The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe both the app and the account with `cd automation; node subscribe-webhooks.js` (`--show` only prints them). `messaging_postbacks` is needed for taps on the DONE button.
 
-### Carousels grouped by rule
+### Grouping carousels by hand
 
-`automation/group.js` (`npm run group`, `group:dry` to only print) makes the job, govt and hackathon drafts, so an opening is only ever in one post:
-- Per category it takes the openings that are `Official` or `Multi-source`, still open for more than a day, not on Instagram and not in another waiting post, sorts them by fewest days left (no closing date last) and puts the first 4 in one `Draft` row with an ID like `CQ-20261112-G1`.
-- One carousel waits per category. The next one is drafted once it is published or rejected; the script runs after every sync (6-hourly) and after every publish.
-- A job or hackathon draft made any other way is marked `Rejected` (approved ones are left alone). News drafts are untouched: the daily task still writes those.
-- A group whose openings have all closed or gone out is rejected and replaced.
+`/admin/feed` → **Group openings** lists every tech job, govt job and hackathon that can still go out: `Official` or `Multi-source`, still open, not on Instagram. Closed and posted openings are never listed. They are sorted by fewest days left (no closing date last).
+- Tick up to 4 of one kind and press **Create carousel**. It becomes a `Draft` in To review with an ID like `CQ-20261112-G1`, and the title, slide lines and caption are written for it. Then **Approve** builds the preview.
+- An opening already in a waiting post shows as taken and can't be picked, so no opening is in two posts.
+- `automation/refresh.js` runs after every sync (`npm run refresh`, `refresh:dry` to only print). When an opening in a waiting `-G` carousel closes, only that opening is replaced by the next most urgent free one of the same kind. The text is rewritten and the preview is cleared, and `instagram-preview.yml` rebuilds it within minutes. Edits to that carousel's caption are replaced too.
+- Older drafts (written by the daily task) are not rewritten. A closed opening in one is only left off its slides.
 
 ### Expired and duplicate posts
 
