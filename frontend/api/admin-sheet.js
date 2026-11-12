@@ -303,9 +303,11 @@ export default async function handler(req, res) {
         const made = newsPosts(queue, tabRows, nowInZone().date);
         for (const row of made) {
           await appendRow("Content_Queue", headers, row);
-          await dispatchPreview(row.ID).catch(() => {}); // instagram-preview.yml also picks it up
           queue.push(row);
         }
+        // One preview run builds them all (no id = --all): a run per post at once goes over the
+        // Sheets read quota (429). instagram-preview.yml also picks them up on its own schedule.
+        if (made.length) await dispatchPreview().catch(() => {});
         return send(res, 200, { ...buildBoard(queue, tabRows), grouped: made.map((r) => r.ID) });
       }
       const tab = q.tab || "Content_Queue";
