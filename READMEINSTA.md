@@ -421,7 +421,7 @@ Instagram only delivers these DMs to the public when:
 
 ### Tech news groups itself
 
-Tech news never waits for a schedule: every time /admin/feed opens, every free story (not posted, rejected or already in a post, dated within 3 days) is grouped into waiting posts, and their previews start building. Nothing is posted by itself; send each one with **Post now**. Jobs, govt jobs and hackathons are grouped by hand on the board below.
+Tech news never waits for a schedule: every time /admin/feed opens, every free story (not posted, rejected or already in a post, of any age) is grouped into waiting posts, and their previews start building. Nothing is posted by itself; send each one with **Post now**. Jobs, govt jobs and hackathons are grouped by hand on the board below.
 - Grouping lives in `frontend/api/_lib/carousel.js` (`newsPosts`). It folds the sheet's free-text `Topic` into themes (Security, AI, Developer tools, Cloud and hardware, Jobs and industry, Policy). Each post takes the biggest theme left, up to 6 stories, topped up to 4 with the newest others; it repeats until fewer than 3 free stories are left, which wait for more.
 - `.github/workflows/daily-news.yml` runs the same grouping (`automation/news-daily.js`, `npm run news`, `news:dry` to only print and render) and builds the previews, so posts are ready before the board opens. It runs at 02:15, 03:15, 05:45 and 08:15 UTC, and a Vercel cron (`frontend/vercel.json`, 02:00 UTC, needs `CRON_SECRET`) also starts it.
 - A news post can hold up to 6 stories, also when grouped by hand.

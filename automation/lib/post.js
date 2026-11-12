@@ -13,6 +13,7 @@ import { logoFor, slugify, knownIn } from "./logos.js";
 import { parseSheetDate } from "./mapping.js";
 // The same rules the admin panel uses to keep closed and repeated posts out of the review list
 import { isOpen, alreadyPosted, planQueue } from "../../frontend/api/_lib/queue.js";
+import { newsHook } from "../../frontend/api/_lib/carousel.js";
 
 const TEMPLATE = path.join(ROOT, "templates", "post.html");
 const PROFILE_PIC = path.join(ROOT, "assets", "profile.jpg");
@@ -228,10 +229,15 @@ export function planDeck(row, category, items = []) {
       ? items.map(cardFromItem)
       : slides.filter((s) => s.variant === "item").map((s) => cardFromFields(s.fields));
 
-  const [hook, sub] = cover;
+  // A news cover is an overview of the whole post: how many stories, then each one in a line.
+  // Built from the stories, so older drafts whose cover repeats the first headline get it too.
+  const newsItems = isNews && items.length && items.length === wanted.length ? items : null;
+  const [hook, sub] = newsItems ? [newsHook(newsItems)] : cover;
   const deck = [
     {
       type: "cover",
+      // A headline too long for its line ends in an ellipsis rather than mid-thought
+      points: newsItems ? cards.map((c) => { const p = clean(c.title, 96); return p.length < c.title.length ? `${p.replace(/[s,;:-]+$/, "")}…` : p; }) : null,
       hook: String(hook || row.Title || "Openings this week").replace(EMOJI, "").replace(/\s{2,}/g, " ").trim(),
       sub: clean(String(sub || "").replace(/,?\s*no (closing date|deadline)[^,]*/i, ""), 110),
       kicker: look.kicker,

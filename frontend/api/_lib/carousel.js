@@ -109,14 +109,13 @@ export const CATEGORIES = {
     news: true,
     show: (i) => ({ name: i.Headline, detail: [i.Topic, i.Source].filter(Boolean).join(" · ") }),
     draft(items) {
-      const n = items.length;
-      const more = n - 1;
+      const hook = newsHook(items);
       return {
-        title: items[0].Headline,
-        hook: `${items[0].Headline} | ${more ? `${more} more ${more === 1 ? "story" : "stories"} students should know` : "What it means for students"}`,
+        title: hook.replace(/\*/g, ""),
+        hook,
         lines: items.map((i) => [i.Headline, i.Why_It_Matters_For_Students || i.Summary]),
         caption: [
-          items[0].Headline,
+          hook.replace(/\*/g, ""),
           "",
           ...items.map((i) => i.Headline),
           "",
@@ -255,11 +254,10 @@ export function nextGroupId(queue, date) {
   return `${stamp}${1 + Math.max(0, ...queue.filter((r) => String(r.ID).startsWith(stamp)).map((r) => Number(r.ID.slice(stamp.length)) || 0))}`;
 }
 
-// ---- tech news groups itself: every free fresh story lands in a waiting post, no schedule ----
+// ---- tech news groups itself: every free story lands in a waiting post, no schedule ----
 
 const MIN_STORIES = 3;
 const FILL_TO = 4; // a theme with fewer stories is topped up with the newest others
-const FRESH_DAYS = 3; // stories dated within the last 3 days
 
 // The sheet's Topic is free text ("Security", "Cybersecurity"); similar ones share a theme
 const THEMES = [
@@ -270,13 +268,22 @@ const THEMES = [
   ["Jobs and industry", /job|industry|career|education|hiring|layoff|big tech|startup/i],
   ["Policy", /policy|regulat|law|govern|web/i],
 ];
+// The cover of a news post: what the whole post is about, not its first story.
+// "*4* tech stories you should know today", or the theme when every story shares one.
+export function newsHook(items) {
+  const themes = [...new Set(items.map(themeOf))];
+  const theme = themes.length === 1 && themes[0] !== "Other" ? themes[0].replace(/^(?!AI)\w/,(c) => c.toLowerCase()) : "tech";
+  return `*${items.length}* ${theme} ${items.length === 1 ? "story" : "stories"} you should know today`;
+}
+
 export const themeOf = (story) => (THEMES.find(([, re]) => re.test(story.Topic || "")) || ["Other"])[0];
 const storyTime = (s) => parseSheetDate(s.Date)?.getTime() || 0;
 
-// One post's stories: the theme with the most fresh stories, newest first, up to 6; topped up
-// with the newest other fresh stories when the theme has fewer than 4. Null when under 3.
-export function pickStories(stories, now = Date.now()) {
-  const fresh = stories.filter((s) => now - storyTime(s) < FRESH_DAYS * DAY).sort((a, b) => storyTime(b) - storyTime(a));
+// One post's stories: the theme with the most stories, newest first, up to 6; topped up with
+// the newest others when the theme has fewer than 4. Null when under 3. Stories of any age
+// count: every free story ends up in a post.
+export function pickStories(stories) {
+  const fresh = [...stories].sort((a, b) => storyTime(b) - storyTime(a));
   if (fresh.length < MIN_STORIES) return null;
   const counts = new Map();
   for (const s of fresh) counts.set(themeOf(s), (counts.get(themeOf(s)) || 0) + 1);
@@ -288,12 +295,12 @@ export function pickStories(stories, now = Date.now()) {
 }
 
 // Every free news story (not posted, rejected or in a waiting post) grouped into new post rows.
-// Under 3 fresh stories left over: they wait for more. Pure; the caller appends the rows.
-export function newsPosts(queue, tabRows, date, now = Date.now()) {
+// Under 3 stories left over: they wait for more. Pure; the caller appends the rows.
+export function newsPosts(queue, tabRows, date) {
   const owner = takenBy(queue, itemsMap(tabRows));
   let free = (tabRows[CATEGORIES.news.tab] || []).filter((s) => s.ID && s.Headline && !alreadyPosted(s) && !igRejected(s) && !owner.has(s.ID));
   const rows = [];
-  for (let pick; (pick = pickStories(free, now)); ) {
+  for (let pick; (pick = pickStories(free)); ) {
     const ID = nextGroupId([...queue, ...rows], date);
     rows.push({ ID, Date: date, Format: "Carousel", Status: "Draft", ...carouselFields("news", pick.stories), _theme: pick.theme });
     free = free.filter((s) => !pick.stories.includes(s));
@@ -379,22 +386,24 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
   assert.strictEqual(list.news[0].age, 1);
   const n = checkGroup(["TN-1", "TN-2"], queue, tabRows);
   assert.deepStrictEqual(n.items.map((i) => i.ID), ["TN-2", "TN-1"]);
-  assert.match(carouselFields("news", n.items).Slides_or_Script, /^New story \| 1 more story/);
+  assert.match(carouselFields("news", n.items).Slides_or_Script, /^\*2\* tech stories you should know today\nNew story/);
   assert.throws(() => checkGroup(["TN-3"], queue, tabRows), /already on Instagram/);
   assert.strictEqual(nextGroupId([...queue, { ID: "CQ-20261112-G2" }], "2026-11-12"), "CQ-20261112-G3");
 
   // TJ-1 closed: swapped for the most urgent free one (TJ-3), TJ-2 stays
   const [s] = planSwaps(queue, tabRows);
   assert.deepStrictEqual([s.closed, s.added, s.fields.Item_IDs], [["TJ-1"], ["TJ-3"], "TJ-3, TJ-2"]);
-  // News: the biggest fresh theme first, topped up to 4; too few stories wait
+  // News: the biggest theme first (tie: the one with the newest story), topped up to 4; too few wait
   const ago = (n) => new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
   const st = (id, topic, d) => ({ ID: id, Topic: topic, Date: ago(d), Headline: id });
   const stories = [st("A", "Cybersecurity", 0), st("B", "Security", 1), st("C", "AI models", 0), st("D", "Open models", 1), st("E", "AI research", 2), st("F", "Cybersecurity", 10), st("G", "Developer tools", 0)];
   const p = pickStories(stories);
-  assert.strictEqual(p.theme, "AI");
-  assert.deepStrictEqual(p.stories.map((x) => x.ID).sort(), ["A", "C", "D", "E"]);
+  assert.strictEqual(p.theme, "Security"); // 3 security (F is old but counts) tie 3 AI; A is newest
+  assert.deepStrictEqual(p.stories.map((x) => x.ID).sort(), ["A", "B", "C", "F"]);
   assert.strictEqual(pickStories(stories.slice(5)), null);
   assert.strictEqual(themeOf({ Topic: "Cloud / Hardware" }), "Cloud and hardware");
+  assert.strictEqual(newsHook(stories.slice(2, 5)), "*3* AI stories you should know today");
+  assert.strictEqual(newsHook(stories.slice(0, 3)), "*3* tech stories you should know today");
   // Every free story is grouped, several posts at once; one already in a post is left alone
   const pile = Array.from({ length: 9 }, (_, i) => ({ ...st(`TN-${i}`, "Security", 0), Summary: "x" }));
   const made = newsPosts([{ ID: "CQ-20261112-G1", Status: "Draft", Item_IDs: "TN-8" }], { Tech_News: pile }, "2026-11-12");
