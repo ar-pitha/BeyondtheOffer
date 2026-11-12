@@ -1,12 +1,9 @@
 name: daily-news
 
-# Every morning, once the research task has added the day's stories: one tech news carousel of 3 to 6 similar stories, grouped by itself
-# (automation/news-daily.js) as a Draft with a preview. Nothing is posted until it's approved with
-# "Post now" in /admin/feed. Jobs, govt jobs and hackathons are grouped by hand in /admin/feed.
-#
-# GitHub sometimes starts scheduled runs late or drops them, so the 02:15 UTC run is backed up by
-# later ones through the day and by a Vercel cron (frontend/vercel.json) that starts this workflow. Every run
-# after the first one sees today's post is already grouped and stops, so nothing is grouped twice.
+# Backup for the board, which groups tech news every time it opens (frontend/api/admin-sheet.js):
+# every free fresh story goes into a waiting post with a preview, ready in /admin/feed → Posts.
+# Nothing is posted until it's sent with "Post now". Jobs, govt jobs and hackathons are grouped by hand.
+# A run with nothing new to group does nothing. Also started by a Vercel cron (frontend/vercel.json).
 on:
   schedule:
     - cron: "15 2 * * *" # 07:45 IST, after the 06:36 research task: groups and builds the preview
@@ -66,7 +63,7 @@ jobs:
       - run: npx playwright install chromium
         working-directory: automation
 
-      - name: Group today's stories
+      - name: Group the free stories
         id: group
         working-directory: automation
         run: node news-daily.js
@@ -74,7 +71,7 @@ jobs:
       - name: Build the preview
         if: steps.group.outputs.due == 'true'
         working-directory: automation
-        run: node preview.js --id ${{ steps.group.outputs.id }}
+        run: node preview.js --all
 
       - name: Keep the slides
         if: always()

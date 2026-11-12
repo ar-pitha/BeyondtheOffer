@@ -255,6 +255,52 @@ export function nextGroupId(queue, date) {
   return `${stamp}${1 + Math.max(0, ...queue.filter((r) => String(r.ID).startsWith(stamp)).map((r) => Number(r.ID.slice(stamp.length)) || 0))}`;
 }
 
+// ---- tech news groups itself: every free fresh story lands in a waiting post, no schedule ----
+
+const MIN_STORIES = 3;
+const FILL_TO = 4; // a theme with fewer stories is topped up with the newest others
+const FRESH_DAYS = 3; // stories dated within the last 3 days
+
+// The sheet's Topic is free text ("Security", "Cybersecurity"); similar ones share a theme
+const THEMES = [
+  ["Security", /secur|cyber|privacy|hack|breach|malware/i],
+  ["AI", /\bai\b|model|machine learning|llm|robot|agent/i],
+  ["Developer tools", /develop|dev ?tools|programming|open source|software|coding/i],
+  ["Cloud and hardware", /cloud|hardware|chip|semiconductor|space|quantum/i],
+  ["Jobs and industry", /job|industry|career|education|hiring|layoff|big tech|startup/i],
+  ["Policy", /policy|regulat|law|govern|web/i],
+];
+export const themeOf = (story) => (THEMES.find(([, re]) => re.test(story.Topic || "")) || ["Other"])[0];
+const storyTime = (s) => parseSheetDate(s.Date)?.getTime() || 0;
+
+// One post's stories: the theme with the most fresh stories, newest first, up to 6; topped up
+// with the newest other fresh stories when the theme has fewer than 4. Null when under 3.
+export function pickStories(stories, now = Date.now()) {
+  const fresh = stories.filter((s) => now - storyTime(s) < FRESH_DAYS * DAY).sort((a, b) => storyTime(b) - storyTime(a));
+  if (fresh.length < MIN_STORIES) return null;
+  const counts = new Map();
+  for (const s of fresh) counts.set(themeOf(s), (counts.get(themeOf(s)) || 0) + 1);
+  // Most stories wins; on a tie, the theme with the newest story (fresh is newest first)
+  const theme = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a))[0];
+  const picked = fresh.filter((s) => themeOf(s) === theme).slice(0, MAX_STORIES);
+  for (const s of fresh) if (picked.length < FILL_TO && !picked.includes(s)) picked.push(s);
+  return { theme, stories: picked.sort((a, b) => storyTime(b) - storyTime(a)) };
+}
+
+// Every free news story (not posted, rejected or in a waiting post) grouped into new post rows.
+// Under 3 fresh stories left over: they wait for more. Pure; the caller appends the rows.
+export function newsPosts(queue, tabRows, date, now = Date.now()) {
+  const owner = takenBy(queue, itemsMap(tabRows));
+  let free = (tabRows[CATEGORIES.news.tab] || []).filter((s) => s.ID && s.Headline && !alreadyPosted(s) && !igRejected(s) && !owner.has(s.ID));
+  const rows = [];
+  for (let pick; (pick = pickStories(free, now)); ) {
+    const ID = nextGroupId([...queue, ...rows], date);
+    rows.push({ ID, Date: date, Format: "Carousel", Status: "Draft", ...carouselFields("news", pick.stories), _theme: pick.theme });
+    free = free.filter((s) => !pick.stories.includes(s));
+  }
+  return rows;
+}
+
 // For each waiting grouped carousel with closed openings: the same carousel with each closed
 // opening replaced by the next most urgent free one of its kind (fewer if none are left).
 // Returns [{ row, category, closed: [ids], added: [ids], fields }].
@@ -340,5 +386,20 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
   // TJ-1 closed: swapped for the most urgent free one (TJ-3), TJ-2 stays
   const [s] = planSwaps(queue, tabRows);
   assert.deepStrictEqual([s.closed, s.added, s.fields.Item_IDs], [["TJ-1"], ["TJ-3"], "TJ-3, TJ-2"]);
+  // News: the biggest fresh theme first, topped up to 4; too few stories wait
+  const ago = (n) => new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
+  const st = (id, topic, d) => ({ ID: id, Topic: topic, Date: ago(d), Headline: id });
+  const stories = [st("A", "Cybersecurity", 0), st("B", "Security", 1), st("C", "AI models", 0), st("D", "Open models", 1), st("E", "AI research", 2), st("F", "Cybersecurity", 10), st("G", "Developer tools", 0)];
+  const p = pickStories(stories);
+  assert.strictEqual(p.theme, "AI");
+  assert.deepStrictEqual(p.stories.map((x) => x.ID).sort(), ["A", "C", "D", "E"]);
+  assert.strictEqual(pickStories(stories.slice(5)), null);
+  assert.strictEqual(themeOf({ Topic: "Cloud / Hardware" }), "Cloud and hardware");
+  // Every free story is grouped, several posts at once; one already in a post is left alone
+  const pile = Array.from({ length: 9 }, (_, i) => ({ ...st(`TN-${i}`, "Security", 0), Summary: "x" }));
+  const made = newsPosts([{ ID: "CQ-20261112-G1", Status: "Draft", Item_IDs: "TN-8" }], { Tech_News: pile }, "2026-11-12");
+  assert.deepStrictEqual(made.map((r) => r.ID), ["CQ-20261112-G2"]); // 8 free: 6, then 2 wait
+  assert.strictEqual(made[0].Item_IDs.split(", ").length, MAX_STORIES);
+  assert.strictEqual(newsPosts([], { Tech_News: [...pile, ...pile.map((s) => ({ ...s, ID: s.ID + "b" }))] }, "2026-11-12").length, 3);
   console.log("carousel.js ok");
 }

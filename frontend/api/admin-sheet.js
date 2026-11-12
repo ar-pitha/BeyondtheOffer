@@ -10,7 +10,7 @@ import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "
 import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
 import { planQueue } from "./_lib/queue.js";
-import { CATEGORIES, GROUPED, buildBoard, checkGroup, carouselFields, nextGroupId, categoryOfId, takenBy } from "./_lib/carousel.js";
+import { CATEGORIES, GROUPED, buildBoard, checkGroup, carouselFields, nextGroupId, categoryOfId, takenBy, newsPosts } from "./_lib/carousel.js";
 
 // The opening tabs the picker groups from, by tab name
 async function openingTabs() {
@@ -296,8 +296,17 @@ export default async function handler(req, res) {
       const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
       // The whole Instagram board: openings, posts, published, rejected, expired (_lib/carousel.js)
       if (q.view === "board") {
-        const [{ rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
-        return send(res, 200, buildBoard(queue, tabRows));
+        const [{ headers, rows: queue }, tabRows] = await Promise.all([readTab("Content_Queue"), openingTabs()]);
+        // Tech news groups itself: every free story is already in a post when the board opens.
+        // ponytail: two board loads at the same instant could group the same stories twice; the
+        // queue rules keep each story in one post only, so the second post just shows them dropped
+        const made = newsPosts(queue, tabRows, nowInZone().date);
+        for (const row of made) {
+          await appendRow("Content_Queue", headers, row);
+          await dispatchPreview(row.ID).catch(() => {}); // instagram-preview.yml also picks it up
+          queue.push(row);
+        }
+        return send(res, 200, { ...buildBoard(queue, tabRows), grouped: made.map((r) => r.ID) });
       }
       const tab = q.tab || "Content_Queue";
       const cfg = TABS[tab];

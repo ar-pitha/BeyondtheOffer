@@ -333,6 +333,11 @@ function AdminFeed() {
       const { data } = await axios.get("/api/admin-sheet", { ...api, params: { view: "board" } });
       setBoard(data);
       setError("");
+      // News posts the board just grouped by itself: follow their previews like hand-made ones
+      if (data.grouped?.length) {
+        setBuilding((b) => ({ ...b, ...Object.fromEntries(data.grouped.map((id) => [id, Date.now()])) }));
+        toast.success(`${data.grouped.length} tech news ${data.grouped.length === 1 ? "post" : "posts"} added to Posts`);
+      }
       return data;
     } catch (err) {
       setError(err.response?.data?.message || "Couldn't load the board. Check your connection and try again.");

@@ -419,13 +419,11 @@ Instagram only delivers these DMs to the public when:
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
 - The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe both the app and the account with `cd automation; node subscribe-webhooks.js` (`--show` only prints them). `messaging_postbacks` is needed for taps on the DONE button.
 
-### Daily tech news, grouped every morning
+### Tech news groups itself
 
-Tech news groups itself and waits for approval; jobs, govt jobs and hackathons are grouped by hand on the board below.
-`.github/workflows/daily-news.yml` runs `automation/news-daily.js` (`npm run news`, `news:dry` to only pick and render):
-- It takes unused stories from the last 3 days and folds the sheet's free-text `Topic` into themes (Security, AI, Developer tools, Cloud and hardware, Jobs and industry, Policy). The theme with the most stories wins: up to 6 of them, newest first, topped up to 4 with the newest others. Under 3 stories, nothing is grouped that day and Run_Log says so.
-- It writes the post as `CQ-YYYYMMDD-G<n>` (Draft) and builds the preview. Nothing is posted by itself: review it in Posts and press **Post now** to approve and publish it.
-- Runs at 02:15 UTC (07:45 IST, after the research task), with backups at 03:15, 05:45 and 08:15 UTC. A Vercel cron (`frontend/vercel.json`, 02:00 UTC) also starts it, once `CRON_SECRET` is set in the frontend's Vercel env. Each run stops if today's news post is already grouped, so nothing is grouped twice.
+Tech news never waits for a schedule: every time /admin/feed opens, every free story (not posted, rejected or already in a post, dated within 3 days) is grouped into waiting posts, and their previews start building. Nothing is posted by itself; send each one with **Post now**. Jobs, govt jobs and hackathons are grouped by hand on the board below.
+- Grouping lives in `frontend/api/_lib/carousel.js` (`newsPosts`). It folds the sheet's free-text `Topic` into themes (Security, AI, Developer tools, Cloud and hardware, Jobs and industry, Policy). Each post takes the biggest theme left, up to 6 stories, topped up to 4 with the newest others; it repeats until fewer than 3 free stories are left, which wait for more.
+- `.github/workflows/daily-news.yml` runs the same grouping (`automation/news-daily.js`, `npm run news`, `news:dry` to only print and render) and builds the previews, so posts are ready before the board opens. It runs at 02:15, 03:15, 05:45 and 08:15 UTC, and a Vercel cron (`frontend/vercel.json`, 02:00 UTC, needs `CRON_SECRET`) also starts it.
 - A news post can hold up to 6 stories, also when grouped by hand.
 
 ### The Instagram board (/admin/feed)
