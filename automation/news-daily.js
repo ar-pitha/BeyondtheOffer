@@ -1,16 +1,16 @@
-// The daily tech news post. Every day at 5 PM IST one carousel of 3 to 6 similar stories goes out
-// by itself (daily-news.yml); jobs, govt jobs and hackathons are grouped by hand in /admin/feed.
-// This script picks the stories and writes the post as Approved; the workflow then builds the
-// preview, waits for 17:00 IST and publishes it with publish.js.
+// The daily tech news post. Every morning one carousel of 3 to 6 similar stories is
+// grouped by itself (daily-news.yml); jobs, govt jobs and hackathons are grouped by hand in /admin/feed.
+// This script picks the stories and writes the post as a Draft; the workflow builds its preview.
+// Nothing is posted until an admin approves it with "Post now" in /admin/feed.
 //   node news-daily.js            write today's post (or reuse it) and print its ID
 //   node news-daily.js --dry-run  only print the stories it would pick and render the slides
 // Safe to run again: once today's news post is out it does nothing, and a post already written
-// today is reused, so the backup runs in daily-news.yml never post twice.
+// today is kept, so the backup runs in daily-news.yml never group twice.
 
 import fs from "node:fs";
 import path from "node:path";
 import { ROOT, TABS, isDryRun } from "./lib/config.js";
-import { readTab, appendRow, updateRow, ensureColumns, nowInZone, logRun } from "./lib/sheets.js";
+import { readTab, appendRow, ensureColumns, nowInZone, logRun } from "./lib/sheets.js";
 import { CATEGORIES, GROUPED, MAX_STORIES, carouselFields, takenBy } from "../frontend/api/_lib/carousel.js";
 import { alreadyPosted, igRejected, parseSheetDate } from "../frontend/api/_lib/queue.js";
 
@@ -64,13 +64,12 @@ async function main() {
     console.log(`Today's news post is already out: ${posted.ID}`);
     return output({ due: "false" });
   }
-  // Written by an earlier run today (a backup run, or one that failed to publish): post that one
+  // Grouped by an earlier run today (a backup run): it waits for approval in /admin/feed.
+  // A run that died before its preview was built builds it now.
   const waiting = todays.find((r) => ["Draft", "Approved"].includes(r.Status));
-  if (waiting && !dryRun) {
-    const headers = await ensureColumns(TABS.queue, ["Publish_Confirmed"]);
-    await updateRow(TABS.queue, headers, waiting._row, { Status: "Approved", Publish_Confirmed: "Y" }, { raw: true });
-    console.log(`Using today's news post ${waiting.ID}`);
-    return output({ due: "true", id: waiting.ID });
+  if (waiting) {
+    console.log(`Today's news post ${waiting.ID} is already grouped and waiting for approval`);
+    return output(waiting.Preview_Link || dryRun ? { due: "false" } : { due: "true", id: waiting.ID });
   }
 
   const owner = takenBy(queue.rows, new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r])));
@@ -97,7 +96,8 @@ async function main() {
 
   const headers = await ensureColumns(TABS.queue, ["Preview_Link", "Publish_Confirmed"]);
   const n = 1 + Math.max(0, ...queue.rows.filter((r) => r.ID.startsWith(today)).map((r) => Number(r.ID.slice(today.length)) || 0));
-  const row = { ID: `${today}${n}`, Date: date, Format: "Carousel", Status: "Approved", Publish_Confirmed: "Y", ...fields };
+  // A Draft: nothing goes out until it's approved with "Post now" in /admin/feed
+  const row = { ID: `${today}${n}`, Date: date, Format: "Carousel", Status: "Draft", ...fields };
   await appendRow(TABS.queue, headers, row);
   await logRun(`daily news grouped ${row.ID}: ${pick.theme}, ${pick.stories.length} stories`).catch(() => {});
   console.log(`Wrote ${row.ID}: "${row.Title}"`);

@@ -270,7 +270,7 @@ export default async function handler(req, res) {
     if (req.method === "POST") body = await readJson(req);
 
     // Vercel cron (frontend/vercel.json), a backup for daily-news.yml's own schedule: starts the
-    // daily tech news run, which posts at 17:00 IST or stops if today's post is already out.
+    // daily tech news run, which groups the post as a draft for approval, or stops if it already did.
     // Vercel sends CRON_SECRET as a bearer token; without that env var this does nothing.
     const query = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
     if (query.cron === "daily-news") {

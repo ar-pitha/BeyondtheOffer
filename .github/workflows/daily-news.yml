@@ -1,21 +1,22 @@
 name: daily-news
 
-# Every day at 5 PM IST: one tech news carousel of 3 to 6 similar stories, grouped and posted by
-# itself (automation/news-daily.js). Jobs, govt jobs and hackathons are grouped by hand in /admin/feed.
+# Every morning, once the research task has added the day's stories: one tech news carousel of 3 to 6 similar stories, grouped by itself
+# (automation/news-daily.js) as a Draft with a preview. Nothing is posted until it's approved with
+# "Post now" in /admin/feed. Jobs, govt jobs and hackathons are grouped by hand in /admin/feed.
 #
-# GitHub sometimes starts scheduled runs late or drops them, so the 11:15 UTC run is backed up by
-# three later ones and by a Vercel cron (frontend/vercel.json) that starts this workflow. Every run
-# after the first one that posts sees today's post is out and stops, so nothing is posted twice.
+# GitHub sometimes starts scheduled runs late or drops them, so the 02:15 UTC run is backed up by
+# later ones through the day and by a Vercel cron (frontend/vercel.json) that starts this workflow. Every run
+# after the first one sees today's post is already grouped and stops, so nothing is grouped twice.
 on:
   schedule:
-    - cron: "15 11 * * *" # 16:45 IST: groups, builds the preview, waits for 17:00 and posts
-    - cron: "45 11 * * *" # backups
-    - cron: "20 12 * * *"
-    - cron: "10 13 * * *"
+    - cron: "15 2 * * *" # 07:45 IST, after the 06:36 research task: groups and builds the preview
+    - cron: "15 3 * * *" # backups, also for a morning with too few stories yet
+    - cron: "45 5 * * *"
+    - cron: "15 8 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Pick and render the stories only, don't post"
+        description: "Pick and render the stories only, don't write the draft"
         type: boolean
         default: true
 
@@ -44,7 +45,7 @@ jobs:
       LOGO_DEV_TOKEN: ${{ secrets.LOGO_DEV_TOKEN }}
       TIMEZONE: Asia/Kolkata
       WEBSITE_URL: ${{ vars.WEBSITE_URL || 'https://beyondtheoffer.vercel.app' }}
-      # Scheduled runs post for real; a manual run is a dry run unless the box is unticked
+      # Scheduled runs write the draft; a manual run is a dry run unless the box is unticked
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || 'false' }}
     steps:
       - uses: actions/checkout@v4
@@ -74,17 +75,6 @@ jobs:
         if: steps.group.outputs.due == 'true'
         working-directory: automation
         run: node preview.js --id ${{ steps.group.outputs.id }}
-
-      - name: Wait for 5 PM IST
-        if: steps.group.outputs.due == 'true'
-        run: |
-          wait=$(( $(date -u -d "$(date -u +%F) 11:30" +%s) - $(date -u +%s) ))
-          if [ "$wait" -gt 0 ]; then echo "Posting at 17:00 IST, in $wait s"; sleep "$wait"; fi
-
-      - name: Publish
-        if: steps.group.outputs.due == 'true'
-        working-directory: automation
-        run: node publish.js --now --id ${{ steps.group.outputs.id }}
 
       - name: Keep the slides
         if: always()
