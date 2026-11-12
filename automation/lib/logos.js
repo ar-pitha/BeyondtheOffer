@@ -4,7 +4,7 @@
 //   2. logo.dev, when LOGO_DEV_TOKEN is set              (best quality for small companies)
 //   3. Wikidata's "logo image" (P154) from Wikimedia Commons, the company's real wordmark
 //   4. the logo or emblem at the top of its Wikipedia article (Indian government bodies)
-//   5. Google's favicon service, only when it has a real icon (64 px or more)
+//   5. Google's favicon service, only when it returns a real PNG icon (64 px or more)
 // Nothing found → null, and the card draws a monogram instead.
 
 import fs from "node:fs";
@@ -50,10 +50,15 @@ const KNOWN = {
   "karnataka-examinations-authority": "kea.kar.nic.in", "andhra-pradesh-psc": "psc.ap.gov.in",
   "indian-railways": "indianrailways.gov.in", ongc: "ongcindia.com", ntpc: "ntpc.co.in", iocl: "iocl.com", gail: "gailonline.com",
   "smart-india-hackathon": "sih.gov.in", unstop: "unstop.com", devfolio: "devfolio.co", "mlh": "mlh.io",
+  eaton: "eaton.com", qnx: "qnx.com", conduent: "conduent.com", konrad: "konrad.com", "konrad-group": "konrad.com",
+  invidi: "invidi.com", unisys: "unisys.com", clarivate: "clarivate.com", michelin: "michelin.com", citi: "citi.com",
+  "odisha-psc": "opsc.gov.in", opsc: "opsc.gov.in", "electronic-arts": "ea.com", ea: "ea.com", crowe: "crowe.com",
+  "cigna-healthcare": "cigna.com", cigna: "cigna.com", "scale-computing": "scalecomputing.com", sprinto: "sprinto.com",
+  "altera-digital-health": "alterahealth.com", kaleris: "kaleris.com", "light-and-wonder": "lnw.com",
 };
 
 // Job boards and ATS hosts say nothing about the company
-const NOT_COMPANY_HOST = /(greenhouse|lever|myworkdayjobs|workday|smartrecruiters|ashbyhq|naukri|linkedin|indeed|instahyre|wellfound|cutshort|foundit|internshala|freshersworld|google\.com\/forms|forms\.gle|bit\.ly|docs\.google|notion|jobs\.ashby|careers-page|keka|darwinbox|zohorecruit|recruitee|bamboohr|icims|taleo|successfactors)/i;
+const NOT_COMPANY_HOST = /(greenhouse|lever|myworkdayjobs|workday|smartrecruiters|ashbyhq|naukri|linkedin|indeed|instahyre|wellfound|cutshort|foundit|internshala|freshersworld|google\.com\/forms|forms\.gle|bit\.ly|docs\.google|notion|jobs\.ashby|careers-page|keka|darwinbox|zohorecruit|recruitee|bamboohr|icims|taleo|successfactors|eightfold|oraclecloud|devpost|joinsuperset|builtin|hirist|jobvite|phenompeople|avature|teamtailor|breezy|jazzhr|workable|unstop|hack2skill|dare2compete)/i;
 
 export function domainFor({ name, domain, link } = {}) {
   if (domain) return String(domain).replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
@@ -72,7 +77,10 @@ export function domainFor({ name, domain, link } = {}) {
     const label = found.split(".")[0];
     const words = String(name || "").toLowerCase();
     const initials = (words.match(/\(([a-z]+)\)/) || [])[1] || words.split(/[^a-z]+/).filter((w) => w.length > 2).map((w) => w[0]).join("");
-    return words.replace(/[^a-z]/g, "").includes(label) || (initials && (initials === label || host.includes(initials))) ? found : null;
+    // Initials count only when they're 3+ letters and a whole part of the host: "e" for Eaton
+    // used to match eaton.eightfold.ai and put the job board's icon on Eaton's card
+    const initialsMatch = initials.length >= 3 && host.split(".").includes(initials);
+    return words.replace(/[^a-z]/g, "").includes(label) || initialsMatch ? found : null;
   } catch {
     return null;
   }
@@ -85,6 +93,9 @@ async function fetchImage(url, timeoutMs = 8000) {
   if (!type.startsWith("image/")) return null;
   return { type, bytes: Buffer.from(await res.arrayBuffer()) };
 }
+
+// Official logos on Wikimedia Commons are drawn files; photos (.jpg) of signs and buildings aren't logos
+const LOGO_FILE = /\.(svg|png)$/i;
 
 // PNG width/height from the IHDR chunk; other formats are trusted
 const pngSize = (b) => (b.length > 24 && b.readUInt32BE(0) === 0x89504e47 ? Math.min(b.readUInt32BE(16), b.readUInt32BE(20)) : Infinity);
@@ -105,9 +116,10 @@ async function fromWikidata(name, domain) {
     }
   };
   const brand = domain ? domain.split(".")[0] : "";
-  // The current logo: the preferred-rank one, else the newest listed
+  // The current logo: the preferred-rank one, else the newest listed. Only drawn logo files:
+  // Wikidata sometimes lists a photo of an office sign (Cognizant's is a .JPG of a building).
   const logo = (id) => {
-    const claims = (entities[id]?.claims?.P154 || []).filter((c) => c.rank !== "deprecated" && c.mainsnak?.datavalue);
+    const claims = (entities[id]?.claims?.P154 || []).filter((c) => c.rank !== "deprecated" && LOGO_FILE.test(c.mainsnak?.datavalue?.value || ""));
     return (claims.find((c) => c.rank === "preferred") || claims[claims.length - 1])?.mainsnak.datavalue.value;
   };
   // With a domain, the most relevant entity whose site is that domain or the same brand (about.google);
@@ -124,7 +136,7 @@ async function fromWikipedia(name) {
   const url = `https://en.wikipedia.org/w/api.php?format=json&action=query&redirects=1&prop=pageimages&piprop=name&titles=${encodeURIComponent(name)}`;
   const { query } = await (await fetch(url, { headers: UA, signal: AbortSignal.timeout(8000) })).json();
   const file = Object.values(query?.pages || {})[0]?.pageimage;
-  if (!file || !/logo|emblem|insignia|seal|symbol/i.test(file)) return null;
+  if (!file || !/logo|emblem|insignia|seal|symbol/i.test(file) || !LOGO_FILE.test(file)) return null;
   return fetchImage(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=600`);
 }
 
@@ -138,7 +150,8 @@ async function fromHomepage(domain) {
   // on a homepage are usually partners' logos. The touch icon is the site's own.
   const brand = domain.split(".")[0];
   const candidates = [
-    ...urls(/<(?:img|link)[^>]+(?:src|href)=["']([^"']*logo[^"']*\.(?:png|svg|webp|jpe?g)[^"']*)["']/gi).filter((u) => u.toLowerCase().includes(brand)),
+    // No .jpg: on government sites those turned out to be photos and screenshots, not the logo
+    ...urls(/<(?:img|link)[^>]+(?:src|href)=["']([^"']*logo[^"']*\.(?:png|svg|webp)[^"']*)["']/gi).filter((u) => u.toLowerCase().includes(brand)),
     ...urls(/<link[^>]+rel=["']apple-touch-icon[^"']*["'][^>]*href=["']([^"']+)["']/gi),
     ...urls(/<link[^>]+href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon/gi),
   ];
@@ -163,7 +176,8 @@ async function lookup({ name, domain }) {
   if (domain) {
     tries.push(async () => {
       const img = await fetchImage(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
-      return img && pngSize(img.bytes) >= 64 ? img : null;
+      // A real icon comes back as a PNG; opsc.gov.in's came back as a JPEG screenshot of a table
+      return img && img.type === "image/png" && pngSize(img.bytes) >= 64 ? img : null;
     });
   }
   if (domain) tries.push(() => fromHomepage(domain));
