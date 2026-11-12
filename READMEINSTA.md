@@ -419,6 +419,15 @@ Instagram only delivers these DMs to the public when:
 - **Allow access to messages** is on: Instagram app → Settings → Messages and story replies → Message controls → Connected tools.
 - The webhook is subscribed to **messages** as well as **comments**, because the DONE reply arrives as a message. `GET /<IG_USER_ID>/subscribed_apps` must list the app; an empty list (seen on 11 Nov 2026) means no events arrive and only the 10-minute sync answers. Re-subscribe both the app and the account with `cd automation; node subscribe-webhooks.js` (`--show` only prints them). `messaging_postbacks` is needed for taps on the DONE button.
 
+### Daily tech news at 5 PM IST
+
+Tech news posts itself; jobs, govt jobs and hackathons are grouped by hand on the board below.
+`.github/workflows/daily-news.yml` runs `automation/news-daily.js` (`npm run news`, `news:dry` to only pick and render):
+- It takes unused stories from the last 3 days and folds the sheet's free-text `Topic` into themes (Security, AI, Developer tools, Cloud and hardware, Jobs and industry, Policy). The theme with the most stories wins: up to 6 of them, newest first, topped up to 4 with the newest others. Under 3 stories, nothing is posted that day and Run_Log says so.
+- It writes the post as `CQ-YYYYMMDD-G<n>` (Approved), builds the preview, waits until 17:00 IST and publishes. The post shows in Posts while it waits and in Published after.
+- Runs at 11:15 UTC, with backups at 11:45, 12:20 and 13:10 UTC. A Vercel cron (`frontend/vercel.json`, 11:00 UTC) also starts it, once `CRON_SECRET` is set in the frontend's Vercel env. Each run stops if today's news post is already out, so nothing posts twice.
+- A news post can hold up to 6 stories, also when grouped by hand.
+
 ### The Instagram board (/admin/feed)
 
 Five tabs, left to right (`frontend/src/pages/AdminFeed.jsx`, data from `GET /api/admin-sheet?view=board`, built in `frontend/api/_lib/carousel.js`):

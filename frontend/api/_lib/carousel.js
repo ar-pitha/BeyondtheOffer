@@ -6,6 +6,9 @@ import { TRUSTED, GROUPED, isOpen, alreadyPosted, igRejected, parseSheetDate, pl
 
 export { GROUPED };
 export const MAX_OPENINGS = 4;
+// News cards are short, so a news post can carry more stories
+export const MAX_STORIES = 6;
+export const maxFor = (category) => (category === "news" ? MAX_STORIES : MAX_OPENINGS);
 // The Expired list only goes back this far
 const EXPIRED_DAYS = 30;
 
@@ -227,10 +230,11 @@ export function buildBoard(queue, tabRows) {
 // Checks a hand-picked group. Returns { category, items } or throws with the reason.
 export function checkGroup(ids, queue, tabRows) {
   const unique = [...new Set((ids || []).map(String))];
-  if (!unique.length || unique.length > MAX_OPENINGS) throw new Error(`Pick 1 to ${MAX_OPENINGS} openings.`);
   const category = categoryOfId(unique[0]);
   if (!category || unique.some((id) => categoryOfId(id) !== category)) throw new Error("A carousel holds one kind: tech jobs, govt jobs, hackathons or tech news.");
   const cfg = CATEGORIES[category];
+  const max = maxFor(category);
+  if (unique.length > max) throw new Error(`Pick 1 to ${max} ${cfg.news ? "stories" : "openings"}.`);
   const rows = tabRows[cfg.tab] || [];
   const owner = takenBy(queue, itemsMap(tabRows));
   const items = unique.map((id) => {

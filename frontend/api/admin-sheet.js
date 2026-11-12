@@ -268,6 +268,22 @@ export default async function handler(req, res) {
   try {
     let body = null;
     if (req.method === "POST") body = await readJson(req);
+
+    // Vercel cron (frontend/vercel.json), a backup for daily-news.yml's own schedule: starts the
+    // daily tech news run, which posts at 17:00 IST or stops if today's post is already out.
+    // Vercel sends CRON_SECRET as a bearer token; without that env var this does nothing.
+    const query = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
+    if (query.cron === "daily-news") {
+      if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+        return send(res, 401, { message: "Not allowed." });
+      }
+      await github("/actions/workflows/daily-news.yml/dispatches", {
+        method: "POST",
+        body: JSON.stringify({ ref: "main", inputs: { dry_run: "false" } }),
+      });
+      return send(res, 202, { message: "Daily news run started" });
+    }
+
     const isScheduledCommentSync =
       body?.action === "sync-comments" &&
       process.env.INSTAGRAM_SYNC_SECRET &&

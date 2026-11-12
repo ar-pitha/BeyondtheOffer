@@ -19,7 +19,8 @@ const TABS = [
 ];
 const ORDER = ["tech", "govt", "events", "news"];
 const KIND_CLASS = { tech: "kind-tech", govt: "kind-govt", events: "kind-event", news: "kind-news" };
-const MAX_PICK = 4;
+// How many fit in one post: news cards are short, so news takes more (same as _lib/carousel.js)
+const maxPick = (kind) => (kind === "news" ? 6 : 4);
 
 // Openings filters. News has no closing date, so a "closes within" window leaves it out.
 const WINDOWS = [
@@ -117,7 +118,7 @@ function OpeningsTab({ board, creating, onCreate, onReject }) {
   const lockReason = (o) => {
     if (picked.includes(o.id)) return "";
     if (kind && o.category !== kind) return `A post holds one kind. You're picking ${board.categories[kind].toLowerCase()}.`;
-    if (picked.length >= MAX_PICK) return `A post holds up to ${MAX_PICK}.`;
+    if (kind && picked.length >= maxPick(kind)) return `A post holds up to ${maxPick(kind)}.`;
     return "";
   };
   const toggle = (o) =>
@@ -157,7 +158,7 @@ function OpeningsTab({ board, creating, onCreate, onReject }) {
         </div>
       </div>
       <p className="stat-note board-hint">
-        Tick up to {MAX_PICK} of one kind and create a post. Closed and posted openings are already gone
+        Tick up to 4 of one kind (6 for news) and create a post. Closed and posted openings are already gone
         {board.inPosts > 0 && `, and ${board.inPosts} are in Posts`}.
       </p>
 
@@ -201,7 +202,7 @@ function OpeningsTab({ board, creating, onCreate, onReject }) {
         <div className="pick-dock" role="region" aria-label="Picked openings">
           <div className="pick-dock-text">
             <b>
-              {picked.length} of {MAX_PICK} · {board.categories[kind]}
+              {picked.length} of {maxPick(kind)} · {board.categories[kind]}
             </b>
             <small>{picked.map((id) => byId.get(id)?.name).join(", ")}</small>
           </div>

@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/admin-sheet?cron=daily-news", "schedule": "0 11 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
