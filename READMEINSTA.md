@@ -421,7 +421,7 @@ Instagram only delivers these DMs to the public when:
 
 ### Grouping carousels by hand
 
-`/admin/feed` → **Group openings** lists every tech job, govt job and hackathon that can still go out: `Official` or `Multi-source`, still open, not on Instagram. Closed and posted openings are never listed. They are sorted by fewest days left (no closing date last).
+`/admin/feed` → **Group openings** lists every tech job, govt job and hackathon that can still go out (`Official` or `Multi-source`, still open, not on Instagram), sorted by fewest days left (no closing date last). Closed and posted openings are never listed. **Tech news** lists every story not yet used in a post, newest first; news never expires and gets the "Did you know?" look.
 - Tick up to 4 of one kind and press **Create carousel**. It becomes a `Draft` in To review with an ID like `CQ-20261112-G1`, and the title, slide lines and caption are written for it. Then **Approve** builds the preview.
 - An opening already in a waiting post shows as taken and can't be picked, so no opening is in two posts.
 - `automation/refresh.js` runs after every sync (`npm run refresh`, `refresh:dry` to only print). When an opening in a waiting `-G` carousel closes, only that opening is replaced by the next most urgent free one of the same kind. The text is rewritten and the preview is cleared, and `instagram-preview.yml` rebuilds it within minutes. Edits to that carousel's caption are replaced too.

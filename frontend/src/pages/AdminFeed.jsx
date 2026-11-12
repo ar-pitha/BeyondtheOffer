@@ -359,7 +359,7 @@ function OpeningsPicker({ onCreated }) {
       </div>
       <div className="pick-bar">
         <span className="stat-note">
-          {picked.length}/{MAX_PICK} picked · {free} free · closed and already posted openings are left out
+          {picked.length}/{MAX_PICK} picked · {free} free · closed, already posted and used items are left out
         </span>
         <button className="btn btn-primary btn-sm" disabled={!picked.length || creating} onClick={create}>
           {creating ? "Creating…" : `Create carousel${picked.length ? ` (${picked.length})` : ""}`}
@@ -381,10 +381,16 @@ function OpeningsPicker({ onCreated }) {
                     <small>{o.detail}</small>
                     <small>{o.id} · {o.verified}{o.takenBy ? ` · in ${o.takenBy}` : ""}</small>
                   </span>
-                  <span className={`pick-days${o.daysLeft !== null && o.daysLeft <= 2 ? " is-urgent" : ""}`}>
-                    {o.daysLeft === null ? "No date" : o.daysLeft === 0 ? "Closes today" : `${o.daysLeft} ${o.daysLeft === 1 ? "day" : "days"}`}
-                    {o.closes && <small>{o.closes}</small>}
-                  </span>
+                  {o.age !== undefined ? (
+                    <span className="pick-days">
+                      {o.age === null ? "No date" : o.age === 0 ? "Today" : `${o.age} ${o.age === 1 ? "day" : "days"} ago`}
+                    </span>
+                  ) : (
+                    <span className={`pick-days${o.daysLeft !== null && o.daysLeft <= 2 ? " is-urgent" : ""}`}>
+                      {o.daysLeft === null ? "No date" : o.daysLeft === 0 ? "Closes today" : `${o.daysLeft} ${o.daysLeft === 1 ? "day" : "days"}`}
+                      {o.closes && <small>{o.closes}</small>}
+                    </span>
+                  )}
                 </label>
               </li>
             );

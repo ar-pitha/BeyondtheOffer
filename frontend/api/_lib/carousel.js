@@ -95,12 +95,43 @@ export const CATEGORIES = {
       };
     },
   },
+  // News has no closing date and no Verified column: newest first, and every story qualifies
+  // until it has been used in a post. The slides get the "Did you know?" look automatically.
+  news: {
+    label: "Tech news",
+    tab: "Tech_News",
+    prefix: "TN-",
+    news: true,
+    show: (i) => ({ name: i.Headline, detail: [i.Topic, i.Source].filter(Boolean).join(" · ") }),
+    draft(items) {
+      const n = items.length;
+      const more = n - 1;
+      return {
+        title: items[0].Headline,
+        hook: `${items[0].Headline} | ${more ? `${more} more ${more === 1 ? "story" : "stories"} students should know` : "What it means for students"}`,
+        lines: items.map((i) => [i.Headline, i.Why_It_Matters_For_Students || i.Summary]),
+        caption: [
+          items[0].Headline,
+          "",
+          ...items.map((i) => i.Headline),
+          "",
+          "Comment LINK for the sources.",
+        ],
+        hashtags: "#technews #ai #techupdates #students",
+      };
+    },
+  },
 };
 
 export const categoryOfId = (id) => Object.keys(CATEGORIES).find((c) => String(id).startsWith(CATEGORIES[c].prefix));
 
-const closesAt = (item, cfg) => parseSheetDate(item[cfg.date])?.getTime() ?? Infinity;
-const byUrgency = (cfg) => (a, b) => closesAt(a, cfg) - closesAt(b, cfg) || String(b.Date_Added || "").localeCompare(String(a.Date_Added || ""));
+const closesAt = (item, cfg) => (cfg.news ? Infinity : parseSheetDate(item[cfg.date])?.getTime() ?? Infinity);
+// Openings: fewest days left first. News: newest first.
+const byUrgency = (cfg) => (a, b) =>
+  cfg.news
+    ? String(b.Date || "").localeCompare(String(a.Date || ""))
+    : closesAt(a, cfg) - closesAt(b, cfg) || String(b.Date_Added || "").localeCompare(String(a.Date_Added || ""));
+const trusted = (r, cfg) => cfg.news || TRUSTED.includes(r.Verified);
 
 // The fields of a Content_Queue row for these openings (already sorted)
 export function carouselFields(category, items) {
@@ -134,16 +165,19 @@ export function openingsList(queue, tabRows) {
     Object.entries(CATEGORIES).map(([category, cfg]) => [
       category,
       (tabRows[cfg.tab] || [])
-        .filter((r) => r.ID && TRUSTED.includes(r.Verified) && isOpen(r) && !alreadyPosted(r))
+        .filter((r) => r.ID && trusted(r, cfg) && isOpen(r) && !alreadyPosted(r))
         .sort(byUrgency(cfg))
         .map((r) => {
           const at = closesAt(r, cfg);
+          const added = parseSheetDate(r.Date)?.getTime();
           return {
             id: r.ID,
             ...cfg.show(r),
             closes: Number.isFinite(at) ? shortDate(r[cfg.date]) : "",
             daysLeft: Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / 86_400_000)) : null,
-            verified: r.Verified,
+            // News: whole days since the story's date (0 = today)
+            ...(cfg.news && { age: added ? Math.max(0, Math.ceil((now - added) / 86_400_000)) : null }),
+            verified: r.Verified || (cfg.news ? r.Source || "News" : ""),
             takenBy: owner.get(r.ID) || "",
           };
         }),
@@ -156,7 +190,7 @@ export function checkGroup(ids, queue, tabRows) {
   const unique = [...new Set((ids || []).map(String))];
   if (!unique.length || unique.length > MAX_OPENINGS) throw new Error(`Pick 1 to ${MAX_OPENINGS} openings.`);
   const category = categoryOfId(unique[0]);
-  if (!category || unique.some((id) => categoryOfId(id) !== category)) throw new Error("A carousel holds one kind: tech jobs, govt jobs or hackathons.");
+  if (!category || unique.some((id) => categoryOfId(id) !== category)) throw new Error("A carousel holds one kind: tech jobs, govt jobs, hackathons or tech news.");
   const cfg = CATEGORIES[category];
   const rows = tabRows[cfg.tab] || [];
   const itemsById = new Map(Object.values(tabRows).flat().filter((r) => r.ID).map((r) => [r.ID, r]));
@@ -164,7 +198,7 @@ export function checkGroup(ids, queue, tabRows) {
   const items = unique.map((id) => {
     const r = rows.find((x) => x.ID === id);
     if (!r) throw new Error(`${id} isn't in ${cfg.tab}.`);
-    if (!TRUSTED.includes(r.Verified)) throw new Error(`${id} is ${r.Verified || "not verified"}; only Official and Multi-source go out.`);
+    if (!trusted(r, cfg)) throw new Error(`${id} is ${r.Verified || "not verified"}; only Official and Multi-source go out.`);
     if (!isOpen(r)) throw new Error(`${id} has closed.`);
     if (alreadyPosted(r)) throw new Error(`${id} is already on Instagram.`);
     if (owner.has(id)) throw new Error(`${id} is already in ${owner.get(id)}.`);
@@ -217,7 +251,12 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
     { ID: "TJ-5", Company: "Echo", Role: "SRE", Verified: "Official", Apply_By: day(5), Posted_On_IG: "Y" }, // out
     { ID: "TJ-6", Company: "Flux", Role: "Dev", Verified: "Official", Apply_By: day(6) },
   ];
-  const tabRows = { Tech_Jobs: tech, Govt_Jobs: [{ ID: "GJ-1", Organisation: "SSC", Verified: "Official", Last_Date: day(4) }], Hackathons_Quizzes: [] };
+  const news = [
+    { ID: "TN-1", Headline: "Old story", Date: day(-30) },
+    { ID: "TN-2", Headline: "New story", Date: day(-1), Why_It_Matters_For_Students: "Jobs" },
+    { ID: "TN-3", Headline: "Used story", Date: day(0), Used_In_Post: "Y" },
+  ];
+  const tabRows = { Tech_Jobs: tech, Govt_Jobs: [{ ID: "GJ-1", Organisation: "SSC", Verified: "Official", Last_Date: day(4) }], Hackathons_Quizzes: [], Tech_News: news };
   const queue = [{ ID: "CQ-1-G1", _row: 2, Status: "Draft", Item_IDs: "TJ-1, TJ-2" }];
 
   const list = openingsList(queue, tabRows);
@@ -230,6 +269,13 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
   const g = checkGroup(["TJ-6", "TJ-3"], queue, tabRows);
   assert.deepStrictEqual(g.items.map((i) => i.ID), ["TJ-3", "TJ-6"]);
   assert.match(carouselFields(g.category, g.items).Title, /Core and Flux/);
+  // News: newest first, never expires, used stories are gone, no Verified needed
+  assert.deepStrictEqual(list.news.map((o) => o.id), ["TN-2", "TN-1"]);
+  assert.strictEqual(list.news[0].age, 1);
+  const n = checkGroup(["TN-1", "TN-2"], queue, tabRows);
+  assert.deepStrictEqual(n.items.map((i) => i.ID), ["TN-2", "TN-1"]);
+  assert.match(carouselFields("news", n.items).Slides_or_Script, /^New story \| 1 more story/);
+  assert.throws(() => checkGroup(["TN-3"], queue, tabRows), /already on Instagram/);
   assert.strictEqual(nextGroupId([...queue, { ID: "CQ-20261112-G2" }], "2026-11-12"), "CQ-20261112-G3");
 
   // TJ-1 closed: swapped for the most urgent free one (TJ-3), TJ-2 stays
