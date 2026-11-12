@@ -132,6 +132,9 @@ function PostCard({ row, onSave, onApprove, onPublish, onPreview, onRegenerate, 
         </p>
         {note && <p className="row-meta">{note}</p>}
         {dead && <p className="row-meta feed-repeat">{row._reason} It can't be posted.</p>}
+        {!dead && !published && row._dropped?.length > 0 && (
+          <p className="row-meta">Left off this carousel: {row._dropped.join(", ")}. The other openings are posted as usual.</p>
+        )}
 
         <ol className="feed-slides">
           {slides.map((s, i) => (

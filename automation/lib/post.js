@@ -12,7 +12,7 @@ import { parseSlides, parseReelScript, getBrowser } from "./render.js";
 import { logoFor, slugify, knownIn } from "./logos.js";
 import { parseSheetDate } from "./mapping.js";
 // The same rules the admin panel uses to keep closed and repeated posts out of the review list
-import { isOpen, alreadyPosted } from "../../frontend/api/_lib/queue.js";
+import { isOpen, alreadyPosted, planQueue } from "../../frontend/api/_lib/queue.js";
 
 const TEMPLATE = path.join(ROOT, "templates", "post.html");
 const PROFILE_PIC = path.join(ROOT, "assets", "profile.jpg");
@@ -199,6 +199,17 @@ export async function loadItems(itemIds) {
   return ids.map((id) => found.find((r) => r.ID === id)).filter(Boolean);
 }
 
+// Openings of this post that another post which isn't out yet keeps (approved posts first, then
+// the newest draft), so the admin panel, the preview and the published post all agree
+async function keptElsewhere(postId) {
+  const { readTab } = await import("./sheets.js");
+  const [queue, ...tabs] = await Promise.all(
+    [TABS.queue, TABS.tech, TABS.govt, TABS.events, TABS.news].map((t) => readTab(t).catch(() => ({ rows: [] })))
+  );
+  const plan = planQueue(queue.rows, new Map(tabs.flatMap((t) => t.rows).filter((r) => r.ID).map((r) => [r.ID, r])));
+  return new Set((plan[postId]?.dropped || []).filter((d) => d.why.startsWith("in ")).map((d) => d.id));
+}
+
 // Pure: row (+ sheet items) → slide models, logos not resolved yet
 export function planDeck(row, category, items = []) {
   const look = LOOK[category] || LOOK.tech;
@@ -272,8 +283,9 @@ export async function renderPost(row, outDir, { category = "tech", items } = {})
   // Openings that have closed, or that an earlier post already covered, are left out:
   // the same opening never goes out twice
   const found = items ?? (await loadItems(row.Item_IDs).catch(() => []));
-  const keep = found.filter((i) => isOpen(i) && !alreadyPosted(i));
-  if (found.length && !keep.length) throw new Error("every opening in this post has closed or was already posted");
+  const elsewhere = items ? new Set() : await keptElsewhere(row.ID).catch(() => new Set());
+  const keep = found.filter((i) => isOpen(i) && !alreadyPosted(i) && !elsewhere.has(i.ID));
+  if (found.length && !keep.length) throw new Error("every opening in this post has closed, was already posted or is in another post");
   if (keep.length < found.length) row = { ...row, Item_IDs: keep.map((i) => i.ID).join(", ") };
   const deck = planDeck(row, category, keep);
   await attachImages(deck);

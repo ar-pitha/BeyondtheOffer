@@ -365,7 +365,9 @@ async function main() {
         IG_Post_Link: permalink,
         Design_Link: urls[0] || "",
       });
-      await markItemsPosted((row.Item_IDs || "").split(/[,\s]+/).filter(Boolean));
+      // Only what went out: an opening left off the slides may still be another post's to carry
+      const leftOff = new Set((images.left || []).map((i) => i.ID));
+      await markItemsPosted((row.Item_IDs || "").split(/[,\s]+/).filter((id) => id && !leftOff.has(id)));
       await logRun(`publish OK ${row.ID}: ${permalink}`);
     }
   } catch (err) {

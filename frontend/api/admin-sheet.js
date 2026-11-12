@@ -9,24 +9,25 @@ import { readTab, appendRow, updateRow, ensureColumns, nowInZone } from "./_lib/
 import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "./_lib/instagram.js";
 import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
-import { queueStates } from "./_lib/queue.js";
+import { planQueue } from "./_lib/queue.js";
 
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://beyondtheoffer.vercel.app";
 
-// Posts with nothing left to post (expired, or every opening is in another post): see _lib/queue.js
-async function postStates(queue) {
+// Per post: the openings it keeps, the ones left off and why, and whether anything is left to
+// post at all (see _lib/queue.js)
+async function postPlan(queue) {
   const tabs = await Promise.all(
     ["Tech_Jobs", "Govt_Jobs", "Hackathons_Quizzes", "Tech_News"].map((t) => readTab(t).catch(() => ({ rows: [] })))
   );
   const items = new Map(tabs.flatMap((t) => t.rows).filter((r) => r.ID).map((r) => [r.ID, r]));
-  return queueStates(queue, items);
+  return planQueue(queue, items);
 }
 
 // Why this post can't be approved or published, or "" when it can
 async function blocked(queue, id) {
-  const s = (await postStates(queue))[id];
-  if (!s) return "";
-  return s.state === "expired" ? `This post has expired. ${s.reason}` : `This post is a duplicate. ${s.reason}`;
+  const p = (await postPlan(queue))[id];
+  if (!p?.state) return "";
+  return `${p.state === "expired" ? "This post has expired." : "Nothing new is left in this post."} ${p.reason}`;
 }
 
 const STATUS_DATA = ["Active", "Expired"];
@@ -282,8 +283,12 @@ export default async function handler(req, res) {
       let list = [...rows].reverse();
       if (cfg.limit) list = list.slice(0, cfg.limit);
       if (tab === "Content_Queue") {
-        const states = await postStates(rows);
-        list = list.map((r) => (states[r.ID] ? { ...r, _state: states[r.ID].state, _reason: states[r.ID].reason } : r));
+        const plan = await postPlan(rows);
+        list = list.map((r) => {
+          const p = plan[r.ID];
+          if (!p) return r;
+          return { ...r, _state: p.state, _reason: p.reason, _dropped: p.dropped.map((d) => `${d.label} (${d.why})`) };
+        });
       }
       return send(res, 200, {
         tab,

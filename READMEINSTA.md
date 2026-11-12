@@ -422,9 +422,10 @@ Instagram only delivers these DMs to the public when:
 ### Expired and duplicate posts
 
 `/admin/feed` sorts posts itself (`frontend/api/_lib/queue.js`, nothing is written to the sheet):
-- **Expired** tab: every opening has closed, or it's a news post (or a draft without sheet items) more than 7 days old.
-- **Duplicate** (also in the Expired tab): every opening is already on Instagram, or the post shares an opening with another post that isn't out yet. Approved posts keep their openings, then the newest draft wins; older drafts sharing one are the duplicates. Reject the newer post and the older one comes back to review.
-- Neither can be approved or published (the API refuses with the reason). **To review** only holds drafts that can go out, and no opening is in two of them.
+- It works one opening at a time. An opening is left off its carousel when it has closed, is already on Instagram, or another post that isn't out yet keeps it (approved posts first, then the newest draft). The card lists what is left off; the preview and the published post leave off the same ones.
+- A carousel moves to the **Expired** tab only when nothing is left: **Expired** when every opening has closed, **Duplicate** otherwise. Reject the newer post and the older one gets its openings back.
+- Tech news has no closing date and never expires.
+- A post with nothing left can't be approved or published (the API refuses with the reason).
 - **Approve** on a draft moves it to Approved and builds a fresh preview; **Publish to Instagram** posts it once the preview is there.
 
 ### Generated admin previews
