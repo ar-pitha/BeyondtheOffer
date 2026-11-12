@@ -169,11 +169,14 @@ function describe(r, category, cfg, now) {
     category,
     ...cfg.show(r),
     closes: Number.isFinite(at) ? shortDate(r[cfg.date]) : "",
-    daysLeft: Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / DAY)) : null,
+    // Whole days after today: an opening closing tonight (end of day IST) is 0, "Closes today"
+    daysLeft: Number.isFinite(at) ? Math.max(0, Math.floor((at - now) / DAY)) : null,
     // News: whole days since the story's date (0 = today)
     ...(cfg.news && { age: dated ? Math.max(0, Math.ceil((now - dated) / DAY)) : null }),
     verified: r.Verified || (cfg.news ? r.Source || "News" : ""),
     closed: !isOpen(r),
+    // When it reached the sheet, for newest/oldest sorting (news: the story's date)
+    addedAt: parseSheetDate(r.Date_Added || r.Date)?.getTime() || 0,
   };
 }
 

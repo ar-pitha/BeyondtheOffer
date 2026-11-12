@@ -20,6 +20,31 @@ const TABS = [
 const ORDER = ["tech", "govt", "events", "news"];
 const KIND_CLASS = { tech: "kind-tech", govt: "kind-govt", events: "kind-event", news: "kind-news" };
 const MAX_PICK = 4;
+
+// Openings filters. News has no closing date, so a "closes within" window leaves it out.
+const WINDOWS = [
+  { value: "any", label: "Any time", test: () => true },
+  { value: "3", label: "Within 3 days", test: (o) => o.daysLeft !== null && o.daysLeft <= 3 },
+  { value: "7", label: "Within 7 days", test: (o) => o.daysLeft !== null && o.daysLeft <= 7 },
+  { value: "30", label: "Within 30 days", test: (o) => o.daysLeft !== null && o.daysLeft <= 30 },
+  { value: "none", label: "No closing date", test: (o) => o.daysLeft === null && o.category !== "news" },
+];
+const byAdded = (o) => o.addedAt || 0;
+const SORTS = [
+  // The API sends each kind most urgent first (news newest first); a stable sort keeps that
+  { value: "urgent", label: "Most urgent", compare: () => 0 },
+  { value: "newest", label: "Newest added", compare: (a, b) => byAdded(b) - byAdded(a) },
+  { value: "oldest", label: "Oldest added", compare: (a, b) => byAdded(a) - byAdded(b) },
+];
+// The last sort and window this browser used
+const remembered = (key, options) => () => {
+  try {
+    const v = localStorage.getItem(key);
+    return options.some((o) => o.value === v) ? v : options[0].value;
+  } catch {
+    return options[0].value;
+  }
+};
 const BUILD_MINUTES = 20; // stop waiting for a preview after this long
 
 const slides = (post) =>
@@ -60,6 +85,16 @@ function Empty({ title, children }) {
 function OpeningsTab({ board, creating, onCreate, onReject }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState(remembered("bto-board-sort", SORTS));
+  const [within, setWithin] = useState(remembered("bto-board-within", WINDOWS));
+  const choose = (key, set) => (e) => {
+    set(e.target.value);
+    try {
+      localStorage.setItem(key, e.target.value);
+    } catch {
+      /* storage blocked: the choice just isn't remembered */
+    }
+  };
   const [picked, setPicked] = useState([]);
   const byId = useMemo(() => new Map(board.openings.map((o) => [o.id, o])), [board.openings]);
 
@@ -70,9 +105,10 @@ function OpeningsTab({ board, creating, onCreate, onReject }) {
 
   const kind = picked.length ? byId.get(picked[0])?.category : null;
   const q = query.trim().toLowerCase();
-  const visible = board.openings.filter(
-    (o) => (filter === "all" || o.category === filter) && (!q || `${o.name} ${o.detail} ${o.id}`.toLowerCase().includes(q))
-  );
+  const inWindow = WINDOWS.find((w) => w.value === within).test;
+  const visible = board.openings
+    .filter((o) => (filter === "all" || o.category === filter) && inWindow(o) && (!q || `${o.name} ${o.detail} ${o.id}`.toLowerCase().includes(q)))
+    .sort(SORTS.find((s) => s.value === sort).compare);
   const count = (c) => board.openings.filter((o) => o.category === c).length;
   const sections = (filter === "all" ? ORDER : [filter])
     .map((c) => [c, visible.filter((o) => o.category === c)])
@@ -105,14 +141,28 @@ function OpeningsTab({ board, creating, onCreate, onReject }) {
           <HiSearch aria-hidden />
           <input type="search" placeholder="Search company, role or ID" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search openings" />
         </label>
+        <div className="board-selects">
+          <label className="sort">
+            <span>Closes</span>
+            <select value={within} onChange={choose("bto-board-within", setWithin)}>
+              {WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+            </select>
+          </label>
+          <label className="sort">
+            <span>Sort</span>
+            <select value={sort} onChange={choose("bto-board-sort", setSort)}>
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
       <p className="stat-note board-hint">
-        Tick up to {MAX_PICK} of one kind and create a post. Most urgent first; closed and posted openings are already gone
+        Tick up to {MAX_PICK} of one kind and create a post. Closed and posted openings are already gone
         {board.inPosts > 0 && `, and ${board.inPosts} are in Posts`}.
       </p>
 
       {sections.length === 0 ? (
-        <Empty title={q ? "Nothing matches" : "No openings here"}>{q ? "Try another word." : "New ones arrive with every sync."}</Empty>
+        <Empty title={q || within !== "any" ? "Nothing matches" : "No openings here"}>{q || within !== "any" ? "Try another word or a wider closing window." : "New ones arrive with every sync."}</Empty>
       ) : (
         sections.map(([c, list]) => (
           <section key={c} className="op-section" aria-label={board.categories[c]}>

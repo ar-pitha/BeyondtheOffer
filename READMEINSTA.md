@@ -423,7 +423,7 @@ Instagram only delivers these DMs to the public when:
 
 Five tabs, left to right (`frontend/src/pages/AdminFeed.jsx`, data from `GET /api/admin-sheet?view=board`, built in `frontend/api/_lib/carousel.js`):
 
-1. **Openings**: every tech job, govt job, hackathon and tech news story that can still go out. Filter by kind or search. Jobs and hackathons must be `Official` or `Multi-source`, still open and not on Instagram, and are sorted by fewest days left (no closing date last). News is newest first and never expires. Tick up to 4 of one kind; the dock at the bottom has **Create post** and **Reject**.
+1. **Openings**: every tech job, govt job, hackathon and tech news story that can still go out. Filter by kind, closing window (3, 7 or 30 days, or no date) or search, and sort by most urgent, newest or oldest added (remembered per browser). Jobs and hackathons must be `Official` or `Multi-source`, still open and not on Instagram, and are sorted by fewest days left (no closing date last). News is newest first and never expires. Tick up to 4 of one kind; the dock at the bottom has **Create post** and **Reject**.
 2. **Posts**: **Create post** writes a `Draft` to Content_Queue with an ID like `CQ-20261112-G1`, with the title, slide lines and caption written for it, and starts the preview build at once (about 3 minutes). **Review and publish** shows the slides and publishes from there. **Ungroup** puts its openings back in Openings (with Undo).
 3. **Published**: what went out, with a link to the post.
 4. **Rejected**: openings rejected in Openings (`IG_Rejected=Y` in their tab). They're never offered for a post again until restored. The website still lists them.

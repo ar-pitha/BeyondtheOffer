@@ -1358,6 +1358,15 @@ select.form-control {
 
 .board-search:focus-within { border-color: var(--ink-3); }
 
+.board-selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.board-selects .sort { margin: 0; }
+.board-selects .sort + .sort { margin-left: 0; }
+
 .board-hint { margin: 10px 0 4px; }
 
 .op-section { margin-top: 12px; }
