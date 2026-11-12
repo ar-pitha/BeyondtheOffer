@@ -49,7 +49,8 @@ export function techRowToJob(r) {
       r.Notes ||
       [`${mapJobType(r.Job_Type)} ${r.Category ? `${r.Category.toLowerCase()} ` : ""}role at ${r.Company}.`, r.Eligibility_Batch && `Open to ${r.Eligibility_Batch}.`]
         .filter(Boolean)
-        .join(" "),
+        .join(" ") +
+      (lines([["Qualification", r.Qualification], ["Skills", r.Skills], ["Selection process", r.Selection_Process]]).replace(/^./, "\n\n$&")),
     type: mapJobType(r.Job_Type),
     link: r.Apply_Link,
     platform: r.Source || "",
@@ -61,7 +62,7 @@ export function techRowToJob(r) {
     deadline: parseSheetDate(r.Apply_By),
     verified: r.Verified,
     sourceName: r.Source || undefined,
-    extra: { jobType: r.Job_Type, dateAdded: r.Date_Added, notes: r.Notes },
+    extra: { jobType: r.Job_Type, dateAdded: r.Date_Added, notes: r.Notes, qualification: r.Qualification, skills: r.Skills, selectionProcess: r.Selection_Process },
   };
 }
 

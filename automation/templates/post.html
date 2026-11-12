@@ -57,6 +57,14 @@
   .facts div.solo { grid-template-columns: 1fr; }
   .facts.many div { padding: 20px 0; }
   .facts.many p { font-size: 34px; }
+  /* a full job card (eligibility, qualification, skills, process, ...): tighter so all of it fits */
+  .facts.lots div { grid-template-columns: 210px 1fr; padding: 15px 0; }
+  .facts.lots small { font-size: 26px; }
+  .facts.lots p { font-size: 30px; line-height: 1.28; }
+  .item:has(.lots) .logo { width: 170px; height: 170px; }
+  .item:has(.lots) .logo.wide { width: 340px; height: 110px; }
+  .item:has(.lots) .rule { margin-top: 30px; }
+  .item:has(.lots) .facts { margin-top: 30px; }
 
   /* news: a "Did you know?" card. The fact is the headline, numbers in the accent colour,
      a short explainer, then why it matters to a student in the same soft panel as the job facts. */
@@ -111,7 +119,7 @@
       ${s.company && !s.logo ? `<p class="company">${esc(s.company)}</p>` : ""}
       <h2 class="title ${s.title.length > 48 ? "long" : ""}">${esc(s.title)}</h2>
       <i class="rule"></i>
-      ${s.rows.length ? `<div class="facts ${s.rows.length > 3 ? "many" : ""}">${s.rows.map((r) => `<div class="${r.label ? "" : "solo"}">${r.label ? `<small>${esc(r.label)}</small>` : ""}<p>${esc(r.value)}</p></div>`).join("")}</div>` : ""}
+      ${s.rows.length ? `<div class="facts ${s.rows.length > 5 ? "many lots" : s.rows.length > 3 ? "many" : ""}">${s.rows.map((r) => `<div class="${r.label ? "" : "solo"}">${r.label ? `<small>${esc(r.label)}</small>` : ""}<p>${esc(r.value)}</p></div>`).join("")}</div>` : ""}
       <div class="foot"><span>${esc(d.handle)}</span></div>`,
     news: (s, d) => `
       ${s.logo ? `<div class="tile logo"><img src="${s.logo}" alt=""></div>` : ""}

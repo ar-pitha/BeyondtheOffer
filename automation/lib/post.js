@@ -134,8 +134,11 @@ function cardFromItem(item) {
     company: heading(item.Company, 60),
     title: heading(item.Role, 110),
     rows: [
-      row("Eligibility", item.Eligibility_Batch),
-      row("Location", item.Location, 70),
+      row("Eligibility", item.Eligibility_Batch, 60),
+      row("Qualification", item.Qualification, 60),
+      row("Skills", item.Skills, 60),
+      row("Process", item.Selection_Process, 60),
+      row("Location", item.Location, 40),
       row(/intern/i.test(`${item.Role} ${item.Job_Type}`) ? "Stipend" : "Salary", item.Salary_Stipend, 60),
       prettyDate(item.Apply_By) && { label: "Apply by", value: prettyDate(item.Apply_By) },
     ].filter(Boolean),
