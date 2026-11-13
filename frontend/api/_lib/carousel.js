@@ -43,7 +43,7 @@ export const CATEGORIES = {
         caption: [
           `${items.length} fresher ${items.length === 1 ? "role" : "roles"} open right now${closes ? `, the first closes ${closes}` : ""}`,
           "",
-          ...items.map((i) => [name(i.Company), i.Role, shortDate(i.Apply_By) && `apply by ${shortDate(i.Apply_By)}`].filter(Boolean).join(" · ")),
+          ...items.map((i) => [name(i.Company), i.Role, shortDate(i.Apply_By) ? `apply by ${shortDate(i.Apply_By)}` : "open until filled"].filter(Boolean).join(" · ")),
           "",
           "Comment JOB and we'll DM you every apply link.",
         ],

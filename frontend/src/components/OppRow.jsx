@@ -14,7 +14,7 @@ function Stub({ deadline }) {
   else if (n <= 99) [big, small, tone] = [String(n), n === 1 ? "day" : "days", n <= 3 ? "urgent" : n <= 7 ? "soon" : "later"];
   else [big, small, tone] = [formatDate(deadline, { day: "numeric" }), formatDate(deadline, { month: "short" }), "later"];
   return (
-    <span className={`stub stub-${tone}`} aria-label={n === null ? "No deadline" : n < 0 ? "Closed" : `${n} days left`}>
+    <span className={`stub stub-${tone}`} aria-label={n === null ? "No closing date" : n < 0 ? "Closed" : `${n} days left`}>
       <b>{big}</b>
       <small>{small}</small>
     </span>

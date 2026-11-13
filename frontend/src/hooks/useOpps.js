@@ -9,7 +9,8 @@ export const fromJob = (j) => ({
   title: j.title,
   org: j.company,
   // One line of facts; never repeat what the row already shows
-  meta: [j.location !== "India" && j.location, j.type !== "Full-time" && j.type, j.batch && `Batch ${j.batch}`, j.salary]
+  // Most company roles publish no closing date; say so rather than leave a gap
+  meta: [j.location !== "India" && j.location, j.type !== "Full-time" && j.type, j.batch && `Batch ${j.batch}`, j.salary, !j.deadline && "Open until filled"]
     .filter(Boolean)
     .join(" · "),
   deadline: j.deadline,
