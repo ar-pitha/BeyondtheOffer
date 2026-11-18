@@ -60,6 +60,12 @@ const CATEGORY_SEARCH = {
   ai: ["ai news", "AI news for engineering students in India, in under a minute."],
 };
 
+const SHARE_ASK = {
+  tech: "Send this to your batchmates who are applying.",
+  govt: "Send this to a friend preparing for govt exams.",
+  events: "Send this to your hackathon team.",
+};
+
 const GENERIC_OPENER = /^[^\n]*\b(in (60|sixty) seconds|in (a|one|1) minute|this week in)\b[^\n]*$/i;
 
 function rotationForDate(date) {
@@ -99,6 +105,8 @@ export function buildCaption(row, category) {
   const [phrase, line] = CATEGORY_SEARCH[category] || CATEGORY_SEARCH.tech;
   // The search line goes before the closing ask, so the caption still ends on it
   if (!body.toLowerCase().includes(phrase)) paragraphs.splice(Math.max(1, paragraphs.length - 1), 0, line);
+  // Shares carry a post past the followers (the Nov 11 post: 15 shares, 887 reached). Job posts ask for one.
+  if (SHARE_ASK[category] && !/\b(share|send this)\b/i.test(body)) paragraphs.push(SHARE_ASK[category]);
   return [...paragraphs, withCategoryHashtags(row, category)].filter(Boolean).join("\n\n");
 }
 

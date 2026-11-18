@@ -3,7 +3,7 @@
 //   hook     "No ~referrals.~ / No cold emails."         (pink strike through the first line)
 //   promise  "just / 5 companies / hiring freshers this week"
 //   openings "NVIDIA / asic engineer, ₹28-45 LPA / closes 30 Nov"   one shot each, at most 4
-//   cta      "comment [JOB] / i'll send you every link", then the DM arriving as an Instagram
+//   cta      "comment [JOB] / i'll send you every link / send this to your batchmates", the DM arriving as an Instagram
 //            notification from beyond_the.offer with the profile picture
 // Every shot is a different real stock clip (lib/broll.js), cut on the music's beats
 // (lib/music.js). Text is black on bright shots and white on dark ones. No voice.
@@ -110,6 +110,8 @@ export function planScenes(row, category, deck) {
       line("ital", "comment", 0.08),
       { type: "chips", chips: [keyword], at: 0.4 },
       line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.75),
+      // The one post that reached non-followers asked for this; shares are what Instagram pushes
+      line("sub", "send this to your batchmates", 2.1),
       { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 1.3 },
     ],
   };
