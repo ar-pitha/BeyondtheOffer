@@ -1,10 +1,10 @@
-// Job posts (tech, govt, events) → a faceless b-roll Reel, 1080x1920 H.264, 15-20 s, cut like a
-// creator edit:
-//   hook    "No ~referrals.~ / No cold emails."            (pink strike through the first line)
-//   promise "NVIDIA & Microsoft / + 3 more hiring / freshers, official apply links"
-//   cards   one white company card per opening (logo, role, tags), the pay as the headline
-//   cta     "just comment [JOB]" and a "beyond_the.offer sent you 5 apply links" banner
-// Every scene is a different real stock shot (lib/broll.js), cut on the music's beats
+// Job posts (tech, govt, events) → a faceless b-roll Reel, 1080x1920 H.264, about 12 s, cut like
+// a creator's edit rather than a template: plain text on real footage, a few words a shot.
+//   hook     "No ~referrals.~ / No cold emails."         (pink strike through the first line)
+//   promise  "just / 5 companies / hiring freshers this week"
+//   openings "NVIDIA / asic engineer, ₹28-45 LPA / closes 30 Nov"   one shot each, at most 4
+//   cta      "comment [JOB] / i'll send you every link"
+// Every shot is a different real stock clip (lib/broll.js), cut on the music's beats
 // (lib/music.js). Text is black on bright shots and white on dark ones. No voice.
 // News and AI posts stay carousels (lib/post.js).
 
@@ -14,23 +14,23 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { ROOT } from "./config.js";
 import { getBrowser } from "./render.js";
-import { postDeck, profilePicture, EMOJI } from "./post.js";
-import { logoFor } from "./logos.js";
+import { postDeck, EMOJI } from "./post.js";
 import { pickClips } from "./broll.js";
 import { pickMusic } from "./music.js";
 import { ffmpegPath } from "../reels.js";
 
 const FPS = 30;
 const TEMPLATE = path.join(ROOT, "templates", "broll.html");
-const MAX_OPENINGS = 5;
-const SECONDS = { hook: 2.5, promise: 2.6, card: 2.0, cta: 3.6 };
+// Short reels get watched to the end and replayed, which is what Instagram rewards
+const MAX_OPENINGS = 4;
+const SECONDS = { hook: 2.3, promise: 2.0, opening: 1.6, cta: 2.4 };
 // The grid cover: the hook once both lines and the strike are in
-export const COVER_AT = 1.9;
+export const COVER_AT = 1.7;
 export const REEL_CATEGORIES = ["tech", "govt", "events"];
 const HOOK = {
   tech: ["No ~referrals.~", "No cold emails."],
   govt: ["No ~agents.~", "No fake links."],
-  events: ["No ~spam.~", "Just real hackathons."],
+  events: ["No ~spam.~", "just real hackathons."],
 };
 const NOUN = { tech: "companies", govt: "govt jobs", events: "hackathons" };
 
@@ -56,80 +56,66 @@ function factOf(card) {
   return value && (value.split(/\s+·\s+/).find((part) => FACT_TEXT.test(part)) || value).replace(/^(stipend|salary|ctc)\s*:?\s*/i, "");
 }
 
-const rowValue = (card, label) => card.rows?.find((r) => r.label.toLowerCase() === label)?.value;
-
-// Pure: deck (lib/post.js) → scenes, each with its lines/chips/card and when they come in
+// Pure: deck (lib/post.js) → scenes, each with its lines and when they come in.
+// Written like a person talks: lowercase, a few words per shot, no labels.
 export function planScenes(row, category, deck) {
-  const cards = deck.map((d) => d.slide).filter((s) => s.type === "item" && (s.company || s.title)).slice(0, MAX_OPENINGS);
-  if (!cards.length) throw new Error("no openings to put in a reel");
+  const every = deck.map((d) => d.slide).filter((s) => s.type === "item" && (s.company || s.title));
+  if (!every.length) throw new Error("no openings to put in a reel");
+  // The reel shows the first few; the count and the DM cover all of them
+  const cards = every.slice(0, MAX_OPENINGS);
   const keyword = deck.find((d) => d.slide.type === "profile")?.slide.keyword || "JOB";
-  const n = cards.length;
+  const n = every.length;
   const deadlineOf = (c) => c.rows?.find((r) => DEADLINE_LABEL.test(r.label) && r.value !== "Open until filled");
   const interns = cards.every((c) => /intern/i.test(c.title));
   // A post that mixes company roles with a government exam is just "openings"
   const kinds = new Set(String(row.Item_IDs || "").toUpperCase().split(/[,\s]+/).filter(Boolean).map((id) => id.slice(0, 3)));
   const mixed = kinds.size > 1;
-  const first = cards
-    .map(deadlineOf)
-    .filter(Boolean)
-    .map((r) => ({ d: r.value, t: Date.parse(r.value) }))
-    .filter((x) => !Number.isNaN(x.t))
-    .sort((a, b) => a.t - b.t)[0];
+  const kind = mixed ? "tech" : category;
 
   const line = (style, text, at) => ({ type: "line", style, text, at });
-  const hook = { kind: "hook", items: (HOOK[mixed ? "tech" : category] || HOOK.tech).map((t, i) => line("bold", t, 0.12 + i * 0.8)) };
+  const hook = { kind: "hook", items: (HOOK[kind] || HOOK.tech).map((t, i) => line("bold", t, 0.1 + i * 0.75)) };
+  const promise = {
+    kind: "promise",
+    items: [
+      line("ital", "just", 0.08),
+      line("bold", kind === "tech" ? (mixed ? `${n} openings` : `${n} ${n === 1 ? "company" : "companies"}`) : `${n} ${NOUN[kind]}`, 0.4),
+      line("sub", kind === "govt" ? "open right now, official links" : kind === "events" ? "taking teams right now" : `hiring ${interns ? "interns" : "freshers"} this week`, 0.85),
+    ],
+  };
 
-  // Names a student knows stop the scroll better than a count
-  const names = [...new Set(cards.map((c) => c.company).filter(Boolean))];
-  let promise;
-  if (category === "tech" && !mixed && names.length) {
-    const two = names.length > 1 && `${names[0]} & ${names[1]}`.length <= 20;
-    const shown = two ? 2 : 1;
-    promise = [
-      line("ital", two ? `${names[0]} & ${names[1]}` : names[0], 0.1),
-      line("bold", n > shown ? `+ ${n - shown} more hiring` : shown > 1 ? "are hiring" : "is hiring", 0.55),
-      line("sub", `${interns ? "interns" : "freshers"}, with the official apply links`, 1.0),
-    ];
-  } else {
-    promise = [
-      line("ital", `${n} ${mixed ? "openings" : NOUN[category] || "openings"}`, 0.1),
-      line("bold", "open right now", 0.55),
-      line("sub", first ? `the first one closes ${dayMonth(first.d)}` : "with the official apply links", 1.0),
-    ];
-  }
-
-  const cardScenes = cards.map((c, k) => {
+  // One shot per opening: the name big, then role and pay the way you'd say them
+  const openings = cards.map((c) => {
     const fact = factOf(c);
     const deadline = deadlineOf(c);
     const title = String(c.title || "");
-    // "Graduate Engineer Trainee, Tata Steel" under "Tata Steel" says the company twice
     const role = !c.company ? "" : title.toLowerCase().endsWith(c.company.toLowerCase()) ? title.slice(0, -c.company.length).replace(/[\s,·|-]+$/, "") : title;
-    const when = deadline ? `${/register/i.test(deadline.label) ? "Register" : "Apply"} by ${dayMonth(deadline.value)}` : "Open now";
-    const tags = [rowValue(c, "location"), rowValue(c, "eligibility"), fact && when !== "Open now" ? when : null]
-      .filter(Boolean)
-      .map((t) => short(t, 26))
-      .slice(0, 3);
+    // "ASIC Engineer, New College Graduate 2027" → "ASIC engineer": the first clause is what you'd say
+    const said = role.split(/\s*(?:,|:|\(|\s[-–]\s|\band\b|\bwith\b|\bfor\b)\s*/i)[0].split(/\s+/).slice(0, 4).join(" ");
+    const detail = [said && casual(said), fact && short(fact, 20)].filter(Boolean).join(", ");
+    const when = deadline ? `closes ${dayMonth(deadline.value)}` : "";
     return {
-      kind: "card",
-      lookup: c.lookup,
+      kind: "opening",
       items: [
-        line("bold", short(fact || when, 22), 0.05),
-        line("sub", `${k + 1} of ${n}`, 0.3),
-        { type: "card", company: short(c.company || c.title, 30), role: c.company ? short(role, 60) : "", tags, foot: `Comment ${keyword} for the link`, at: 0.22 },
-      ],
+        line("bold", short(c.company || title, 22), 0.06),
+        detail && line("sub", detail, 0.4),
+        when && line("sub", when, 0.7),
+      ].filter(Boolean),
     };
   });
 
   const cta = {
     kind: "cta",
     items: [
-      line("ital", "just comment", 0.1),
-      { type: "chips", chips: [`${keyword} ✓`], at: 0.5 },
-      { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 1.25 },
+      line("ital", "comment", 0.08),
+      { type: "chips", chips: [keyword], at: 0.4 },
+      line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.85),
     ],
   };
-  return [hook, { kind: "promise", items: promise }, ...cardScenes, cta];
+  return [hook, promise, ...openings, cta];
 }
+
+// "Software Engineer Intern" → "software engineer intern"; acronyms (SDE, AI, GATE) stay as they are
+const casual = (s) => s.split(/\s+/).map((w) => (/^[A-Z0-9&.+/-]{2,}$/.test(w) ? w : w.toLowerCase())).join(" ");
 
 // Scene lengths from SECONDS, each cut moved onto the nearest beat within 0.3 s
 export function timeScenes(scenes, beats = []) {
@@ -148,9 +134,9 @@ export function timeScenes(scenes, beats = []) {
   });
 }
 
-// Desk work for the promise and the cards, coffee every third card, someone seen from behind to open and close
+// Someone seen from behind to open and close, desk work in between, coffee every third shot
 const shotKinds = (scenes) =>
-  scenes.map((s, i) => (s.kind === "hook" ? "hook" : s.kind === "cta" ? "cta" : s.kind === "card" && i % 3 === 0 ? "coffee" : "work"));
+  scenes.map((s, i) => (s.kind === "hook" ? "hook" : s.kind === "cta" ? "cta" : s.kind === "opening" && i % 3 === 0 ? "coffee" : "work"));
 
 function hash(text) {
   let h = 0;
@@ -196,16 +182,8 @@ export async function buildJobReel(row, outDir, { category = "tech", items, vari
     const room = Math.max(0, clips[i].duration - s.dur - 2);
     return 1 + (room ? (hash(`${seed}|${i}`) % Math.floor(room * 10)) / 10 : 0);
   });
-  // Black text on bright shots, white on dark ones; logos and the profile picture for the cards
-  const picture = await profilePicture().catch(() => null);
-  for (const [i, s] of scenes.entries()) {
-    s.ink = (await textAreaMin(ffmpeg, clips[i].file, offsets[i] + s.dur / 2)) > 125 ? "dark" : "light";
-    for (const item of s.items) {
-      if (item.type === "card") item.logo = s.lookup ? await logoFor(s.lookup).catch(() => null) : null;
-      if (item.type === "notify") item.picture = picture;
-    }
-    delete s.lookup;
-  }
+  // Black text on bright shots, white on dark ones
+  for (const [i, s] of scenes.entries()) s.ink = (await textAreaMin(ffmpeg, clips[i].file, offsets[i] + s.dur / 2)) > 125 ? "dark" : "light";
 
   const file = path.join(outDir, "reel.mp4");
   const args = ["-y"];

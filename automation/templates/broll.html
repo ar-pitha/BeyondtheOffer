@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <!-- Transparent 1080x1920 layer for job reels (lib/brollReel.js); the footage goes underneath in ffmpeg.
      The look of a creator edit: big serif lines top-left that come in a line at a time (black on bright
-     shots, white on dark), a pink strike, pink chips, a white company card and a "sent you a link" banner. -->
+     shots, white on dark), a pink strike and a pink chip. Plain text only: no boxes or mock UI. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,800;1,500;1,800&family=Inter:wght@500;600;700&display=block" rel="stylesheet">
 <style>
@@ -12,36 +12,18 @@
   * { box-sizing: border-box; }
   .stage { position: absolute; inset: 0; }
   .text { position: absolute; left: 78px; top: 230px; width: 930px; font-family: "Playfair Display", Georgia, serif; }
-  .dark { color: #121212; text-shadow: 0 0 22px rgba(255,255,255,.55), 0 0 4px rgba(255,255,255,.4); }
-  .light { color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.45), 0 0 4px rgba(0,0,0,.3); }
+  .dark { color: #111; }
+  .light { color: #fff; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
   .line { display: block; will-change: transform, opacity, filter; }
-  .bold { font-size: 104px; line-height: 1.02; font-weight: 800; letter-spacing: -1.5px; }
-  .bold.long { font-size: 86px; }
-  .ital { font-size: 104px; line-height: 1.02; font-style: italic; font-weight: 800; letter-spacing: -1px; }
-  .ital.long { font-size: 86px; }
-  .sub { margin-top: 14px; font-size: 46px; line-height: 1.2; font-style: italic; font-weight: 500; }
+  .bold { font-size: 108px; line-height: 1.02; font-weight: 800; letter-spacing: -1.5px; }
+  .bold.long { font-size: 88px; }
+  .ital { font-size: 108px; line-height: 1.02; font-style: italic; font-weight: 800; letter-spacing: -1px; }
+  .ital.long { font-size: 88px; }
+  .sub { margin-top: 12px; font-size: 52px; line-height: 1.18; font-style: italic; font-weight: 500; }
   .struck { position: relative; display: inline-block; }
   .struck::after { content: ""; position: absolute; left: -6px; top: 55%; height: 10px; border-radius: 6px; background: #e8336d; width: calc((100% + 12px) * var(--cut, 0)); }
-  .chips { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 30px; }
-  .chip { padding: 16px 30px 18px; border-radius: 999px; background: #e8336d; color: #fff; font: 700 46px Inter, Arial, sans-serif; text-shadow: none; transform-origin: left center; box-shadow: 0 8px 24px rgba(232,51,109,.28); }
-  .card { position: absolute; left: 90px; top: 800px; width: 900px; padding: 40px 42px 30px; border-radius: 40px; background: #fff; color: #141414; font-family: Inter, Arial, sans-serif; box-shadow: 0 30px 80px rgba(0,0,0,.28); }
-  .card .head { display: flex; align-items: center; gap: 30px; }
-  .card .logo { flex: none; width: 128px; height: 128px; border-radius: 50%; background: #f4f4f6; display: grid; place-items: center; overflow: hidden; }
-  .card .logo img { width: 78%; height: 78%; object-fit: contain; }
-  .card .logo b { font: 700 54px Inter, Arial, sans-serif; color: #e8336d; }
-  .card .name { font-size: 50px; font-weight: 700; line-height: 1.1; }
-  .card .role { margin-top: 8px; font-size: 34px; font-weight: 500; line-height: 1.25; color: #5d5f6b; }
-  .card .tags { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
-  .card .tag { padding: 10px 20px; border-radius: 14px; background: #fde8ef; color: #c2185b; font-size: 31px; font-weight: 600; }
-  .card .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 30px; padding-top: 24px; border-top: 2px solid #eeeef2; font-size: 32px; font-weight: 600; color: #3b3d48; }
-  .card .foot span:last-child { font-size: 44px; color: #9a9caa; }
-  .notify { position: absolute; left: 70px; top: 760px; width: 940px; display: flex; align-items: center; gap: 28px; padding: 30px 34px; border-radius: 46px; background: rgba(250,250,252,.96); color: #141414; font-family: Inter, Arial, sans-serif; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
-  .notify .pic { flex: none; width: 104px; height: 104px; border-radius: 50%; background: #e8336d center/cover; }
-  .notify .body { flex: 1; min-width: 0; }
-  .notify .top { display: flex; justify-content: space-between; font-size: 36px; font-weight: 700; }
-  .notify .top span { font-weight: 500; color: #8a8c99; }
-  .notify .msg { margin-top: 6px; font-size: 36px; font-weight: 500; color: #3b3d48; display: flex; align-items: center; gap: 12px; }
-  .notify svg { width: 34px; height: 34px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 22px; }
+  .chip { padding: 14px 34px 16px; border-radius: 999px; background: #e8336d; color: #fff; font: 700 52px Inter, Arial, sans-serif; text-shadow: none; transform-origin: left center; }
 </style>
 </head>
 <body>
@@ -54,7 +36,6 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   // "No ~referrals.~" → the word in a span that gets struck through
   const strike = (text) => esc(text).replace(/~([^~]+)~/g, '<span class="struck">$1</span>');
-  const LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="#8a8c99" stroke-width="2.4" stroke-linecap="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>';
 
   function build(scene) {
     const stage = document.getElementById("stage");
@@ -82,30 +63,6 @@
           parts.push({ el: chip, item: { at: item.at + i * 0.14 }, kind: "chip" });
         });
         text.appendChild(el);
-      } else if (item.type === "card") {
-        el = document.createElement("div");
-        el.className = "card";
-        const initials = esc(item.company.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase());
-        el.innerHTML = `
-          <div class="head">
-            <div class="logo">${item.logo ? `<img src="${item.logo}">` : `<b>${initials}</b>`}</div>
-            <div><div class="name">${esc(item.company)}</div>${item.role ? `<div class="role">${esc(item.role)}</div>` : ""}</div>
-          </div>
-          ${item.tags.length ? `<div class="tags">${item.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
-          <div class="foot"><span>${esc(item.foot)}</span><span>&rsaquo;</span></div>`;
-        stage.appendChild(el);
-        parts.push({ el, item, kind: "card" });
-      } else if (item.type === "notify") {
-        el = document.createElement("div");
-        el.className = "notify";
-        el.innerHTML = `
-          <div class="pic" style="${item.picture ? `background-image:url('${item.picture}')` : ""}"></div>
-          <div class="body">
-            <div class="top">${esc(item.name)}<span>now</span></div>
-            <div class="msg">${esc(item.text)} ${LINK}</div>
-          </div>`;
-        stage.appendChild(el);
-        parts.push({ el, item, kind: "notify" });
       }
     }
     return parts;
@@ -130,14 +87,6 @@
       } else if (kind === "chip") {
         el.style.opacity = easeOut(p * 1.5);
         el.style.transform = `scale(${0.6 + 0.4 * backOut(p)})`;
-      } else if (kind === "card") {
-        const q = (local - item.at) / 0.42;
-        el.style.opacity = easeOut(q * 1.6);
-        el.style.transform = `translateY(${(1 - backOut(q)) * 260}px)`;
-      } else if (kind === "notify") {
-        const q = (local - item.at) / 0.38;
-        el.style.opacity = easeOut(q * 1.6);
-        el.style.transform = `translateY(${(1 - backOut(q)) * -200}px) scale(${0.94 + 0.06 * easeOut(q)})`;
       }
     }
   };
