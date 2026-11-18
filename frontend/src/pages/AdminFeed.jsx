@@ -52,6 +52,12 @@ const slides = (post) =>
   String(post.Preview_Link || "")
     .split(/\s+/)
     .filter((u) => /^https?:\/\//.test(u) && !/\.mp4(\?|$)/i.test(u));
+// A reel's preview is one video
+const video = (post) => String(post.Preview_Link || "").split(/\s+/).find((u) => /^https?:\/\/\S+\.mp4(\?|$)/i.test(u)) || "";
+const hasPreview = (post) => slides(post).length > 0 || !!video(post);
+// Jobs, govt jobs and hackathons can go out as a reel; news stays a carousel
+const REEL_KINDS = ["tech", "govt", "events"];
+const isReel = (post) => String(post.Format).toLowerCase() === "reel" && REEL_KINDS.includes(post.category);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 // Days left (jobs, hackathons) or age (news)
@@ -222,8 +228,10 @@ function OpeningsTab({ board, creating, onCreate, onReject }) {
 }
 
 // ── Posts: waiting for their preview, then publish ───────────────────────────
-function PostCard({ post, labels, building, posting, busy, onOpen, onBuild, onRebuild, onUngroup, onSaveCaption }) {
+function PostCard({ post, labels, building, posting, busy, onOpen, onBuild, onRebuild, onUngroup, onSaveCaption, onFormat }) {
   const pics = slides(post);
+  const clip = video(post);
+  const reel = isReel(post);
   const [editing, setEditing] = useState(false);
   const [caption, setCaption] = useState(post.Caption);
   const closed = post.items.filter((i) => i.closed).length;
@@ -250,13 +258,27 @@ function PostCard({ post, labels, building, posting, busy, onOpen, onBuild, onRe
         </p>
       )}
 
+      {REEL_KINDS.includes(post.category) && (
+        <div className="seg post-format" role="group" aria-label="Post as">
+          {["Carousel", "Reel"].map((f) => (
+            <button key={f} aria-pressed={(f === "Reel") === reel} disabled={locked} onClick={() => (f === "Reel") !== reel && onFormat(f)}>
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="post-preview">
-        {pics.length > 0 ? (
+        {reel && clip ? (
+          <button className="post-thumbs post-reel" onClick={onOpen} aria-label="Play the reel">
+            <video src={clip} muted playsInline preload="metadata" />
+          </button>
+        ) : !reel && pics.length > 0 ? (
           <button className="post-thumbs" onClick={onOpen} aria-label={`Open the ${pics.length} slides`}>
             {pics.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
           </button>
         ) : building ? (
-          <p className="post-building"><span className="pulse" aria-hidden /> Building the preview… about 3 minutes</p>
+          <p className="post-building"><span className="pulse" aria-hidden /> Building the {reel ? "reel" : "preview"}… about {reel ? 5 : 3} minutes</p>
         ) : (
           <p className="post-building">
             No preview yet.{" "}
@@ -287,10 +309,10 @@ function PostCard({ post, labels, building, posting, busy, onOpen, onBuild, onRe
       </details>
 
       <div className="post-actions">
-        <button className="btn btn-primary btn-sm" disabled={!pics.length || locked} onClick={onOpen}>
+        <button className="btn btn-primary btn-sm" disabled={!hasPreview(post) || locked} onClick={onOpen}>
           {posting ? "Publishing…" : "Review and publish"}
         </button>
-        {pics.length > 0 && (
+        {hasPreview(post) && (
           <button className="btn btn-secondary btn-sm" disabled={locked} onClick={onRebuild}>Rebuild preview</button>
         )}
         <button className="link-button post-ungroup" disabled={locked} onClick={onUngroup}>Ungroup</button>
@@ -462,6 +484,18 @@ function AdminFeed() {
       }
     });
 
+  const setFormat = (post, format) =>
+    withBusy(post.ID, async () => {
+      try {
+        await call({ action: "set-format", id: post.ID, format });
+        setBuilding((b) => ({ ...b, [post.ID]: Date.now() }));
+        setBoard((b) => ({ ...b, posts: b.posts.map((p) => (p.ID === post.ID ? { ...p, Format: format, Preview_Link: "" } : p)) }));
+        toast.success(format === "Reel" ? "Building the reel. It takes about 5 minutes." : "Building the carousel. It takes about 3 minutes.");
+      } catch (err) {
+        fail(err, "Couldn't change the format.");
+      }
+    });
+
   const saveCaption = (post, Caption) =>
     withBusy(post.ID, async () => {
       try {
@@ -489,7 +523,7 @@ function AdminFeed() {
 
   // While previews build, check every 20 s and say when each is ready
   const waiting = (board?.posts || [])
-    .filter((p) => !slides(p).length && Date.now() - (building[p.ID] || 0) < BUILD_MINUTES * 60_000)
+    .filter((p) => !hasPreview(p) && Date.now() - (building[p.ID] || 0) < BUILD_MINUTES * 60_000)
     .map((p) => p.ID)
     .join(",");
   useEffect(() => {
@@ -497,7 +531,7 @@ function AdminFeed() {
     const timer = setInterval(async () => {
       const fresh = await load();
       fresh?.posts
-        .filter((p) => waiting.split(",").includes(p.ID) && slides(p).length)
+        .filter((p) => waiting.split(",").includes(p.ID) && hasPreview(p))
         .forEach((p) => toast.success(`Preview ready: ${p.Title}`));
     }, 20000);
     return () => clearInterval(timer);
@@ -621,6 +655,7 @@ function AdminFeed() {
                 onRebuild={() => buildPreview(p, true)}
                 onUngroup={() => ungroup(p)}
                 onSaveCaption={(caption) => saveCaption(p, caption)}
+                onFormat={(format) => setFormat(p, format)}
               />
             ))}
           </ul>
@@ -632,12 +667,12 @@ function AdminFeed() {
         ) : (
           <ul className="pub-list">
             {board.published.map((p) => {
-              const thumb = slides(p)[0] || (/^https?:\/\//.test(p.Design_Link) ? p.Design_Link : "");
+              const thumb = slides(p)[0] || video(p) || (/^https?:\/\//.test(p.Design_Link) ? p.Design_Link : "");
               return (
                 <li key={p.ID}>
                   {thumb ? (
                     <button className="pub-thumb" onClick={() => setOpenId(p.ID)} aria-label="Open the slides">
-                      <img src={thumb} alt="" loading="lazy" />
+                      {/\.mp4(\?|$)/i.test(thumb) ? <video src={thumb} muted playsInline preload="metadata" /> : <img src={thumb} alt="" loading="lazy" />}
                     </button>
                   ) : (
                     <span className="pub-thumb" aria-hidden />
@@ -691,12 +726,18 @@ function AdminFeed() {
           <section className="modal feed-preview-modal" role="dialog" aria-modal="true" aria-labelledby="slides-title">
             <header className="modal-header">
               <h3 id="slides-title">{open.Title}</h3>
-              <p className="stat-note">{plural(slides(open).length, "slide")}, in the order Instagram shows them</p>
+              <p className="stat-note">
+                {video(open) && (isReel(open) || !slides(open).length) ? "Reel, exactly as it will be posted" : `${plural(slides(open).length, "slide")}, in the order Instagram shows them`}
+              </p>
             </header>
             <div className="modal-body">
-              <div className="feed-preview-images">
-                {slides(open).map((src) => <img key={src} src={src} alt="" />)}
-              </div>
+              {video(open) && (isReel(open) || !slides(open).length) ? (
+                <video className="feed-preview-video" src={video(open)} controls autoPlay playsInline />
+              ) : (
+                <div className="feed-preview-images">
+                  {slides(open).map((src) => <img key={src} src={src} alt="" />)}
+                </div>
+              )}
             </div>
             <footer className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setOpenId(null)}>Close</button>

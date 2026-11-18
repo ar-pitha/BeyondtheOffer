@@ -1,5 +1,7 @@
-// Approved Content_Queue rows → Instagram, always as a white carousel with company logos
-// (lib/post.js). Reel and Story drafts are posted as carousels too; nothing is voiced.
+// Approved Content_Queue rows → Instagram as a white carousel with company logos (lib/post.js).
+// Job posts (tech, govt, events) whose Format is Reel (picked in /admin/feed) go out as a faceless
+// stock-footage Reel instead (lib/brollReel.js): the exact video approved in the preview. Preview one
+// locally with jobreel.js. News and AI always go out as carousels.
 //   Runs only when "Publish to Instagram" is pressed in the admin (publish.yml has no timer).
 //   node publish.js              publish one due row (only inside POST_SLOTS_IST unless scheduled)
 //   node publish.js --dry-run    render + upload, no publish; ignores time slots
@@ -17,9 +19,10 @@ import path from "node:path";
 import { ROOT, TABS, WEBSITE_URL, hasFlag, isDryRun } from "./lib/config.js";
 import { readTab, updateRow, ensureColumns, nowInZone, logRun } from "./lib/sheets.js";
 import { closeBrowser } from "./lib/render.js";
-import { hasCloudinary, uploadSlides } from "./lib/cloudinary.js";
+import { hasCloudinary, uploadSlides, uploadVideo } from "./lib/cloudinary.js";
 import { renderPost, EMOJI } from "./lib/post.js";
 import { categoryForRow } from "./lib/category.js";
+import { buildJobReel, REEL_CATEGORIES, COVER_AT } from "./lib/brollReel.js";
 
 const dryRun = isDryRun();
 const sample = hasFlag("sample");
@@ -127,6 +130,9 @@ function scheduleKey(value, today) {
 }
 
 const isVideoPreview = (r) => /\.mp4(\?|\s|$)/i.test(r.Preview_Link || "");
+const isReelRow = (r) => String(r.Format || "").toLowerCase() === "reel" && REEL_CATEGORIES.includes(categoryForRow(r));
+// preview.js uploads a job reel's preview as .../jobreel.mp4; older voiced reels used other names
+const reelPreview = (r) => String(r.Preview_Link || "").split(/\s+/).find((u) => /\/jobreel\.mp4(\?|$)/i.test(u)) || "";
 
 function failureCounts(runLogRows) {
   const counts = {};
@@ -149,7 +155,7 @@ function pickRow(rows, failures) {
       // Fixture rows have no admin preview step
       (sample || (r.Publish_Confirmed === "Y" && r.Preview_Link)) &&
       // A video preview was approved for the old reel renderer; Regenerate gives it carousel slides
-      !isVideoPreview(r) &&
+      (isReelRow(r) ? sample || reelPreview(r) : !isVideoPreview(r)) &&
       FORMATS.includes((r.Format || "").toLowerCase()) &&
       r.Slides_or_Script
   );
@@ -190,9 +196,15 @@ async function loadRows() {
 }
 
 async function renderRow(row, outDir) {
-  const images = await renderPost(row, outDir, { category: categoryForRow(row) });
+  const category = categoryForRow(row);
+  // A reel goes out exactly as approved; only sample and local runs render one here
+  const approved = !sample && isReelRow(row) ? reelPreview(row) : "";
+  if (approved) return { images: [], reel: { url: approved, left: [] }, left: [], note: "the approved reel preview" };
+  const reel = isReelRow(row) ? await buildJobReel(row, outDir, { category }) : null;
+  const images = reel ? [] : await renderPost(row, outDir, { category });
+  const left = (reel || images).left || [];
   // Openings already posted elsewhere (or closed) were left off the slides; their caption lines go too
-  const names = (images.left || [])
+  const names = left
     .flatMap((i) => [String(i.Company || i.Organisation || i.Name || i.Headline || "").replace(/\s*\([^)]*\)/g, ""), (String(i.Organisation || "").match(/\(([^)]+)\)/) || [])[1]])
     .filter((n) => n && n.length > 2)
     .map((n) => n.toLowerCase());
@@ -202,11 +214,12 @@ async function renderRow(row, outDir) {
       .filter((line, k) => k === 0 || !names.some((n) => line.toLowerCase().includes(n)))
       .join("\n");
   }
-  const note = images.left?.length ? `, left out ${images.left.map((i) => i.ID).join(", ")}` : "";
-  return { images, note: `${images.length} slide(s)${note}` };
+  const note = left.length ? `, left out ${left.map((i) => i.ID).join(", ")}` : "";
+  const what = reel ? `reel ${reel.seconds.toFixed(1)}s, ${reel.scenes.length} scenes, music: ${reel.track}` : `${images.length} slide(s)`;
+  return { images, reel, left, note: `${what}${note}` };
 }
 
-async function publishToInstagram(row, imageUrls) {
+async function publishToInstagram(row, imageUrls, { videoUrl } = {}) {
   const ig = await import("./lib/instagram.js");
   // No URL in the caption: it isn't clickable there. The comment keyword DMs the
   // /links/<ID> page instead (frontend/api/_lib/replies.js).
@@ -217,7 +230,10 @@ async function publishToInstagram(row, imageUrls) {
   if (used + 1 > total) throw new Error(`Publishing limit reached (${used}/${total} in 24 h)`);
 
   let creationId;
-  if (imageUrls.length === 1) {
+  if (videoUrl) {
+    // The grid cover is the hook once its words are on screen
+    creationId = await ig.createReelContainerFromUrl(videoUrl, caption, { collaborators, trial: process.env.REEL_TRIAL, thumbOffsetMs: COVER_AT * 1000 });
+  } else if (imageUrls.length === 1) {
     creationId = await ig.createImageContainer(imageUrls[0], { caption, collaborators });
   } else {
     const children = [];
@@ -338,12 +354,22 @@ async function main() {
 
   const outDir = path.join(ROOT, "renders", row.ID);
   try {
-    const { images, note } = await renderRow(row, outDir);
+    const { images, reel, left, note } = await renderRow(row, outDir);
     await closeBrowser();
     console.log(`Rendered ${note} → ${path.relative(process.cwd(), outDir) || outDir}`);
 
     let urls = [];
-    if (images.length && hasCloudinary()) {
+    let videoUrl = null;
+    if (reel?.url) {
+      videoUrl = reel.url;
+    } else if (reel && hasCloudinary()) {
+      videoUrl = await uploadVideo(reel.file, { folder: `beyondtheoffer/${row.ID}`, publicId: "reel" });
+      console.log(`Uploaded to Cloudinary:
+  ${videoUrl}`);
+    } else if (reel) {
+      if (!dryRun) throw new Error("Cloudinary credentials missing; Instagram needs a public video URL");
+      console.log("Cloudinary not configured: skipped upload.");
+    } else if (images.length && hasCloudinary()) {
       urls = await uploadSlides(images, row.ID);
       console.log(`Uploaded to Cloudinary:\n  ${urls.join("\n  ")}`);
     } else if (images.length) {
@@ -356,17 +382,17 @@ async function main() {
       return;
     }
 
-    const { permalink } = await publishToInstagram(row, urls);
+    const { permalink } = await publishToInstagram(row, urls, { videoUrl });
     console.log(`Published: ${permalink}`);
 
     if (!sample) {
       await updateRow(TABS.queue, headers, row._row, {
         Status: "Published",
         IG_Post_Link: permalink,
-        Design_Link: urls[0] || "",
+        Design_Link: videoUrl || urls[0] || "",
       });
       // Only what went out: an opening left off the slides may still be another post's to carry
-      const leftOff = new Set((images.left || []).map((i) => i.ID));
+      const leftOff = new Set(left.map((i) => i.ID));
       await markItemsPosted((row.Item_IDs || "").split(/[,\s]+/).filter((id) => id && !leftOff.has(id)));
       await logRun(`publish OK ${row.ID}: ${permalink}`);
     }

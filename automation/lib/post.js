@@ -256,7 +256,7 @@ export function planDeck(row, category, items = []) {
   return deck.slice(0, MAX_SLIDES).map((slide, i, all) => ({ slide, index: i + 1, total: all.length, accent: look.accent }));
 }
 
-async function profilePicture() {
+export async function profilePicture() {
   // Fresh from Instagram when the token is around (publish runs); the committed copy otherwise
   if (process.env.IG_ACCESS_TOKEN) {
     try {
@@ -287,8 +287,8 @@ async function attachImages(deck) {
 }
 
 // Renders every slide to a 1440x1800 JPEG in outDir and returns the file paths
-export async function renderPost(row, outDir, { category = "tech", items } = {}) {
-  fs.mkdirSync(outDir, { recursive: true });
+// The cards a post goes out with. Shared by the carousel and the job reel (lib/brollReel.js).
+export async function postDeck(row, { category = "tech", items } = {}) {
   // Openings that have closed, or that an earlier post already covered, are left out:
   // the same opening never goes out twice
   const found = items ?? (await loadItems(row.Item_IDs).catch(() => []));
@@ -296,7 +296,12 @@ export async function renderPost(row, outDir, { category = "tech", items } = {})
   const keep = found.filter((i) => isOpen(i) && !alreadyPosted(i) && !elsewhere.has(i.ID));
   if (found.length && !keep.length) throw new Error("every opening in this post has closed, was already posted or is in another post");
   if (keep.length < found.length) row = { ...row, Item_IDs: keep.map((i) => i.ID).join(", ") };
-  const deck = planDeck(row, category, keep);
+  return { deck: planDeck(row, category, keep), items: keep, left: found.filter((i) => !keep.includes(i)) };
+}
+
+export async function renderPost(row, outDir, { category = "tech", items } = {}) {
+  fs.mkdirSync(outDir, { recursive: true });
+  const { deck, left } = await postDeck(row, { category, items });
   await attachImages(deck);
   const browser = await getBrowser();
   const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: SCALE });
@@ -310,6 +315,6 @@ export async function renderPost(row, outDir, { category = "tech", items } = {})
   }
   await page.close();
   // The caller trims the caption to match (publish.js)
-  files.left = found.filter((i) => !keep.includes(i));
+  files.left = left;
   return files;
 }

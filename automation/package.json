@@ -18,7 +18,8 @@
     "news": "node news-daily.js",
     "news:dry": "node news-daily.js --dry-run",
     "refresh": "node refresh.js",
-    "refresh:dry": "node refresh.js --dry-run"
+    "refresh:dry": "node refresh.js --dry-run",
+    "reel:job": "node jobreel.js --sample"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

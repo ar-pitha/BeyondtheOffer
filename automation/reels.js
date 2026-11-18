@@ -43,7 +43,7 @@ function pickTheme(script, category) {
   return THEMES[h % THEMES.length];
 }
 
-async function ffmpegPath() {
+export async function ffmpegPath() {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
   try {
     return (await import("ffmpeg-static")).default || "ffmpeg";
@@ -79,7 +79,7 @@ const AUDIO = /\.(mp3|m4a|aac|wav)$/i;
 function tracksIn(dir) {
   return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => AUDIO.test(f)).sort().map((f) => path.join(dir, f)) : [];
 }
-function pickTrack({ category, seed = "" } = {}) {
+export function pickTrack({ category, seed = "" } = {}) {
   const base = path.join(ROOT, "assets");
   const pool = [path.join(base, "music", category || "_"), path.join(base, "music"), base].map(tracksIn).find((list) => list.length);
   if (!pool) return null;

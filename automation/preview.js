@@ -4,7 +4,8 @@ import { readTab, updateRow, ensureColumns } from "./lib/sheets.js";
 import { closeBrowser } from "./lib/render.js";
 import { renderPost } from "./lib/post.js";
 import { categoryForRow } from "./lib/category.js";
-import { uploadSlides, hasCloudinary } from "./lib/cloudinary.js";
+import { uploadSlides, uploadVideo, hasCloudinary } from "./lib/cloudinary.js";
+import { buildJobReel, REEL_CATEGORIES } from "./lib/brollReel.js";
 import { GROUPED } from "../frontend/api/_lib/queue.js";
 
 if (!hasCloudinary()) throw new Error("Cloudinary is required for admin previews");
@@ -32,9 +33,16 @@ if (requestedId && !targets.length) {
 for (const row of targets) {
   const outDir = path.join(ROOT, "renders", "preview", row.ID);
   try {
-    // Same renderer as publishing: every format becomes white carousel slides
-    const images = await renderPost(row, outDir, { category: categoryForRow(row) });
-    const previewLinks = await uploadSlides(images, `${row.ID}/preview`);
+    // Format=Reel on a jobs post builds the reel publish.js will post as is (named jobreel.mp4);
+    // everything else becomes white carousel slides
+    const category = categoryForRow(row);
+    let previewLinks;
+    if (String(row.Format).toLowerCase() === "reel" && REEL_CATEGORIES.includes(category)) {
+      const reel = await buildJobReel(row, outDir, { category });
+      previewLinks = [await uploadVideo(reel.file, { folder: `beyondtheoffer/${row.ID}/preview`, publicId: "jobreel" })];
+    } else {
+      previewLinks = await uploadSlides(await renderPost(row, outDir, { category }), `${row.ID}/preview`);
+    }
     const nextHeaders = headers.includes("Preview_Link") ? headers : await ensureColumns("Content_Queue", ["Preview_Link"]);
     await updateRow("Content_Queue", nextHeaders, row._row, { Preview_Link: previewLinks.join("\n") }, { raw: true });
     console.log(`Preview ready for ${row.ID}`);

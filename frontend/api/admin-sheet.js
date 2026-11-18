@@ -12,6 +12,9 @@ import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/f
 import { planQueue } from "./_lib/queue.js";
 import { CATEGORIES, GROUPED, buildBoard, checkGroup, carouselFields, nextGroupId, categoryOfId, takenBy, newsPosts } from "./_lib/carousel.js";
 
+// Posts of these kinds can go out as a reel (automation/lib/brollReel.js); news stays a carousel
+const REEL_KINDS = ["tech", "govt", "events"];
+
 // The opening tabs the picker groups from, by tab name
 async function openingTabs() {
   const tabs = Object.values(CATEGORIES).map((c) => c.tab);
@@ -422,6 +425,23 @@ export default async function handler(req, res) {
 
       if (body.action === "preview-status") {
         return send(res, 200, await latestPreviewRun());
+      }
+
+      // Carousel or Reel: switching throws away the preview and builds one in the new format
+      if (body.action === "set-format") {
+        const format = body.format === "Reel" ? "Reel" : body.format === "Carousel" ? "Carousel" : null;
+        if (!format) return send(res, 400, { message: "Format is Carousel or Reel." });
+        const { rows } = await readTab("Content_Queue");
+        const row = rows.find((r) => r.ID === body.id);
+        if (!row) return send(res, 404, { message: `No post with ID ${body.id}.` });
+        if (row.Status === "Published") return send(res, 409, { message: "This post is already published." });
+        const kind = categoryOfId(String(row.Item_IDs || "").split(/[,\s]+/).find(Boolean));
+        if (format === "Reel" && !REEL_KINDS.includes(kind)) return send(res, 409, { message: "News posts go out as carousels." });
+        if (String(row.Format).toLowerCase() === format.toLowerCase()) return send(res, 200, { row });
+        const headers = await ensureColumns("Content_Queue", ["Preview_Link", "Publish_Confirmed"]);
+        await updateRow("Content_Queue", headers, row._row, { Format: format }, { raw: true });
+        await resetPreview({ ...row, Format: format });
+        return send(res, 202, { message: `Building the ${format.toLowerCase()} preview`, row: { ...row, Format: format, Preview_Link: "", Publish_Confirmed: "" } });
       }
 
       // "Post now": start the publish workflow on GitHub for one approved row

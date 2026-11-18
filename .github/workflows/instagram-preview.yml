@@ -38,6 +38,13 @@ jobs:
       # No --with-deps: see publish.yml
       - run: npx playwright install chromium
         working-directory: automation
+      # Job reels (Format=Reel): ffmpeg, and the stock footage and music downloaded once (lib/broll.js, lib/music.js)
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 ffmpeg)
+      - uses: actions/cache@v4
+        with:
+          path: automation/renders/_broll
+          key: broll-${{ hashFiles('automation/lib/broll.js', 'automation/lib/music.js') }}
+          restore-keys: broll-
       # A waiting post whose opening closed gets the next most urgent one; its preview is rebuilt below
       - run: node refresh.js
         working-directory: automation

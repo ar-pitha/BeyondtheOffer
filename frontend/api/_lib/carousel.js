@@ -182,7 +182,7 @@ function describe(r, category, cfg, now) {
   };
 }
 
-const POST_FIELDS = ["ID", "Date", "Title", "Caption", "Hashtags", "Item_IDs", "Status", "Preview_Link", "IG_Post_Link", "Design_Link"];
+const POST_FIELDS = ["ID", "Date", "Title", "Format", "Caption", "Hashtags", "Item_IDs", "Status", "Preview_Link", "IG_Post_Link", "Design_Link"];
 const postFields = (row) => Object.fromEntries(POST_FIELDS.map((k) => [k, row[k] || ""]));
 const kindOf = (row) => categoryOfId(idsIn(row)[0]) || null;
 
