@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <!-- Transparent 1080x1920 layer for job reels (lib/brollReel.js); the footage goes underneath in ffmpeg.
      The look of a creator edit: big serif lines top-left that come in a line at a time (black on bright
-     shots, white on dark), a pink strike and a pink chip. Plain text only: no boxes or mock UI. -->
+     shots, white on dark), a pink strike and a pink chip, and to close, the DM arriving as the phone's
+     Instagram notification with the profile picture. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,800;1,500;1,800&family=Inter:wght@500;600;700&display=block" rel="stylesheet">
 <style>
@@ -24,6 +25,15 @@
   .struck::after { content: ""; position: absolute; left: -6px; top: 55%; height: 10px; border-radius: 6px; background: #e8336d; width: calc((100% + 12px) * var(--cut, 0)); }
   .chips { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 22px; }
   .chip { padding: 14px 34px 16px; border-radius: 999px; background: #e8336d; color: #fff; font: 700 52px Inter, Arial, sans-serif; text-shadow: none; transform-origin: left center; }
+  /* The DM coming in, drawn like the phone's own Instagram notification */
+  .notify { position: absolute; left: 54px; top: 820px; width: 972px; padding: 30px 34px 34px; border-radius: 48px; background: rgba(246,246,248,.94); color: #111; font-family: Inter, Arial, sans-serif; box-shadow: 0 20px 60px rgba(0,0,0,.28); text-shadow: none; }
+  .notify .app { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 500; color: #6e6e76; letter-spacing: .3px; }
+  .notify .app i { width: 40px; height: 40px; border-radius: 11px; background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+  .notify .app span:last-child { margin-left: auto; }
+  .notify .row { display: flex; align-items: center; gap: 24px; margin-top: 22px; }
+  .notify .pic { flex: none; width: 96px; height: 96px; border-radius: 50%; background: #ddd center/cover; }
+  .notify b { display: block; font-size: 38px; font-weight: 700; }
+  .notify .msg { margin-top: 4px; font-size: 36px; font-weight: 500; color: #3a3a40; }
 </style>
 </head>
 <body>
@@ -63,6 +73,14 @@
           parts.push({ el: chip, item: { at: item.at + i * 0.14 }, kind: "chip" });
         });
         text.appendChild(el);
+      } else if (item.type === "notify") {
+        el = document.createElement("div");
+        el.className = "notify";
+        el.innerHTML = `<div class="app"><i></i><span>INSTAGRAM</span><span>now</span></div>
+          <div class="row"><div class="pic" style="${item.picture ? `background-image:url('${item.picture}')` : ""}"></div>
+          <div><b>${esc(item.name)}</b><div class="msg">${esc(item.text)}</div></div></div>`;
+        stage.appendChild(el);
+        parts.push({ el, item, kind: "notify" });
       }
     }
     return parts;
@@ -87,6 +105,11 @@
       } else if (kind === "chip") {
         el.style.opacity = easeOut(p * 1.5);
         el.style.transform = `scale(${0.6 + 0.4 * backOut(p)})`;
+      } else if (kind === "notify") {
+        // Drops in from above like a real banner
+        const q = (local - item.at) / 0.4;
+        el.style.opacity = easeOut(q * 2);
+        el.style.transform = `translateY(${(1 - backOut(q)) * -240}px)`;
       }
     }
   };

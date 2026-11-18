@@ -3,7 +3,8 @@
 //   hook     "No ~referrals.~ / No cold emails."         (pink strike through the first line)
 //   promise  "just / 5 companies / hiring freshers this week"
 //   openings "NVIDIA / asic engineer, ₹28-45 LPA / closes 30 Nov"   one shot each, at most 4
-//   cta      "comment [JOB] / i'll send you every link"
+//   cta      "comment [JOB] / i'll send you every link", then the DM arriving as an Instagram
+//            notification from beyond_the.offer with the profile picture
 // Every shot is a different real stock clip (lib/broll.js), cut on the music's beats
 // (lib/music.js). Text is black on bright shots and white on dark ones. No voice.
 // News and AI posts stay carousels (lib/post.js).
@@ -14,7 +15,7 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { ROOT } from "./config.js";
 import { getBrowser } from "./render.js";
-import { postDeck, EMOJI } from "./post.js";
+import { postDeck, profilePicture, EMOJI } from "./post.js";
 import { pickClips } from "./broll.js";
 import { pickMusic } from "./music.js";
 import { ffmpegPath } from "../reels.js";
@@ -23,7 +24,7 @@ const FPS = 30;
 const TEMPLATE = path.join(ROOT, "templates", "broll.html");
 // Short reels get watched to the end and replayed, which is what Instagram rewards
 const MAX_OPENINGS = 4;
-const SECONDS = { hook: 2.3, promise: 2.0, opening: 1.6, cta: 2.4 };
+const SECONDS = { hook: 2.3, promise: 2.0, opening: 1.6, cta: 3.2 };
 // The grid cover: the hook once both lines and the strike are in
 export const COVER_AT = 1.7;
 export const REEL_CATEGORIES = ["tech", "govt", "events"];
@@ -108,7 +109,8 @@ export function planScenes(row, category, deck) {
     items: [
       line("ital", "comment", 0.08),
       { type: "chips", chips: [keyword], at: 0.4 },
-      line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.85),
+      line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.75),
+      { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 1.3 },
     ],
   };
   return [hook, promise, ...openings, cta];
@@ -182,8 +184,12 @@ export async function buildJobReel(row, outDir, { category = "tech", items, vari
     const room = Math.max(0, clips[i].duration - s.dur - 2);
     return 1 + (room ? (hash(`${seed}|${i}`) % Math.floor(room * 10)) / 10 : 0);
   });
-  // Black text on bright shots, white on dark ones
-  for (const [i, s] of scenes.entries()) s.ink = (await textAreaMin(ffmpeg, clips[i].file, offsets[i] + s.dur / 2)) > 125 ? "dark" : "light";
+  // Black text on bright shots, white on dark ones; the profile picture for the DM
+  const picture = await profilePicture().catch(() => null);
+  for (const [i, s] of scenes.entries()) {
+    s.ink = (await textAreaMin(ffmpeg, clips[i].file, offsets[i] + s.dur / 2)) > 125 ? "dark" : "light";
+    for (const item of s.items) if (item.type === "notify") item.picture = picture;
+  }
 
   const file = path.join(outDir, "reel.mp4");
   const args = ["-y"];
