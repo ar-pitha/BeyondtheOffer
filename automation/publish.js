@@ -239,8 +239,18 @@ async function publishToInstagram(row, imageUrls, { videoUrl } = {}) {
 
   let creationId;
   if (videoUrl) {
-    // The grid cover is the hook once its words are on screen
-    creationId = await ig.createReelContainerFromUrl(videoUrl, caption, { collaborators, trial: process.env.REEL_TRIAL, thumbOffsetMs: COVER_AT * 1000 });
+    // The grid cover is the hook once its words are on screen. Reels go out as trial reels (shown
+    // to non-followers first, shared with followers once they do well) unless REEL_TRIAL=off: the
+    // account's few followers barely watch, and they were each reel's first test audience.
+    const options = { collaborators, thumbOffsetMs: COVER_AT * 1000 };
+    const trial = process.env.REEL_TRIAL || "auto";
+    try {
+      creationId = await ig.createReelContainerFromUrl(videoUrl, caption, { ...options, trial });
+    } catch (e) {
+      if (trial === "off") throw e;
+      console.warn(`Trial reel refused (${e.message}); posting as a normal reel`);
+      creationId = await ig.createReelContainerFromUrl(videoUrl, caption, options);
+    }
   } else if (imageUrls.length === 1) {
     creationId = await ig.createImageContainer(imageUrls[0], { caption, collaborators });
   } else {

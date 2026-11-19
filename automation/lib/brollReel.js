@@ -85,9 +85,14 @@ export function planScenes(row, category, deck) {
   const rest = every.filter((c) => c !== lead).slice(0, MAX_OPENINGS - 1);
   const leadFact = factOf(lead);
   const intern = /intern|apprentice/i.test(lead.title);
+  // Who it's for, first: the one post that reached far beyond the followers opened with
+  // "2027 batch, this one's for you", and a line naming the reader is what makes people send it on
+  const batch = every.map((c) => [c.title, ...(c.rows || []).map((r) => r.value)].join(" ").match(/\b(20[2-3]\d)\s*(?:batch|grads?|graduates?|pass(?:ing)?[- ]?outs?)\b/i)).find(Boolean)?.[1];
+  const forWho = batch ? `${batch} batch, this is for you` : category === "tech" && "freshers, this is for you";
   const hook = {
     kind: "hook",
     items: [
+      forWho && line("sub", forWho, 0),
       line("bold", short(lead.company || lead.title, 20), 0),
       line("bold", category === "events" ? "is open for teams" : category === "govt" ? "is hiring" : `is hiring ${intern ? "interns" : "freshers"}`, 0),
       line("ital", leadFact || roleOf(lead) || "apply now", 0.35),
