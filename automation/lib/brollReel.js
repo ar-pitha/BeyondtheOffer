@@ -47,8 +47,14 @@ const short = (s, max) => {
 // "13 Nov 2026" → "13 Nov"
 const dayMonth = (value) => String(value).replace(/\s+\d{4}$/, "");
 
+// "₹80,000-1,50,000/month" → "₹80k-1.5 lakh/month", so a pay range fits a line without being cut mid-number
+const compactPay = (s) => {
+  const text = String(s).replace(/\b(\d{1,2}),(\d{2}),000\b/g, (_, a, b) => `${a}${b === "00" ? "" : `.${b.replace(/0$/, "")}`} lakh`);
+  return /\d\s*(?:[-–]|to)\s*₹?\s*\d/.test(text) ? text.replace(/\b(\d{1,3}),000\b/g, "$1k") : text;
+};
+
 function factOf(card) {
-  const fact = rawFact(card) && short(rawFact(card), 20);
+  const fact = rawFact(card) && short(compactPay(rawFact(card)), 20);
   // Pay from an aggregator or an estimate is labelled as such, never shown as the company's figure
   return fact && card.reported && /₹|lakh|lpa|month|stipend|salary/i.test(fact) ? `${fact} (reported)` : fact;
 }
@@ -80,14 +86,27 @@ export function planScenes(row, category, deck) {
   const deadlineOf = (c) => c.rows?.find((r) => DEADLINE_LABEL.test(r.label) && r.value !== "Open until filled");
   const line = (style, text, at) => ({ type: "line", style, text, at });
 
-  // The first opening leads: the daily task lists the biggest name first
-  const lead = every[0];
+  // The opening the post's title names first leads (the daily task puts the biggest name there),
+  // else the first one
+  const title = String(row.Title || "").toLowerCase();
+  const named = every.filter((c) => c.company && title.includes(c.company.toLowerCase()));
+  const lead = named.sort((a, b) => title.indexOf(a.company.toLowerCase()) - title.indexOf(b.company.toLowerCase()))[0] || every[0];
   const rest = every.filter((c) => c !== lead).slice(0, MAX_OPENINGS - 1);
   const leadFact = factOf(lead);
   const intern = /intern|apprentice/i.test(lead.title);
   // Who it's for, first: the one post that reached far beyond the followers opened with
   // "2027 batch, this one's for you", and a line naming the reader is what makes people send it on
-  const batch = every.map((c) => [c.title, ...(c.rows || []).map((r) => r.value)].join(" ").match(/\b(20[2-3]\d)\s*(?:batch|grads?|graduates?|pass(?:ing)?[- ]?outs?)\b/i)).find(Boolean)?.[1];
+  // Every batch the openings name ("2026 Freshers", "2027 grads", "2027 Winter ... Intern"), so the
+  // line never tells one batch that a reel led by another batch's opening is for them
+  const years = new Set(
+    every.flatMap((c) => {
+      const text = [c.title, ...(c.rows || []).map((r) => r.value)].join(" ");
+      const named = [...text.matchAll(/\b(20[2-3]\d)\s*(?:batch|grads?|graduates?|freshers|pass(?:ing)?[- ]?outs?)\b/gi)].map((m) => m[1]);
+      const intern = /intern/i.test(c.title) && String(c.title).match(/\b(20[2-3]\d)\b/)?.[1];
+      return [...named, intern].filter(Boolean);
+    })
+  );
+  const batch = years.size && years.size <= 2 && [...years].sort().join(" & ");
   const forWho = batch ? `${batch} batch, this is for you` : category === "tech" && "freshers, this is for you";
   const hook = {
     kind: "hook",

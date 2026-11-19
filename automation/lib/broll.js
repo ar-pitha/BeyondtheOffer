@@ -29,7 +29,6 @@ const CLIPS = {
   45148: [OLD(45148), "writing notes in a notebook"],
   4915: [OLD(4915), "typing on a phone"],
   144: [OLD(144), "texting by a window"],
-  42133: [OLD(42133), "scrolling a phone, vertical"],
   247: [OLD(247), "phone resting on a laptop"],
   99888: [NEW(99888, 1717186447), "taking notes with a pen"],
   99890: [NEW(99890, 1717186770), "writing in a spiral notebook"],
@@ -45,7 +44,7 @@ const CLIPS = {
 // Which shots suit each scene
 export const SHOTS = {
   hook: [717, 4629, 4808, 17450, 14669, 41646],
-  work: [1808, 4827, 41287, 42662, 1781, 41646, 4907, 45148, 4915, 144, 42133, 99888, 99890, 99909],
+  work: [1808, 4827, 41287, 42662, 1781, 41646, 4907, 45148, 4915, 144, 99888, 99890, 99909],
   coffee: [43935, 46058, 44956, 1730, 100253, 100262],
   cta: [247, 4808, 4629, 17450, 14669],
 };

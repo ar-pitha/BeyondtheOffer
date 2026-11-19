@@ -239,15 +239,15 @@ async function publishToInstagram(row, imageUrls, { videoUrl } = {}) {
 
   let creationId;
   if (videoUrl) {
-    // The grid cover is the hook once its words are on screen. Reels go out as trial reels (shown
-    // to non-followers first, shared with followers once they do well) unless REEL_TRIAL=off: the
-    // account's few followers barely watch, and they were each reel's first test audience.
+    // The grid cover is the hook once its words are on screen. REEL_TRIAL=auto|manual posts trial
+    // reels (non-followers first). On Nov 19 Instagram refused them for this app (code 10, subcode
+    // 2207081, no permission), so a refused trial still goes out as a normal reel.
     const options = { collaborators, thumbOffsetMs: COVER_AT * 1000 };
-    const trial = process.env.REEL_TRIAL || "auto";
+    const trial = process.env.REEL_TRIAL;
     try {
       creationId = await ig.createReelContainerFromUrl(videoUrl, caption, { ...options, trial });
     } catch (e) {
-      if (trial === "off") throw e;
+      if (!trial || trial === "off") throw e;
       console.warn(`Trial reel refused (${e.message}); posting as a normal reel`);
       creationId = await ig.createReelContainerFromUrl(videoUrl, caption, options);
     }
