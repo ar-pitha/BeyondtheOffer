@@ -1,10 +1,13 @@
-// Job posts (tech, govt, events) → a faceless b-roll Reel, 1080x1920 H.264, about 12 s, cut like
-// a creator's edit rather than a template: plain text on real footage, a few words a shot.
-//   hook     "No ~referrals.~ / No cold emails."         (pink strike through the first line)
-//   promise  "just / 5 companies / hiring freshers this week"
-//   openings "NVIDIA / asic engineer, ₹28-45 LPA / closes 30 Nov"   one shot each, at most 4
-//   cta      "comment [JOB] / i'll send you every link / send this to your batchmates", the DM arriving as an Instagram
-//            notification from beyond_the.offer with the profile picture
+// Job posts (tech, govt, events) → a faceless b-roll Reel, 1080x1920 H.264, about 8 s, cut like a
+// creator's edit: plain text on real footage, a few words a shot.
+//   hook     "Google / is hiring freshers / ₹12 LPA"        on screen from the first frame
+//   openings "Comcast / software engineer, ₹8 LPA"           about a second each, at most 3 more
+//   cta      "comment [JOB] / i'll send you every link / send this to your batchmates", the DM
+//            arriving as an Instagram notification from beyond_the.offer with the profile picture
+// Why this shape: the first reel (Nov 18) was watched for 4.3 s on average out of 14 s, and its
+// payoff came at 5 s. Instagram only shows a reel to more people when its first viewers stay and
+// share, so the best opening is the first thing on screen and the whole reel fits in the time
+// people actually watch.
 // Every shot is a different real stock clip (lib/broll.js), cut on the music's beats
 // (lib/music.js). Text is black on bright shots and white on dark ones. No voice.
 // News and AI posts stay carousels (lib/post.js).
@@ -22,18 +25,12 @@ import { ffmpegPath } from "../reels.js";
 
 const FPS = 30;
 const TEMPLATE = path.join(ROOT, "templates", "broll.html");
-// Short reels get watched to the end and replayed, which is what Instagram rewards
+// The hook opening plus this many more, so the reel ends inside the time people watch
 const MAX_OPENINGS = 4;
-const SECONDS = { hook: 2.3, promise: 2.0, opening: 1.6, cta: 3.2 };
-// The grid cover: the hook once both lines and the strike are in
-export const COVER_AT = 1.7;
+const SECONDS = { hook: 2.0, opening: 1.15, cta: 2.9 };
+// The grid cover: the hook, which is on screen from the first frame
+export const COVER_AT = 0.8;
 export const REEL_CATEGORIES = ["tech", "govt", "events"];
-const HOOK = {
-  tech: ["No ~referrals.~", "No cold emails."],
-  govt: ["No ~agents.~", "No fake links."],
-  events: ["No ~spam.~", "just real hackathons."],
-};
-const NOUN = { tech: "companies", govt: "govt jobs", events: "hackathons" };
 
 const DEADLINE_LABEL = /^(apply by|last date|register by|deadline)$/i;
 const FACT_LABEL = /^(stipend|salary|posts|prizes)$/i;
@@ -51,55 +48,63 @@ const short = (s, max) => {
 const dayMonth = (value) => String(value).replace(/\s+\d{4}$/, "");
 
 function factOf(card) {
+  const fact = rawFact(card) && short(rawFact(card), 20);
+  // Pay from an aggregator or an estimate is labelled as such, never shown as the company's figure
+  return fact && card.reported && /₹|lakh|lpa|month|stipend|salary/i.test(fact) ? `${fact} (reported)` : fact;
+}
+
+function rawFact(card) {
   const labelled = card.rows?.find((r) => FACT_LABEL.test(r.label));
   if (labelled) return /^posts$/i.test(labelled.label) && /^\d[\d,]*$/.test(labelled.value) ? `${labelled.value} posts` : labelled.value;
   const value = card.rows?.find((r) => !r.label && FACT_TEXT.test(r.value))?.value;
   return value && (value.split(/\s+·\s+/).find((part) => FACT_TEXT.test(part)) || value).replace(/^(stipend|salary|ctc)\s*:?\s*/i, "");
 }
 
-// Pure: deck (lib/post.js) → scenes, each with its lines and when they come in.
-// Written like a person talks: lowercase, a few words per shot, no labels.
+// "Software Engineer Intern" → "software engineer intern"; acronyms (SDE, AI, GATE) stay as they are
+const casual = (s) => s.split(/\s+/).map((w) => (/^[A-Z0-9&.+/-]{2,}$/.test(w) ? w : w.toLowerCase())).join(" ");
+
+// "ASIC Engineer, New College Graduate 2027" → "ASIC engineer": the first clause is what you'd say
+function roleOf(c) {
+  const title = String(c.title || "");
+  const role = !c.company ? title : title.toLowerCase().endsWith(c.company.toLowerCase()) ? title.slice(0, -c.company.length).replace(/[\s,·|-]+$/, "") : title;
+  return casual(role.split(/\s*(?:,|:|\(|\s[-–]\s|\band\b|\bwith\b|\bfor\b)\s*/i)[0].split(/\s+/).slice(0, 4).join(" "));
+}
+
+// Pure: deck (lib/post.js) → scenes, each with its lines and when they come in (at 0 = already
+// on screen when the shot starts). Written like a person talks: lowercase, a few words per shot.
 export function planScenes(row, category, deck) {
   const every = deck.map((d) => d.slide).filter((s) => s.type === "item" && (s.company || s.title));
   if (!every.length) throw new Error("no openings to put in a reel");
-  // The reel shows the first few; the count and the DM cover all of them
-  const cards = every.slice(0, MAX_OPENINGS);
   const keyword = deck.find((d) => d.slide.type === "profile")?.slide.keyword || "JOB";
   const n = every.length;
   const deadlineOf = (c) => c.rows?.find((r) => DEADLINE_LABEL.test(r.label) && r.value !== "Open until filled");
-  const interns = cards.every((c) => /intern/i.test(c.title));
-  // A post that mixes company roles with a government exam is just "openings"
-  const kinds = new Set(String(row.Item_IDs || "").toUpperCase().split(/[,\s]+/).filter(Boolean).map((id) => id.slice(0, 3)));
-  const mixed = kinds.size > 1;
-  const kind = mixed ? "tech" : category;
-
   const line = (style, text, at) => ({ type: "line", style, text, at });
-  const hook = { kind: "hook", items: (HOOK[kind] || HOOK.tech).map((t, i) => line("bold", t, 0.1 + i * 0.75)) };
-  const promise = {
-    kind: "promise",
+
+  // The first opening leads: the daily task lists the biggest name first
+  const lead = every[0];
+  const rest = every.filter((c) => c !== lead).slice(0, MAX_OPENINGS - 1);
+  const leadFact = factOf(lead);
+  const intern = /intern|apprentice/i.test(lead.title);
+  const hook = {
+    kind: "hook",
     items: [
-      line("ital", "just", 0.08),
-      line("bold", kind === "tech" ? (mixed ? `${n} openings` : `${n} ${n === 1 ? "company" : "companies"}`) : `${n} ${NOUN[kind]}`, 0.4),
-      line("sub", kind === "govt" ? "open right now, official links" : kind === "events" ? "taking teams right now" : `hiring ${interns ? "interns" : "freshers"} this week`, 0.85),
-    ],
+      line("bold", short(lead.company || lead.title, 20), 0),
+      line("bold", category === "events" ? "is open for teams" : category === "govt" ? "is hiring" : `is hiring ${intern ? "interns" : "freshers"}`, 0),
+      line("ital", leadFact || roleOf(lead) || "apply now", 0.35),
+      n > 1 && line("sub", `+ ${n - 1} more`, 0.9),
+    ].filter(Boolean),
   };
 
-  // One shot per opening: the name big, then role and pay the way you'd say them
-  const openings = cards.map((c) => {
+  const openings = rest.map((c) => {
     const fact = factOf(c);
     const deadline = deadlineOf(c);
-    const title = String(c.title || "");
-    const role = !c.company ? "" : title.toLowerCase().endsWith(c.company.toLowerCase()) ? title.slice(0, -c.company.length).replace(/[\s,·|-]+$/, "") : title;
-    // "ASIC Engineer, New College Graduate 2027" → "ASIC engineer": the first clause is what you'd say
-    const said = role.split(/\s*(?:,|:|\(|\s[-–]\s|\band\b|\bwith\b|\bfor\b)\s*/i)[0].split(/\s+/).slice(0, 4).join(" ");
-    const detail = [said && casual(said), fact && short(fact, 20)].filter(Boolean).join(", ");
-    const when = deadline ? `closes ${dayMonth(deadline.value)}` : "";
+    const detail = [roleOf(c), fact].filter(Boolean).join(", ");
     return {
       kind: "opening",
       items: [
-        line("bold", short(c.company || title, 22), 0.06),
-        detail && line("sub", detail, 0.4),
-        when && line("sub", when, 0.7),
+        line("bold", short(c.company || c.title, 22), 0),
+        detail && line("sub", detail, 0.12),
+        !fact && deadline && line("sub", `closes ${dayMonth(deadline.value)}`, 0.3),
       ].filter(Boolean),
     };
   });
@@ -107,21 +112,18 @@ export function planScenes(row, category, deck) {
   const cta = {
     kind: "cta",
     items: [
-      line("ital", "comment", 0.08),
-      { type: "chips", chips: [keyword], at: 0.4 },
-      line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.75),
+      line("ital", "comment", 0),
+      { type: "chips", chips: [keyword], at: 0.2 },
+      line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.45),
+      { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 0.85 },
       // The one post that reached non-followers asked for this; shares are what Instagram pushes
-      line("sub", "send this to your batchmates", 2.1),
-      { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 1.3 },
+      line("sub", "send this to your batchmates", 1.3),
     ],
   };
-  return [hook, promise, ...openings, cta];
+  return [hook, ...openings, cta];
 }
 
-// "Software Engineer Intern" → "software engineer intern"; acronyms (SDE, AI, GATE) stay as they are
-const casual = (s) => s.split(/\s+/).map((w) => (/^[A-Z0-9&.+/-]{2,}$/.test(w) ? w : w.toLowerCase())).join(" ");
-
-// Scene lengths from SECONDS, each cut moved onto the nearest beat within 0.3 s
+// Scene lengths from SECONDS, each cut moved onto the nearest beat within 0.25 s
 export function timeScenes(scenes, beats = []) {
   let start = 0;
   let planned = 0;
@@ -129,8 +131,8 @@ export function timeScenes(scenes, beats = []) {
     planned += SECONDS[s.kind];
     let end = planned;
     if (i < scenes.length - 1) {
-      const near = beats.filter((b) => Math.abs(b - planned) <= 0.3).sort((a, b) => Math.abs(a - planned) - Math.abs(b - planned))[0];
-      if (near && near - start >= 1.4) end = near;
+      const near = beats.filter((b) => Math.abs(b - planned) <= 0.25).sort((a, b) => Math.abs(a - planned) - Math.abs(b - planned))[0];
+      if (near && near - start >= 0.9) end = near;
     }
     const scene = { ...s, start, dur: Number((end - start).toFixed(3)) };
     start = end;
@@ -138,9 +140,10 @@ export function timeScenes(scenes, beats = []) {
   });
 }
 
-// Someone seen from behind to open and close, desk work in between, coffee every third shot
+// Hands at work from the first frame (motion holds the eye), coffee now and then, someone seen
+// from behind to close
 const shotKinds = (scenes) =>
-  scenes.map((s, i) => (s.kind === "hook" ? "hook" : s.kind === "cta" ? "cta" : s.kind === "opening" && i % 3 === 0 ? "coffee" : "work"));
+  scenes.map((s, i) => (s.kind === "cta" ? "cta" : s.kind === "opening" && i % 3 === 2 ? "coffee" : "work"));
 
 function hash(text) {
   let h = 0;
@@ -173,7 +176,12 @@ async function textAreaMin(ffmpeg, file, at) {
 
 export async function buildJobReel(row, outDir, { category = "tech", items, variant = 0 } = {}) {
   fs.mkdirSync(outDir, { recursive: true });
-  const { deck, left } = await postDeck(row, { category, items });
+  const { deck, items: kept, left } = await postDeck(row, { category, items });
+  // Cards come in the same order as the sheet rows they were made from
+  const cards = deck.map((d) => d.slide).filter((sl) => sl.type === "item");
+  if (cards.length === kept.length) {
+    kept.forEach((item, i) => (cards[i].reported = /unofficial|aggregator|expected|estimate|\bper [a-z]/i.test(`${item.Salary_Stipend || ""} ${item.Prizes_Perks || ""}`)));
+  }
   const seed = `${row.ID}|${variant}`;
   const ffmpeg = await ffmpegPath();
   const music = await pickMusic(seed, ffmpeg);
@@ -231,6 +239,9 @@ export async function buildJobReel(row, outDir, { category = "tech", items, vari
     await page.evaluate(() => document.fonts.ready);
     await page.evaluate((d) => window.setup(d), { scenes });
     await cdp.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } });
+    // Paint the hook once before recording, so frame 0 (what people see before they decide) has it
+    await page.evaluate(() => window.seek(0));
+    await page.waitForTimeout(150);
     const frames = Math.ceil(total * FPS);
     for (let f = 0; f < frames; f++) {
       await page.evaluate((t) => window.seek(t), f / FPS);

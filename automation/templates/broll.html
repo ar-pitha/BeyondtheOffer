@@ -93,10 +93,12 @@
   window.seek = (t) => {
     const i = Math.max(0, data.scenes.findIndex((s) => t >= s.start && t < s.start + s.dur));
     const scene = data.scenes[i];
-    if (i !== current) { current = i; parts = build(scene); }
+    const rebuilt = i !== current;
+    if (rebuilt) { current = i; parts = build(scene); }
     const local = t - scene.start;
     for (const { el, item, kind } of parts) {
-      const p = (local - item.at) / IN;
+      // at 0: already on screen when the shot starts, so the first frame is never blank
+      const p = item.at <= 0 ? 1 : (local - item.at) / IN;
       if (kind === "line") {
         el.style.opacity = easeOut(p);
         el.style.transform = `translateY(${(1 - easeOut(p)) * 22}px)`;
@@ -112,6 +114,8 @@
         el.style.transform = `translateY(${(1 - backOut(q)) * -240}px)`;
       }
     }
+    // A shot's new text has to be painted before the frame is captured, or the cut flashes blank
+    if (rebuilt) return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   };
 </script>
 </body>
