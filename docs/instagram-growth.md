@@ -169,3 +169,17 @@ student wants (Amazon), an ask to share with batchmates, and 12 comments in its 
 
 `insights.js` now also records Format, Avg_Watch_s, Follows, Profile_Visits and
 Shares_per_100_Reach daily, so this table can be read straight from the Insights tab.
+
+## Change, 2026-11-20: big names get their own reel, small companies share a carousel
+
+A study of Indian fresher-job pages (Nov 20) found the faceless outliers each spotlight one
+company, while lists of several companies stay at the page's normal reach. So:
+
+- `frontend/api/_lib/brands.js` lists the companies students search by name (Google, Amazon,
+  Apple, Microsoft, TCS, Infosys, Deloitte, ISRO, SBI, ...). Edit it to add or remove names.
+- Picking openings on the board (`create-carousel`) makes one **Reel** per big-name opening and
+  one **Carousel** with the rest. A post can hold up to 8 openings now.
+- `refresh.js` (after every sync) does the same to today's and yesterday's drafts from the daily
+  task. Approved and published posts are never split.
+- Each job reel spotlights its one opening (`lib/brollReel.js`); the carousel keeps 5+ smaller
+  companies, as the daily task drafts them.

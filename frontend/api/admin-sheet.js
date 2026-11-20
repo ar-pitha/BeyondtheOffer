@@ -10,7 +10,7 @@ import { listUserMedia, listMediaComments, permalinkKey, replyToComment } from "
 import { thanksReply, PUBLIC_LINKS_REPLY, COMMENTS_LOG_TAB } from "./_lib/replies.js";
 import { startCommentDm, prepareCommentsLog, sweepFollowReplies } from "./_lib/followgate.js";
 import { planQueue } from "./_lib/queue.js";
-import { CATEGORIES, GROUPED, buildBoard, checkGroup, carouselFields, nextGroupId, categoryOfId, takenBy, newsPosts } from "./_lib/carousel.js";
+import { CATEGORIES, GROUPED, buildBoard, checkGroup, carouselFields, splitByBrand, nextGroupId, categoryOfId, takenBy, newsPosts } from "./_lib/carousel.js";
 
 // Posts of these kinds can go out as a reel (automation/lib/brollReel.js); news stays a carousel
 const REEL_KINDS = ["tech", "govt", "events"];
@@ -359,11 +359,18 @@ export default async function handler(req, res) {
           return send(res, 409, { message: err.message });
         }
         const { date } = nowInZone();
-        const row = { ID: nextGroupId(queue, date), Date: date, Format: "Carousel", Status: "Draft", ...carouselFields(group.category, group.items) };
-        await appendRow("Content_Queue", headers, row);
-        // instagram-preview.yml also builds it on its next 5-minute run if this dispatch fails
-        const previewStarted = await dispatchPreview(row.ID).then(() => true, () => false);
-        return send(res, 201, { row, previewStarted });
+        // A big-name company gets a reel of its own; the smaller ones share the carousel
+        const { reels, carousel } = splitByBrand(group.category, group.items);
+        const posts = [...reels.map((item) => ({ format: "Reel", items: [item] })), ...(carousel.length ? [{ format: "Carousel", items: carousel }] : [])];
+        const rows = [];
+        for (const post of posts) {
+          const row = { ID: nextGroupId([...queue, ...rows], date), Date: date, Format: post.format, Status: "Draft", ...carouselFields(group.category, post.items) };
+          await appendRow("Content_Queue", headers, row);
+          rows.push(row);
+        }
+        // instagram-preview.yml also builds them on its next 5-minute run if a dispatch fails
+        const started = await Promise.all(rows.map((r) => dispatchPreview(r.ID).then(() => true, () => false)));
+        return send(res, 201, { row: rows[0], rows, previewStarted: started.every(Boolean) });
       }
 
       // Reject or restore openings on the board. A rejected opening is never offered for a post

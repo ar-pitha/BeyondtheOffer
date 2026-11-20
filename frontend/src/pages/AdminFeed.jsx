@@ -20,7 +20,8 @@ const TABS = [
 const ORDER = ["tech", "govt", "events", "news"];
 const KIND_CLASS = { tech: "kind-tech", govt: "kind-govt", events: "kind-event", news: "kind-news" };
 // How many fit in one post: news cards are short, so news takes more (same as _lib/carousel.js)
-const maxPick = (kind) => (kind === "news" ? 6 : 4);
+// Matches maxFor in api/_lib/carousel.js. Big names picked here become reels of their own.
+const maxPick = (kind) => (kind === "news" ? 6 : 8);
 
 // Openings filters. News has no closing date, so a "closes within" window leaves it out.
 const WINDOWS = [
@@ -391,11 +392,16 @@ function AdminFeed() {
   const createPost = async (ids) => {
     setCreating(true);
     try {
-      const { row } = await call({ action: "create-carousel", ids });
-      setBuilding((b) => ({ ...b, [row.ID]: Date.now() }));
+      const { row, rows = [row] } = await call({ action: "create-carousel", ids });
+      setBuilding((b) => ({ ...b, ...Object.fromEntries(rows.map((r) => [r.ID, Date.now()])) }));
       await load();
       setTab("posts");
-      toast.success("Post created. Its preview is building.");
+      const reels = rows.filter((r) => r.Format === "Reel").length;
+      toast.success(
+        rows.length === 1
+          ? "Post created. Its preview is building."
+          : `${plural(rows.length, "post")} created: ${plural(reels, "big-name reel")}${rows.length > reels ? " and a carousel" : ""}. Previews are building.`
+      );
       return true;
     } catch (err) {
       fail(err, "Couldn't create the post.");

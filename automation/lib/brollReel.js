@@ -93,19 +93,14 @@ export function planScenes(row, category, deck) {
   const leadFact = factOf(lead);
   const intern = /intern|apprentice/i.test(lead.title);
   // Who it's for, first: the one post that reached far beyond the followers opened with
-  // "2027 batch, this one's for you", and a line naming the reader is what makes people send it on
-  // Every batch the openings name ("2026 Freshers", "2027 grads", "2027 Winter ... Intern"), so the
-  // line never tells one batch that a reel led by another batch's opening is for them
-  const years = new Set(
-    every.flatMap((c) => {
-      const text = [c.title, ...(c.rows || []).map((r) => r.value)].join(" ");
-      const named = [...text.matchAll(/\b(20[2-3]\d)\s*(?:batch|grads?|graduates?|freshers|pass(?:ing)?[- ]?outs?)\b/gi)].map((m) => m[1]);
-      const intern = /intern/i.test(c.title) && String(c.title).match(/\b(20[2-3]\d)\b/)?.[1];
-      return [...named, intern].filter(Boolean);
-    })
-  );
+  // "2027 batch, this one's for you", and a line naming the reader is what makes people send it on.
+  // Read from the lead opening only, since it's the one on screen. "Summer 2027" in an intern title
+  // is when the internship runs, not a batch; "returning to degree" means pre-final year.
+  const leadText = [lead.title, ...(lead.rows || []).map((r) => r.value)].join(" ");
+  const years = new Set([...leadText.matchAll(/\b(20[2-3]\d)\s*(?:batch(?:es)?|grads?|graduates?|freshers|pass(?:ing)?[- ]?outs?)\b/gi)].map((m) => m[1]));
   const batch = years.size && years.size <= 2 && [...years].sort().join(" & ");
-  const forWho = batch ? `${batch} batch, this is for you` : category === "tech" && "freshers, this is for you";
+  const preFinal = /returning to (?:their |the )?degree|pre-?final/i.test(leadText);
+  const forWho = batch ? `${batch} batch, this is for you` : preFinal ? "pre-final year, this is for you" : category === "tech" && "freshers, this is for you";
   const hook = {
     kind: "hook",
     items: [
@@ -120,7 +115,7 @@ export function planScenes(row, category, deck) {
 
   // Who can apply, where, and by when: what a viewer checks before commenting
   const value = (label) => lead.rows?.find((r) => label.test(r.label))?.value;
-  const eligible = value(/^(eligibility|qualification)$/i);
+  const eligible = preFinal ? "pre-final year students" : value(/^(eligibility|qualification)$/i)?.replace(/\s*\((?:per|batch not|as per)[^)]*\)/gi, "");
   const where = value(/^location$/i);
   const deadline = deadlineOf(lead);
   const detail = {

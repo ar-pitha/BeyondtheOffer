@@ -3,9 +3,11 @@
 // automation/refresh.js (swap closed openings).
 
 import { TRUSTED, GROUPED, isOpen, alreadyPosted, igRejected, parseSheetDate, planQueue, pickOpenings } from "./queue.js";
+import { isBigBrand, companyOf } from "./brands.js";
 
 export { GROUPED };
-export const MAX_OPENINGS = 4;
+// Carousels are where the smaller companies go, five or more to a post
+export const MAX_OPENINGS = 8;
 // News cards are short, so a news post can carry more stories
 export const MAX_STORIES = 6;
 export const maxFor = (category) => (category === "news" ? MAX_STORIES : MAX_OPENINGS);
@@ -136,6 +138,13 @@ const byUrgency = (cfg) => (a, b) =>
     ? String(b.Date || "").localeCompare(String(a.Date || ""))
     : closesAt(a, cfg) - closesAt(b, cfg) || String(b.Date_Added || "").localeCompare(String(a.Date_Added || ""));
 const trusted = (r, cfg) => cfg.news || TRUSTED.includes(r.Verified);
+
+// Openings → posts: each big-name company (lib brands.js) gets a reel of its own, the rest share
+// one carousel. News is never split.
+export function splitByBrand(category, items) {
+  if (category === "news") return { reels: [], carousel: items };
+  return { reels: items.filter((i) => isBigBrand(companyOf(i))), carousel: items.filter((i) => !isBigBrand(companyOf(i))) };
+}
 
 // The fields of a Content_Queue row for these openings (already sorted)
 export function carouselFields(category, items) {
@@ -335,6 +344,38 @@ export function planSwaps(queue, tabRows) {
   return swaps;
 }
 
+// Drafts (the daily task's or the board's) that mix big-name companies with smaller ones: each
+// big name moves to a reel of its own and the draft keeps the rest as a carousel. Approved and
+// published posts are left alone. Returns [{ row, category, fields, reels: [{ ID, Format, ...fields }] }].
+// Only drafts from today and yesterday: older ones are stale and their openings sit in newer drafts.
+export function planBrandSplits(queue, tabRows, date) {
+  const itemsById = itemsMap(tabRows);
+  const since = new Date(new Date(`${date}T00:00:00Z`).getTime() - DAY).toISOString().slice(0, 10);
+  // An opening already in a published post or moved to a reel isn't moved again
+  const used = new Set(queue.filter((r) => r.Status === "Published").flatMap(idsIn));
+  const made = [];
+  const splits = [];
+  for (const row of queue) {
+    if ((row.Status || "Draft") !== "Draft" || String(row.Date || "") < since) continue;
+    const ids = idsIn(row);
+    const category = categoryOfId(ids[0]);
+    if (!category || category === "news") continue;
+    const items = ids.map((id) => itemsById.get(id)).filter((i) => i && isOpen(i) && !alreadyPosted(i) && !used.has(i.ID));
+    const { reels, carousel } = splitByBrand(category, items);
+    reels.forEach((i) => used.add(i.ID));
+    // Already one company in a reel, or nothing big to move out
+    if (!reels.length || (items.length === 1 && String(row.Format).toLowerCase() === "reel")) continue;
+    const keep = carousel.length ? carousel : [reels.shift()];
+    const newRows = reels.map((item) => {
+      const reel = { ID: nextGroupId([...queue, ...made], date), Date: date, Format: "Reel", Status: "Draft", ...carouselFields(category, [item]) };
+      made.push(reel);
+      return reel;
+    });
+    splits.push({ row, category, fields: { ...carouselFields(category, keep), Format: carousel.length ? "Carousel" : "Reel" }, reels: newRows });
+  }
+  return splits;
+}
+
 // Self-check: node frontend/api/_lib/carousel.js
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
   const { default: assert } = await import("node:assert");
@@ -377,7 +418,11 @@ if (process.argv[1]?.replace(/\\/g, "/").endsWith("_lib/carousel.js")) {
   assert.throws(() => checkGroup(["TJ-1"], queue, tabRows), /closed/);
   assert.throws(() => checkGroup(["TJ-4"], queue, tabRows), /Single-source/);
   assert.throws(() => checkGroup(["TJ-3", "GJ-1"], queue, tabRows), /one kind/);
-  assert.throws(() => checkGroup(["TJ-2", "TJ-3", "TJ-6", "TJ-1", "TJ-5"], queue, tabRows), /1 to 4/);
+  assert.throws(() => checkGroup(["TJ-2", "TJ-3", "TJ-6", "TJ-1", "TJ-5", "TJ-8", "TJ-9", "TJ-10", "TJ-11"], queue, tabRows), /1 to 8/);
+  // Big names leave the carousel for reels of their own
+  const split = splitByBrand("tech", [{ ID: "TJ-A", Company: "Amazon" }, { ID: "TJ-B", Company: "Bolt" }, { ID: "TJ-C", Company: "Google India" }]);
+  assert.deepStrictEqual([split.reels.map((i) => i.ID), split.carousel.map((i) => i.ID)], [["TJ-A", "TJ-C"], ["TJ-B"]]);
+  assert.deepStrictEqual(splitByBrand("news", [{ ID: "TN-A", Company: "Apple" }]).reels, []);
   const g = checkGroup(["TJ-6", "TJ-3"], queue, tabRows);
   assert.deepStrictEqual(g.items.map((i) => i.ID), ["TJ-3", "TJ-6"]);
   assert.match(carouselFields(g.category, g.items).Title, /Core and Flux/);
