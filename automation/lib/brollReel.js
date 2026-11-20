@@ -54,7 +54,8 @@ const compactPay = (s) => {
 };
 
 function factOf(card) {
-  const fact = rawFact(card) && short(compactPay(rawFact(card)), 20);
+  // "₹40,000/month for 6 months" → "₹40,000/month": the duration doesn't fit a line and the pay is what stops the scroll
+  const fact = rawFact(card) && short(compactPay(rawFact(card)).replace(/\s+for\s+\d+\s+months?.*$/i, ""), 20);
   // Pay from an aggregator or an estimate is labelled as such, never shown as the company's figure
   return fact && card.reported && /₹|lakh|lpa|month|stipend|salary/i.test(fact) ? `${fact} (reported)` : fact;
 }
@@ -188,14 +189,16 @@ function run(cmd, args, { stdout = "ignore" } = {}) {
   return { proc: p, done };
 }
 
-// The darkest part of where the text sits (a 4x3 grid over y 200-720), 0-255. Black text only
-// reads when all of it is bright; one dark corner swallows it.
-async function textAreaMin(ffmpeg, file, at) {
+// How bright the text area is (a 4x3 grid over y 200-720), 0-255: the median cell, so one dark
+// hand or one bright window doesn't decide the colour for a shot that is mostly the other
+async function textAreaLight(ffmpeg, file, at) {
   const { proc, done } = run(ffmpeg, ["-v", "error", "-ss", at.toFixed(2), "-i", file, "-frames:v", "1",
     "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,crop=1080:520:0:200,scale=4:3", "-f", "rawvideo", "-pix_fmt", "gray", "-"], { stdout: "pipe" });
   proc.stdin.end();
   const buf = await done.catch(() => Buffer.alloc(0));
-  return buf.length ? Math.min(...buf) : 0;
+  if (!buf.length) return 0;
+  const cells = [...buf].sort((a, b) => a - b);
+  return cells[Math.floor(cells.length / 2)];
 }
 
 export async function buildJobReel(row, outDir, { category = "tech", items, variant = 0 } = {}) {
@@ -221,7 +224,7 @@ export async function buildJobReel(row, outDir, { category = "tech", items, vari
   // Black text on bright shots, white on dark ones; the profile picture for the DM
   const picture = await profilePicture().catch(() => null);
   for (const [i, s] of scenes.entries()) {
-    s.ink = (await textAreaMin(ffmpeg, clips[i].file, offsets[i] + s.dur / 2)) > 125 ? "dark" : "light";
+    s.ink = (await textAreaLight(ffmpeg, clips[i].file, offsets[i] + s.dur / 2)) > 140 ? "dark" : "light";
     for (const item of s.items) if (item.type === "notify") item.picture = picture;
   }
 
@@ -264,6 +267,11 @@ export async function buildJobReel(row, outDir, { category = "tech", items, vari
     await page.evaluate((d) => window.setup(d), { scenes });
     await cdp.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } });
     // Paint the hook once before recording, so frame 0 (what people see before they decide) has it
+    // Each font face loads on first use; load them all now, or the first frames miss a line
+    await page.evaluate(() =>
+      Promise.all(["800 108px", "italic 800 108px", "italic 500 52px"].map((f) => document.fonts.load(`${f} "Playfair Display"`)).concat(
+        ["500 30px", "700 52px"].map((f) => document.fonts.load(`${f} Inter`))))
+    );
     await page.evaluate(() => window.seek(0));
     await page.waitForTimeout(150);
     const frames = Math.ceil(total * FPS);

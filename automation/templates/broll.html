@@ -14,7 +14,9 @@
   .stage { position: absolute; inset: 0; }
   .text { position: absolute; left: 78px; top: 230px; width: 930px; font-family: "Playfair Display", Georgia, serif; }
   .dark { color: #111; }
-  .light { color: #fff; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
+  .light { color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,.5), 0 0 3px rgba(0,0,0,.35); }
+  /* White text gets a soft shade at the top of the shot, as an editor would grade it, so it reads on mixed backgrounds */
+  .shade { position: absolute; left: 0; right: 0; top: 0; height: 1000px; background: linear-gradient(rgba(0,0,0,.42), rgba(0,0,0,.22) 55%, rgba(0,0,0,0)); }
   .line { display: block; will-change: transform, opacity, filter; }
   .bold { font-size: 108px; line-height: 1.02; font-weight: 800; letter-spacing: -1.5px; }
   .bold.long { font-size: 88px; }
@@ -49,7 +51,7 @@
 
   function build(scene) {
     const stage = document.getElementById("stage");
-    stage.innerHTML = "";
+    stage.innerHTML = scene.ink === "light" ? '<div class="shade"></div>' : "";
     const text = document.createElement("div");
     text.className = `text ${scene.ink}`;
     stage.appendChild(text);
