@@ -85,6 +85,14 @@ const row = (label, value, max) => {
   return v ? { label, value: v } : null;
 };
 
+// Pay from a job site or an estimate is labelled as such, never shown as the company's figure.
+// The sheet notes it in brackets ("Rs 30,000/month (per talentd, unofficial)"), which clean() drops.
+const REPORTED = /unofficial|aggregator|expected|estimate|ambitionbox|glassdoor|\bper [a-z]/i;
+const payRow = (label, value) => {
+  const r = row(label, value, 60);
+  return r && REPORTED.test(String(value)) ? { ...r, value: `${r.value} (reported)` } : r;
+};
+
 // One sheet row → one card
 function cardFromItem(item) {
   const id = String(item.ID || "").toUpperCase();
@@ -141,7 +149,7 @@ function cardFromItem(item) {
       row("Skills", item.Skills, 60),
       row("Process", item.Selection_Process, 60),
       row("Location", item.Location, 40),
-      row(/intern/i.test(`${item.Role} ${item.Job_Type}`) ? "Stipend" : "Salary", item.Salary_Stipend, 60),
+      payRow(/intern/i.test(`${item.Role} ${item.Job_Type}`) ? "Stipend" : "Salary", item.Salary_Stipend),
       // Most company roles publish no closing date; say so rather than leave the card without one
       prettyDate(item.Apply_By) ? { label: "Apply by", value: prettyDate(item.Apply_By) } : { label: "Deadline", value: "Open until filled" },
     ].filter(Boolean),
