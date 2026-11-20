@@ -143,3 +143,29 @@ Instagram drafts (Content_Queue) – carousels only, no reels, no voiceover:
 Millions of views and followers isn't something any template or setting guarantees. The usual path for a niche page posting daily for 30 days is a few reels at 1k–10k views, then occasionally one breaks out. Follows come when a profile visitor sees a full, useful grid. Do not buy followers, likes or views, and don't use follow/unfollow bots. Instagram detects them and suppresses the account's reach, which is the opposite of the goal.
 
 Judge it after 30 days of daily posting with insights on. Look at reach to non-followers, shares and saves per post, then make more of what worked (`/ig-audit` can read the Insights tab).
+
+## Audit, 2026-11-20: why every post stops near 135 accounts
+
+11 posts, 70 followers. Numbers from the Graph API that day.
+
+| Post | Format | Reach | Shares | Comments | Follows | Avg watch |
+|---|---|---|---|---|---|---|
+| Nov 11 "2027 batch, this one's for you" (Amazon, Honeywell) | Carousel | **900** | **15** | 12 (in first 2 h) | **12** | |
+| Jul 8 motivational | Carousel | 763 | 1 | 1 | 0 | |
+| Nov 18, 19, 19 job reels | Reel | 136, 38, 135 | 0 | 0-2 | | 4.2 / 5.8 / 3.8 s of 8-14 s |
+| 7 other carousels | Carousel | 46-86 | 0-1 | 0-4 | 0 | |
+
+- Reach stops at Instagram's first test batch (about 135 accounts for a reel) unless that batch
+  shares. 98% of the account's reach is non-followers, so followers are not the bottleneck.
+- Shares are the line between the two groups: 15 on the post that travelled, 0 or 1 on every other.
+- Carousel "views" count each slide, so 190 views is about 47 accounts. Reels reach about 3x more
+  accounts than carousels here; comparing views hides that.
+- The Jul 8 post reached 763 people and got 0 follows: reach from off-topic content doesn't build
+  this account.
+- One post is not a pattern. Read this as the best lead there is, not a rule.
+
+What the Nov 11 post had that the others didn't: a line naming who it's for, a company every
+student wants (Amazon), an ask to share with batchmates, and 12 comments in its first 2 hours.
+
+`insights.js` now also records Format, Avg_Watch_s, Follows, Profile_Visits and
+Shares_per_100_Reach daily, so this table can be read straight from the Insights tab.
