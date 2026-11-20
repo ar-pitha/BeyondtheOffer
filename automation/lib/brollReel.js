@@ -1,13 +1,13 @@
-// Job posts (tech, govt, events) → a faceless b-roll Reel, 1080x1920 H.264, about 8 s, cut like a
-// creator's edit: plain text on real footage, a few words a shot.
-//   hook     "Google / is hiring freshers / ₹12 LPA"        on screen from the first frame
-//   openings "Comcast / software engineer, ₹8 LPA"           about a second each, at most 3 more
-//   cta      "comment [JOB] / i'll send you every link / send this to your batchmates", the DM
-//            arriving as an Instagram notification from beyond_the.offer with the profile picture
-// Why this shape: the first reel (Nov 18) was watched for 4.3 s on average out of 14 s, and its
-// payoff came at 5 s. Instagram only shows a reel to more people when its first viewers stay and
-// share, so the best opening is the first thing on screen and the whole reel fits in the time
-// people actually watch.
+// Job posts (tech, govt, events) → a faceless b-roll Reel, 1080x1920 H.264, about 7.5 s, that
+// spotlights ONE opening, the biggest name in the post:
+//   hook    "2027 batch / Apple / is hiring freshers / ₹12 LPA / [comment JOB] for the link"  frame 0
+//   detail  "junior fullstack engineer / who can apply: 2026 grads / Hyderabad / closes 25 Nov"
+//   cta     "comment [JOB] / + 5 more openings in the DM / send this to your batchmates", the DM
+//           arriving as an Instagram notification from beyond_the.offer with the profile picture
+// Why this shape (niche study, Nov 20): the faceless job pages' outliers (10-17x their own median)
+// each spotlight one company with who can apply, and get 3-5x more comments than likes because the
+// keyword is on screen from the start. Lists of 5 companies, ours included, sat at their median.
+// The other openings still go out: the DM sends every link and the caption lists them.
 // Every shot is a different real stock clip (lib/broll.js), cut on the music's beats
 // (lib/music.js). Text is black on bright shots and white on dark ones. No voice.
 // News and AI posts stay carousels (lib/post.js).
@@ -25,9 +25,7 @@ import { ffmpegPath } from "../reels.js";
 
 const FPS = 30;
 const TEMPLATE = path.join(ROOT, "templates", "broll.html");
-// The hook opening plus this many more, so the reel ends inside the time people watch
-const MAX_OPENINGS = 4;
-const SECONDS = { hook: 2.0, opening: 1.15, cta: 2.9 };
+const SECONDS = { hook: 2.4, detail: 2.3, cta: 2.8 };
 // The grid cover: the hook, which is on screen from the first frame
 export const COVER_AT = 0.8;
 export const REEL_CATEGORIES = ["tech", "govt", "events"];
@@ -92,7 +90,6 @@ export function planScenes(row, category, deck) {
   const title = String(row.Title || "").toLowerCase();
   const named = every.filter((c) => c.company && title.includes(c.company.toLowerCase()));
   const lead = named.sort((a, b) => title.indexOf(a.company.toLowerCase()) - title.indexOf(b.company.toLowerCase()))[0] || every[0];
-  const rest = every.filter((c) => c !== lead).slice(0, MAX_OPENINGS - 1);
   const leadFact = factOf(lead);
   const intern = /intern|apprentice/i.test(lead.title);
   // Who it's for, first: the one post that reached far beyond the followers opened with
@@ -115,37 +112,40 @@ export function planScenes(row, category, deck) {
       forWho && line("sub", forWho, 0),
       line("bold", short(lead.company || lead.title, 20), 0),
       line("bold", category === "events" ? "is open for teams" : category === "govt" ? "is hiring" : `is hiring ${intern ? "interns" : "freshers"}`, 0),
-      line("ital", leadFact || roleOf(lead) || "apply now", 0.35),
-      n > 1 && line("sub", `+ ${n - 1} more`, 0.9),
+      leadFact && line("ital", leadFact, 0.3),
+      // The ask is on screen from the first frame, not at the end most viewers never reach
+      { type: "chips", chips: [`comment ${keyword}`], at: 0 },
     ].filter(Boolean),
   };
 
-  const openings = rest.map((c) => {
-    const fact = factOf(c);
-    const deadline = deadlineOf(c);
-    const detail = [roleOf(c), fact].filter(Boolean).join(", ");
-    return {
-      kind: "opening",
-      items: [
-        line("bold", short(c.company || c.title, 22), 0),
-        detail && line("sub", detail, 0.12),
-        !fact && deadline && line("sub", `closes ${dayMonth(deadline.value)}`, 0.3),
-      ].filter(Boolean),
-    };
-  });
+  // Who can apply, where, and by when: what a viewer checks before commenting
+  const value = (label) => lead.rows?.find((r) => label.test(r.label))?.value;
+  const eligible = value(/^(eligibility|qualification)$/i);
+  const where = value(/^location$/i);
+  const deadline = deadlineOf(lead);
+  const detail = {
+    kind: "detail",
+    items: [
+      line("bold", short(lead.company || lead.title, 20), 0),
+      line("sub", roleOf(lead) || "apply now", 0),
+      eligible && line("sub", `who can apply: ${short(eligible, 34)}`, 0.25),
+      where && line("sub", short(where.replace(/\s*\(.*?\)/g, ""), 34), 0.5),
+      line("sub", deadline ? `closes ${dayMonth(deadline.value)}` : "no closing date, apply early", 0.75),
+    ].filter(Boolean),
+  };
 
   const cta = {
     kind: "cta",
     items: [
       line("ital", "comment", 0),
-      { type: "chips", chips: [keyword], at: 0.2 },
-      line("sub", `i'll send you ${n === 1 ? "the link" : "every link"}`, 0.45),
-      { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 0.85 },
+      { type: "chips", chips: [keyword], at: 0.15 },
+      line("sub", n > 1 ? `+ ${n - 1} more openings in the DM` : "i'll send you the link", 0.4),
+      { type: "notify", name: "beyond_the.offer", text: `sent you ${n === 1 ? "the apply link" : `${n} apply links`}`, at: 0.8 },
       // The one post that reached non-followers asked for this; shares are what Instagram pushes
-      line("sub", "send this to your batchmates", 1.3),
+      line("sub", "send this to your batchmates", 1.25),
     ],
   };
-  return [hook, ...openings, cta];
+  return [hook, detail, cta];
 }
 
 // Scene lengths from SECONDS, each cut moved onto the nearest beat within 0.25 s
@@ -168,7 +168,7 @@ export function timeScenes(scenes, beats = []) {
 // Hands at work from the first frame (motion holds the eye), coffee now and then, someone seen
 // from behind to close
 const shotKinds = (scenes) =>
-  scenes.map((s, i) => (s.kind === "cta" ? "cta" : s.kind === "opening" && i % 3 === 2 ? "coffee" : "work"));
+  scenes.map((s) => (s.kind === "cta" ? "cta" : s.kind === "detail" ? "coffee" : "work"));
 
 function hash(text) {
   let h = 0;
