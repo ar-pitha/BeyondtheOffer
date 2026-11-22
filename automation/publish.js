@@ -140,7 +140,10 @@ function scheduleKey(value, today) {
 const isVideoPreview = (r) => /\.mp4(\?|\s|$)/i.test(r.Preview_Link || "");
 const isReelRow = (r) => String(r.Format || "").toLowerCase() === "reel" && REEL_CATEGORIES.includes(categoryForRow(r));
 // preview.js uploads a job reel's preview as .../jobreel.mp4; older voiced reels used other names
-const reelPreview = (r) => String(r.Preview_Link || "").split(/\s+/).find((u) => /\/jobreel\.mp4(\?|$)/i.test(u)) || "";
+// The approved reel: the b-roll job reel (jobreel.mp4) or the official-page reel (officialreel.mp4,
+// lib/officialReel.js), with its designed cover (cover.jpg) when there is one
+const reelPreview = (r) => String(r.Preview_Link || "").split(/\s+/).find((u) => /\/(jobreel|officialreel)\.mp4(\?|$)/i.test(u)) || "";
+const coverPreview = (r) => String(r.Preview_Link || "").split(/\s+/).find((u) => /\/cover\.jpg(\?|$)/i.test(u)) || "";
 
 function failureCounts(runLogRows) {
   const counts = {};
@@ -207,7 +210,7 @@ async function renderRow(row, outDir) {
   const category = categoryForRow(row);
   // A reel goes out exactly as approved; only sample and local runs render one here
   const approved = !sample && isReelRow(row) ? reelPreview(row) : "";
-  if (approved) return { images: [], reel: { url: approved, left: [] }, left: [], note: "the approved reel preview" };
+  if (approved) return { images: [], reel: { url: approved, cover: coverPreview(row), left: [] }, left: [], note: "the approved reel preview" };
   const reel = isReelRow(row) ? await buildJobReel(row, outDir, { category }) : null;
   const images = reel ? [] : await renderPost(row, outDir, { category });
   const left = (reel || images).left || [];
@@ -227,7 +230,7 @@ async function renderRow(row, outDir) {
   return { images, reel, left, note: `${what}${note}` };
 }
 
-async function publishToInstagram(row, imageUrls, { videoUrl } = {}) {
+async function publishToInstagram(row, imageUrls, { videoUrl, coverUrl } = {}) {
   const ig = await import("./lib/instagram.js");
   // No URL in the caption: it isn't clickable there. The comment keyword DMs the
   // /links/<ID> page instead (frontend/api/_lib/replies.js).
@@ -242,7 +245,7 @@ async function publishToInstagram(row, imageUrls, { videoUrl } = {}) {
     // The grid cover is the hook once its words are on screen. REEL_TRIAL=auto|manual posts trial
     // reels (non-followers first). On Nov 19 Instagram refused them for this app (code 10, subcode
     // 2207081, no permission), so a refused trial still goes out as a normal reel.
-    const options = { collaborators, thumbOffsetMs: COVER_AT * 1000 };
+    const options = { collaborators, thumbOffsetMs: COVER_AT * 1000, coverUrl: coverUrl || undefined };
     const trial = process.env.REEL_TRIAL;
     try {
       creationId = await ig.createReelContainerFromUrl(videoUrl, caption, { ...options, trial });
@@ -400,7 +403,7 @@ async function main() {
       return;
     }
 
-    const { permalink } = await publishToInstagram(row, urls, { videoUrl });
+    const { permalink } = await publishToInstagram(row, urls, { videoUrl, coverUrl: reel?.cover });
     console.log(`Published: ${permalink}`);
 
     if (!sample) {

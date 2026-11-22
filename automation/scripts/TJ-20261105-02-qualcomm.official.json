@@ -1,0 +1,68 @@
+{
+  "id": "TJ-20261105-02-official",
+  "item": "TJ-20261105-02",
+  "url": "https://careers.qualcomm.com/careers/job/446719784235?domain=qualcomm.com",
+  "intro": {
+    "lines": [
+      "*Qualcomm*",
+      "is hiring the 2027 batch"
+    ],
+    "say": "Qualcomm is hiring the 27 batch!"
+  },
+  "lines": [
+    {
+      "say": "Associate Engineer, Software, right on their official page.",
+      "do": [
+        {
+          "mark": "2027 Campus Hire"
+        },
+        {
+          "hover": "Apply Now",
+          "dur": 0.9
+        }
+      ]
+    },
+    {
+      "say": "And yes, CSE, ECE and communication engineering can all apply.",
+      "do": [
+        {
+          "scrollTo": "Job description",
+          "dur": 0.6
+        },
+        {
+          "click": "Read more",
+          "dur": 0.5,
+          "stay": true
+        },
+        {
+          "scrollTo": "Education:",
+          "dur": 0.9
+        },
+        {
+          "mark": "Education:"
+        }
+      ]
+    },
+    {
+      "say": "Jobs in Hyderabad, Bangalore, Chennai and Noida.",
+      "do": [
+        {
+          "scrollTo": "Job Location",
+          "dur": 0.8
+        },
+        {
+          "mark": "Job Location"
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "say": "Comment JOB for the link, and follow for more!"
+  },
+  "thumb": {
+    "company": "Qualcomm",
+    "link": "https://careers.qualcomm.com",
+    "batch": "2027",
+    "role": "Associate Engineer, Software"
+  }
+}

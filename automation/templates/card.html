@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Opening and closing cards of an official-page reel (lib/officialReel.js), 1080x1920, in the
+     carousel's look (templates/post.html): white page, serif type, one blue accent.
+     intro: a few words that come in one line at a time. outro: the DM arriving as an Instagram
+     notification, then the carousel's profile card with Follow and the comment ask. -->
+<link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&family=Inter:wght@500;700&display=block" rel="stylesheet">
+<style>
+  :root { --accent: #2f54eb; --ink: #111317; --body: #4a4f5c; --muted: #8a8f9c; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #fff; color: var(--ink); font-family: "Times New Roman", Tinos, Times, serif; }
+  * { box-sizing: border-box; }
+  .intro { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 110px; }
+  .intro p { margin: 0; font-size: 104px; line-height: 1.12; font-weight: 700; }
+  .intro p.small { margin-top: 26px; font-size: 50px; font-weight: 400; color: var(--body); }
+  .intro .hl { color: var(--accent); }
+
+  .outro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 90px 80px; text-align: center; }
+  .pic { width: 312px; height: 312px; border-radius: 50%; padding: 7px; border: 5px solid var(--accent); }
+  .pic img, .pic .none { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; background: #f1f2f5; }
+  .handle { margin: 44px 0 0; font-size: 58px; font-weight: 700; }
+  .line { margin: 14px 0 0; font-size: 36px; color: var(--body); }
+  .follow { margin-top: 52px; padding: 24px 100px; border-radius: 20px; background: var(--accent); color: #fff; font-size: 40px; font-weight: 700; }
+  .ask { margin: 64px 0 0; width: 100%; background: #f6f7f9; border-radius: 30px; padding: 40px 44px; font-size: 40px; line-height: 1.4; }
+  .ask b { color: var(--accent); }
+  .ask small { display: block; margin-top: 12px; font-size: 30px; color: var(--muted); }
+
+  .notify { position: absolute; left: 54px; top: 110px; width: 972px; padding: 30px 34px 34px; border-radius: 48px; background: rgba(246,246,248,.98); color: #111; font-family: Inter, Arial, sans-serif; box-shadow: 0 20px 60px rgba(0,0,0,.18); text-align: left; }
+  .notify .app { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 500; color: #6e6e76; }
+  .notify .app i { width: 40px; height: 40px; border-radius: 11px; background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+  .notify .app span:last-child { margin-left: auto; }
+  .notify .row { display: flex; align-items: center; gap: 24px; margin-top: 22px; }
+  .notify .pp { flex: none; width: 96px; height: 96px; border-radius: 50%; background: #ddd center/cover; }
+  .notify b { display: block; font-size: 38px; font-weight: 700; }
+  .notify .msg { margin-top: 4px; font-size: 36px; font-weight: 500; color: #3a3a40; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  const clamp = (x) => Math.min(1, Math.max(0, x));
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+  const backOut = (x) => { const c = 1.7; x = clamp(x) - 1; return 1 + (c + 1) * x * x * x + c * x * x; };
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const accentize = (s) => esc(s).replace(/\*([^*]+)\*/g, '<span class="hl">$1</span>');
+  let d = null;
+
+  window.setup = (data) => {
+    d = data;
+    const root = document.getElementById("root");
+    if (d.kind === "intro") {
+      root.innerHTML = `<div class="intro">${d.lines.map((l, k) => `<p class="${k === d.lines.length - 1 && d.lastSmall ? "small" : ""}" data-k="${k}">${accentize(l)}</p>`).join("")}</div>`;
+    } else {
+      root.innerHTML = (d.dm ? `
+        <div class="notify" id="dm"><div class="app"><i></i><span>INSTAGRAM</span><span>now</span></div>
+          <div class="row"><div class="pp" style="${d.picture ? `background-image:url('${d.picture}')` : ""}"></div>
+          <div><b>${esc(d.handle)}</b><div class="msg">${esc(d.dm)}</div></div></div></div>` : "") + `
+        <div class="outro" id="card">
+          <div class="pic">${d.picture ? `<img src="${d.picture}" alt="">` : `<div class="none"></div>`}</div>
+          <p class="handle">@${esc(d.handle)}</p>
+          <p class="line">${esc(d.line)}</p>
+          <div class="follow">Follow</div>
+          <p class="ask">Comment <b>${esc(d.keyword)}</b> and we'll DM you the apply link<small>Save this post and share it with your batch</small></p>
+        </div>`;
+    }
+  };
+
+  window.seek = (t) => {
+    if (d.kind === "intro") {
+      // One line at a time, each as it's said; the first is there from frame 0
+      document.querySelectorAll(".intro p").forEach((el) => {
+        const at = d.at[Number(el.dataset.k)] ?? 0;
+        const p = at <= 0 ? 1 : (t - at) / 0.3;
+        el.style.opacity = ease(p);
+        el.style.transform = `translateY(${(1 - ease(p)) * 24}px)`;
+      });
+    } else {
+      // The profile card first, then the DM drops in from the top
+      const c = ease(t / 0.35);
+      const card = document.getElementById("card");
+      card.style.opacity = c;
+      card.style.transform = `scale(${0.96 + 0.04 * c})`;
+      const q = (t - d.dmAt) / 0.45;
+      const dm = document.getElementById("dm");
+      if (!dm) return;
+      dm.style.opacity = clamp(q * 2);
+      dm.style.transform = `translateY(${(1 - backOut(q)) * -260}px)`;
+    }
+  };
+</script>
+</body>
+</html>
