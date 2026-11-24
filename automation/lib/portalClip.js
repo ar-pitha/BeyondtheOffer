@@ -73,8 +73,8 @@ export async function recordPortal(url, steps, file, { width = 470, height = 380
         // A marker-pen highlight on the page's own text, on what's being said right now
         await page.evaluate(([text, css]) => {
           document.querySelectorAll("[data-marked]").forEach((e) => { e.style.cssText = e.dataset.marked; e.removeAttribute("data-marked"); });
-          const el = [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && e.textContent.trim().startsWith(text) && e.getBoundingClientRect().height > 0)
-            || [...document.querySelectorAll("body *")].reverse().find((e) => e.textContent.includes(text) && e.getBoundingClientRect().height > 0);
+          const el = [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && e.textContent.trim().startsWith(text) && e.getBoundingClientRect().height > 8)
+            || [...document.querySelectorAll("body *")].reverse().find((e) => e.textContent.includes(text) && e.getBoundingClientRect().height > 8);
           if (!el) return;
           el.dataset.marked = el.style.cssText;
           el.style.cssText += css;
@@ -86,7 +86,7 @@ export async function recordPortal(url, steps, file, { width = 470, height = 380
       } else if (step.scrollTo || step.scrollTop) {
         // Job pages often scroll an inner box rather than the window: scroll whichever holds the text
         const { from, to } = await page.evaluate(([text, top]) => {
-          const el = text && [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && e.textContent.trim().startsWith(text) && e.getBoundingClientRect().height > 0);
+          const el = text && [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && e.textContent.trim().startsWith(text) && e.getBoundingClientRect().height > 8);
           let box = el && el.parentElement;
           while (box && !(box.scrollHeight > box.clientHeight + 20 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
           window.__scroller = box || window.__scroller || document.scrollingElement;

@@ -126,7 +126,7 @@ export async function buildOfficialReel(script, outDir) {
   const keyword = script.keyword || "JOB";
   const voices = [];
 
-  // 1. Intro: each line of text comes in when its first word is spoken
+  // 1. Intro: the whole hook is on screen from frame 0, the frame people decide on
   const intro = await spoken(script.intro.say, path.join(outDir, "v-intro.mp3"), voice, ffmpeg, script.rate || RATE);
   let k = 0;
   const at = script.intro.lines.map((line) => {
@@ -136,7 +136,7 @@ export async function buildOfficialReel(script, outDir) {
   });
   const introDur = intro.seconds + GAP + 0.1;
   voices.push({ file: intro.file, start: 0.15 });
-  await renderCard({ kind: "intro", lines: script.intro.lines, at: at.map((t, i) => (i === 0 ? 0 : t + 0.15)) }, introDur, path.join(outDir, "part-1.mp4"), ffmpeg);
+  await renderCard({ kind: "intro", lines: script.intro.lines, at: at.map(() => 0) }, introDur, path.join(outDir, "part-1.mp4"), ffmpeg);
 
   // 2. The page: each sentence lasts as long as the longer of its words and its scrolling
   let start = introDur + 0.25; // the page is on screen a beat before she goes on

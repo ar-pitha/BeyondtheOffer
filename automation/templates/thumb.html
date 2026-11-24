@@ -62,10 +62,14 @@
     const colour = d.color || (d.logo && (await brandColour(d.logo).catch(() => null))) || "#1f45d6";
     document.documentElement.style.setProperty("--c", colour);
     document.getElementById("logo").innerHTML = d.logo ? `<img src="${d.logo}" alt="">` : `<b style="font:800 150px Poppins;color:var(--c)">${esc(d.company)}</b>`;
-    document.getElementById("band").textContent = d.band || `Campus Hiring ${d.batch || ""}`.trim();
+    const band = document.getElementById("band");
+    band.innerHTML = `<span>${esc(d.band || `Campus Hiring ${d.batch || ""}`.trim())}</span>`;
     document.getElementById("role").innerHTML = esc(d.role).replace(/,?\s+/, "<br>");
     await Promise.all([...document.images].map((img) => (img.complete ? null : new Promise((r) => (img.onload = img.onerror = r)))));
     await document.fonts.ready;
+    // Long band text shrinks to fit inside the slant instead of running off it
+    const span = band.firstElementChild;
+    for (let size = 74; size > 40 && span.scrollWidth > band.clientWidth * 0.8; size -= 2) band.style.fontSize = `${size}px`;
   };
 </script>
 </body>

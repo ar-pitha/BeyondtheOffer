@@ -1,0 +1,70 @@
+{
+  "id": "TJ-20261110-04-official",
+  "item": "TJ-20261110-04",
+  "url": "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers/job/Bangalore-India/Software-Engineer_2027972-1",
+  "keyword": "your branch",
+  "intro": {
+    "lines": [
+      "Freshers,",
+      "*Cisco* is hiring"
+    ],
+    "say": "Freshers, Cisco is hiring!"
+  },
+  "lines": [
+    {
+      "say": "Software Engineer, in Bangalore.",
+      "do": [
+        {
+          "scrollTo": "Software Engineer",
+          "dur": 0.5
+        },
+        {
+          "mark": "Software Engineer"
+        },
+        {
+          "hover": "Apply",
+          "dur": 0.6
+        }
+      ]
+    },
+    {
+      "say": "Any CS or engineering degree. Up to three years' experience.",
+      "do": [
+        {
+          "click": "Read More",
+          "dur": 0.5,
+          "stay": true
+        },
+        {
+          "scrollTo": "Minimum Qualifications",
+          "dur": 0.9
+        },
+        {
+          "mark": "Bachelor"
+        }
+      ]
+    },
+    {
+      "say": "An AI and cloud role. Python and AWS.",
+      "do": [
+        {
+          "scrollTo": "What You",
+          "dur": 0.8
+        },
+        {
+          "mark": "Integrate AI capabilities"
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "say": "Comment your branch for the link."
+  },
+  "thumb": {
+    "company": "Cisco",
+    "link": "https://www.cisco.com",
+    "band": "Hiring Freshers · Bangalore",
+    "role": "Software Engineer, AI & Cloud"
+  },
+  "rate": "+18%"
+}

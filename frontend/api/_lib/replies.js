@@ -1,6 +1,7 @@
 // Comment reply rules shared by the webhook (frontend/api) and automation/lib/replies.js.
 
-const LINK_WORDS = /\b(job|jobs|intern|internship|internships|link|links|ai)\b/i;
+// Reels ask "comment your branch", so a branch or batch on its own asks for the links too
+const LINK_WORDS = /\b(job|jobs|intern|internship|internships|link|links|ai|cse|ece|eee|ise|mech|mechanical|civil|mca|bca|aiml|btech|b\.tech|202[5-9])\b/i;
 const QUESTION_START = /^(what|how|when|where|which|who|why|is|are|can|could|does|do|will|should|any)\b/i;
 const THANKS = /\b(thanks?|thank you|thx|tysm|ty|helpful|nice|great|awesome|super|amazing|useful|good one|love (it|this))\b/i;
 
